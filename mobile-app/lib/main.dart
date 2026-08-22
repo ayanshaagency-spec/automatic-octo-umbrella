@@ -4,104 +4,24 @@ void main() => runApp(const AyanshaHealthCareApp());
 
 class AyanshaHealthCareApp extends StatelessWidget {
   const AyanshaHealthCareApp({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    return MaterialApp(
-      debugShowCheckedModeBanner: false,
-      title: 'Ayansha Health Care',
-      theme: ThemeData(
-        colorScheme: ColorScheme.fromSeed(seedColor: const Color(0xFF0E8F8F)),
-        scaffoldBackgroundColor: const Color(0xFFF7FBFC),
-        useMaterial3: true,
-      ),
-      home: const HomePage(),
-    );
-  }
+  @override Widget build(BuildContext context) => MaterialApp(
+    debugShowCheckedModeBanner:false, title:'Ayansha Health Care',
+    theme:ThemeData(colorScheme:ColorScheme.fromSeed(seedColor:const Color(0xFF0E8F8F)),useMaterial3:true,scaffoldBackgroundColor:const Color(0xFFF7FBFC)),
+    home:const HomePage(),
+  );
 }
-
-class HomePage extends StatelessWidget {
-  const HomePage({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    final services = [
-      ('Find a Doctor', Icons.medical_services_outlined),
-      ('Book Appointment', Icons.calendar_month_outlined),
-      ('Video Consultation', Icons.videocam_outlined),
-      ('Lab Tests', Icons.science_outlined),
-      ('Health Records', Icons.folder_shared_outlined),
-      ('Emergency Help', Icons.emergency_outlined),
-    ];
-
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('AYANSHA', style: TextStyle(fontWeight: FontWeight.bold)),
-        actions: [IconButton(onPressed: () {}, icon: const Icon(Icons.notifications_none))],
-      ),
-      body: ListView(
-        padding: const EdgeInsets.all(16),
-        children: [
-          Container(
-            padding: const EdgeInsets.all(20),
-            decoration: BoxDecoration(
-              color: const Color(0xFF073C4A),
-              borderRadius: BorderRadius.circular(22),
-            ),
-            child: const Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text('Good morning 👋', style: TextStyle(color: Colors.white70)),
-                SizedBox(height: 6),
-                Text('Your health, our priority', style: TextStyle(color: Colors.white, fontSize: 24, fontWeight: FontWeight.bold)),
-                SizedBox(height: 8),
-                Text('Find doctors, book care and manage your health in one place.', style: TextStyle(color: Colors.white70)),
-              ],
-            ),
-          ),
-          const SizedBox(height: 22),
-          const Text('Quick Services', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
-          const SizedBox(height: 12),
-          GridView.builder(
-            shrinkWrap: true,
-            physics: const NeverScrollableScrollPhysics(),
-            itemCount: services.length,
-            gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(crossAxisCount: 2, crossAxisSpacing: 12, mainAxisSpacing: 12, childAspectRatio: 1.45),
-            itemBuilder: (_, i) => Card(
-              elevation: 0,
-              child: InkWell(
-                borderRadius: BorderRadius.circular(16),
-                onTap: () {},
-                child: Padding(
-                  padding: const EdgeInsets.all(16),
-                  child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                    Icon(services[i].$2, size: 30, color: const Color(0xFF0E8F8F)),
-                    const Spacer(),
-                    Text(services[i].$1, style: const TextStyle(fontWeight: FontWeight.w600)),
-                  ]),
-                ),
-              ),
-            ),
-          ),
-          const SizedBox(height: 18),
-          Container(
-            padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(color: const Color(0xFFFFEEEE), borderRadius: BorderRadius.circular(18)),
-            child: const Row(children: [
-              Icon(Icons.emergency, color: Color(0xFFD32F2F)),
-              SizedBox(width: 12),
-              Expanded(child: Text('Emergency? Get immediate professional help.', style: TextStyle(fontWeight: FontWeight.w600))),
-            ]),
-          ),
-        ],
-      ),
-      bottomNavigationBar: const NavigationBar(selectedIndex: 0, destinations: [
-        NavigationDestination(icon: Icon(Icons.home_outlined), label: 'Home'),
-        NavigationDestination(icon: Icon(Icons.people_outline), label: 'Doctors'),
-        NavigationDestination(icon: Icon(Icons.calendar_month_outlined), label: 'Bookings'),
-        NavigationDestination(icon: Icon(Icons.folder_outlined), label: 'Records'),
-        NavigationDestination(icon: Icon(Icons.person_outline), label: 'Profile'),
-      ]),
-    );
-  }
-}
+class HomePage extends StatefulWidget { const HomePage({super.key}); @override State<HomePage> createState()=>_HomePageState(); }
+class _HomePageState extends State<HomePage>{ int index=0; final pages=const[HomeTab(),DoctorsTab(),BookingsTab(),RecordsTab(),ProfileTab()]; @override Widget build(BuildContext c)=>Scaffold(body:pages[index],bottomNavigationBar:NavigationBar(selectedIndex:index,onDestinationSelected:(i)=>setState(()=>index=i),destinations:const[NavigationDestination(icon:Icon(Icons.home_outlined),label:'Home'),NavigationDestination(icon:Icon(Icons.people_outline),label:'Doctors'),NavigationDestination(icon:Icon(Icons.calendar_month_outlined),label:'Bookings'),NavigationDestination(icon:Icon(Icons.folder_outlined),label:'Records'),NavigationDestination(icon:Icon(Icons.person_outline),label:'Profile')])); }
+class HomeTab extends StatelessWidget{const HomeTab({super.key}); @override Widget build(BuildContext c)=>Scaffold(appBar:AppBar(title:const Text('AYANSHA',style:TextStyle(fontWeight:FontWeight.bold))),body:ListView(padding:const EdgeInsets.all(16),children:[Container(padding:const EdgeInsets.all(20),decoration:BoxDecoration(color:const Color(0xFF073C4A),borderRadius:BorderRadius.circular(22)),child:const Column(crossAxisAlignment:CrossAxisAlignment.start,children:[Text('Good morning 👋',style:TextStyle(color:Colors.white70)),SizedBox(height:6),Text('Your health, our priority',style:TextStyle(color:Colors.white,fontSize:24,fontWeight:FontWeight.bold)),SizedBox(height:8),Text('Find doctors, book care and manage your health in one place.',style:TextStyle(color:Colors.white70))])),const SizedBox(height:22),const Text('Quick Services',style:TextStyle(fontSize:20,fontWeight:FontWeight.bold)),const SizedBox(height:12),GridView.count(shrinkWrap:true,physics:const NeverScrollableScrollPhysics(),crossAxisCount:2,crossAxisSpacing:12,mainAxisSpacing:12,childAspectRatio:1.45,children:[service(c,'Find a Doctor',Icons.medical_services_outlined,const DoctorsTab()),service(c,'Book Appointment',Icons.calendar_month_outlined,const BookingPage()),service(c,'Video Consultation',Icons.videocam_outlined,const ConsultationPage()),service(c,'Lab Tests',Icons.science_outlined,const LabsPage()),service(c,'Health Records',Icons.folder_shared_outlined,const RecordsTab()),service(c,'Emergency Help',Icons.emergency_outlined,const EmergencyPage())]),const SizedBox(height:18),Container(padding:const EdgeInsets.all(16),decoration:BoxDecoration(color:const Color(0xFFFFEEEE),borderRadius:BorderRadius.circular(18)),child:const Row(children:[Icon(Icons.emergency,color:Colors.red),SizedBox(width:12),Expanded(child:Text('Emergency? Get immediate professional help.',style:TextStyle(fontWeight:FontWeight.w600))) ]))]));}
+Widget service(BuildContext c,String title,IconData icon,Widget page)=>Card(elevation:0,child:InkWell(onTap:()=>Navigator.push(c,MaterialPageRoute(builder:(_)=>page)),child:Padding(padding:const EdgeInsets.all(16),child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[Icon(icon,size:30,color:const Color(0xFF0E8F8F)),const Spacer(),Text(title,style:const TextStyle(fontWeight:FontWeight.w600))]))));
+class DoctorsTab extends StatelessWidget{const DoctorsTab({super.key});@override Widget build(BuildContext c)=>SimplePage(title:'Find a Doctor',children:[doctor(c,'Dr. Ananya Sharma','Cardiology'),doctor(c,'Dr. Rahul Mehta','General Medicine'),doctor(c,'Dr. Priya Kapoor','Dermatology')]);}
+Widget doctor(BuildContext c,String n,String s)=>Card(child:ListTile(leading:const CircleAvatar(child:Icon(Icons.person)),title:Text(n),subtitle:Text(s),trailing:FilledButton(onPressed:()=>Navigator.push(c,MaterialPageRoute(builder:(_)=>BookingPage(doctor:n))),child:const Text('Book'))));
+class BookingPage extends StatefulWidget{final String? doctor;const BookingPage({super.key,this.doctor});@override State<BookingPage> createState()=>_BookingPageState();}
+class _BookingPageState extends State<BookingPage>{String mode='Video';@override Widget build(BuildContext c)=>SimplePage(title:'Book Appointment',children:[Text(widget.doctor??'Select your doctor',style:const TextStyle(fontSize:18,fontWeight:FontWeight.bold)),const ListTile(leading:Icon(Icons.calendar_month),title:Text('Today, 10:30 AM'),subtitle:Text('Available slot')),DropdownButtonFormField<String>(initialValue:mode,decoration:const InputDecoration(labelText:'Consultation mode',border:OutlineInputBorder()),items:['Video','In-clinic'].map((x)=>DropdownMenuItem(value:x,child:Text(x))).toList(),onChanged:(x)=>setState(()=>mode=x!)),FilledButton(onPressed:()=>showDialog(context:c,builder:(_)=>const AlertDialog(title:Text('Appointment Confirmed'),content:Text('Your appointment request has been saved.'))),child:const Text('Confirm Appointment'))]);}
+class BookingsTab extends StatelessWidget{const BookingsTab({super.key});@override Widget build(BuildContext c)=>SimplePage(title:'My Bookings',children:[const Card(child:ListTile(leading:Icon(Icons.calendar_month),title:Text('Dr. Ananya Sharma'),subtitle:Text('Today • 10:30 AM • Video'),trailing:Chip(label:Text('Confirmed')))),FilledButton(onPressed:()=>Navigator.push(c,MaterialPageRoute(builder:(_)=>const BookingPage())),child:const Text('Book New Appointment'))]);}
+class ConsultationPage extends StatelessWidget{const ConsultationPage({super.key});@override Widget build(BuildContext c)=>SimplePage(title:'Video Consultation',children:[const Card(child:ListTile(leading:Icon(Icons.videocam),title:Text('Consultation ready'),subtitle:Text('Join securely when your doctor is available.'))),FilledButton.icon(onPressed:(){},icon:const Icon(Icons.video_call),label:const Text('Join Consultation')),const ListTile(leading:Icon(Icons.receipt_long),title:Text('Digital Prescription'))]);}
+class LabsPage extends StatelessWidget{const LabsPage({super.key});@override Widget build(BuildContext c)=>SimplePage(title:'Lab Tests',children:['CBC / Complete Blood Count','Diabetes Profile','Lipid Profile','Home Sample Collection'].map((x)=>Card(child:ListTile(title:Text(x),trailing:TextButton(onPressed:(){},child:const Text('Book'))))).toList());}
+class RecordsTab extends StatelessWidget{const RecordsTab({super.key});@override Widget build(BuildContext c)=>SimplePage(title:'Health Records',children:['Prescriptions','Lab Reports','Medical History','Appointments'].map((x)=>Card(child:ListTile(leading:const Icon(Icons.description_outlined),title:Text(x),trailing:const Icon(Icons.chevron_right)))).toList());}
+class ProfileTab extends StatelessWidget{const ProfileTab({super.key});@override Widget build(BuildContext c)=>SimplePage(title:'My Profile',children:[const CircleAvatar(radius:38,child:Icon(Icons.person,size:40)),const Center(child:Text('Patient Profile',style:TextStyle(fontSize:20,fontWeight:FontWeight.bold))),const Divider(),...['Personal Information','Family Members','Notifications','Privacy & Security'].map((x)=>ListTile(title:Text(x),trailing:const Icon(Icons.chevron_right))) ]);}
+class EmergencyPage extends StatelessWidget{const EmergencyPage({super.key});@override Widget build(BuildContext c)=>SimplePage(title:'Emergency Help',children:[const Icon(Icons.emergency,color:Colors.red,size:70),const Text('If this is a life-threatening emergency, contact your local emergency service immediately.',style:TextStyle(fontSize:17)),FilledButton.icon(onPressed:(){},icon:const Icon(Icons.phone),label:const Text('Emergency Call'))]);}
+class SimplePage extends StatelessWidget{final String title;final List<Widget> children;const SimplePage({super.key,required this.title,required this.children});@override Widget build(BuildContext c)=>Scaffold(appBar:AppBar(title:Text(title)),body:ListView(padding:const EdgeInsets.all(16),children:children.map((x)=>Padding(padding:const EdgeInsets.only(bottom:12),child:x)).toList()));}
