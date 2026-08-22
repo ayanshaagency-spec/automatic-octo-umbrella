@@ -1,0 +1,7 @@
+{
+  "name": "ayansha-health-care-api",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {"start": "node src/server.js"},
+  "engines": {"node": ">=18"}
+}
