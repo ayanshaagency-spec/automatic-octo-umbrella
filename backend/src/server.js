@@ -1,11 +1,12 @@
 const http = require('http');
 const PORT = process.env.PORT || 3000;
 const doctorsFallback = [{id:1,name:'Dr. Ananya Sharma',specialty:'Cardiology'},{id:2,name:'Dr. Rahul Mehta',specialty:'General Medicine'},{id:3,name:'Dr. Priya Kapoor',specialty:'Dermatology'}];
-const appointments = [];
+const appointments=[];
 const { issueOtp, verifyOtp, createDevToken } = require('./auth');
 const { getDb } = require('./db');
 const { listDoctors, createAppointment, listAppointmentsByPhone } = require('./repository');
 const { getDoctorAvailability } = require('./availability');
+const { listPatientRecords } = require('./records');
 const send=(res,code,data)=>{res.writeHead(code,{'Content-Type':'application/json'});res.end(JSON.stringify(data));};
 const parseBody=(req,done)=>{let body='';req.on('data',c=>body+=c);req.on('end',()=>{try{done(null,JSON.parse(body||'{}'));}catch(e){done(e);}});};
 const isNonEmptyString=v=>typeof v==='string'&&v.trim().length>0;
@@ -19,6 +20,7 @@ const server=http.createServer(async(req,res)=>{
  if(req.url==='/api/db/health'&&req.method==='GET'){try{const db=await getDb();if(!db)return send(res,503,{ok:false,error:'DATABASE_URL not configured'});await db.query('SELECT 1');return send(res,200,{ok:true,database:'connected'});}catch{return send(res,503,{ok:false,error:'Database unavailable'});}}
  if(req.url==='/api/auth/request-otp'&&req.method==='POST')return parseBody(req,(e,d)=>{if(e||!isValidPhone(d.phone))return send(res,400,{error:'valid phone is required'});send(res,200,{message:'OTP generated for development',devOtp:issueOtp(d.phone)});});
  if(req.url==='/api/auth/verify-otp'&&req.method==='POST')return parseBody(req,(e,d)=>{if(e||!isValidPhone(d.phone)||!d.otp)return send(res,400,{error:'valid phone and otp are required'});if(!verifyOtp(d.phone,String(d.otp)))return send(res,401,{error:'Invalid or expired OTP'});send(res,200,{token:createDevToken(d.phone),user:{phone:d.phone}});});
+ if(req.url==='/api/records'&&req.method==='GET'){const phone=authPhone(req);if(!phone)return send(res,401,{error:'Authentication required'});try{return send(res,200,await listPatientRecords(phone));}catch{return send(res,503,{error:'Unable to load medical records'});}}
  if(req.url==='/api/appointments'&&req.method==='GET'){const phone=authPhone(req);if(!phone)return send(res,401,{error:'Authentication required'});try{const rows=await listAppointmentsByPhone(phone);if(rows)return send(res,200,rows);}catch{}return send(res,200,appointments.filter(a=>a.phone===phone));}
  if(req.url==='/api/appointments'&&req.method==='POST')return parseBody(req,async(e,d)=>{const phone=authPhone(req);if(!phone)return send(res,401,{error:'Authentication required'});if(e)return send(res,400,{error:'Invalid JSON'});if(d.phone!==phone)return send(res,403,{error:'Phone does not match authenticated patient'});if(!isValidAppointment(d))return send(res,422,{error:'patientName, valid phone, doctorId and appointmentAt are required; mode must be Video or In-clinic'});try{const saved=await createAppointment({...d,doctorId:Number(d.doctorId)});if(saved)return send(res,201,saved);}catch{return send(res,503,{error:'Unable to create appointment'});}const appointment={id:appointments.length+1,status:'confirmed',mode:d.mode||'Video',...d,doctorId:Number(d.doctorId)};appointments.push(appointment);send(res,201,appointment);});
  send(res,404,{error:'Not found'});
