@@ -1,8 +1,9 @@
 import 'dart:convert';
 import 'package:http/http.dart' as http;
+import 'app_config.dart';
 
 class ApiService {
-  ApiService({String? baseUrl}) : baseUrl = baseUrl ?? 'http://10.0.2.2:3000';
+  ApiService({String? baseUrl}) : baseUrl = baseUrl ?? AppConfig.apiBaseUrl;
   final String baseUrl; String? token;
   Map<String,String> get _headers=>{'Content-Type':'application/json',if(token!=null)'Authorization':'Bearer $token'};
   Future<dynamic> getJson(String path) async { final r=await http.get(Uri.parse('$baseUrl$path'),headers:_headers); _check(r,200); return jsonDecode(r.body); }
