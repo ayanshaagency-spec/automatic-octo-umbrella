@@ -1,0 +1,27 @@
+import 'dart:convert';
+import 'package:http/http.dart' as http;
+import 'app_config.dart';
+import 'payment_models.dart';
+
+class ApiService {
+  ApiService({String? baseUrl}) : baseUrl = baseUrl ?? AppConfig.apiBaseUrl;
+  final String baseUrl; String? token;
+  Map<String,String> get _headers=>{'Content-Type':'application/json',if(token!=null)'Authorization':'Bearer $token'};
+  Future<dynamic> getJson(String path) async { final r=await http.get(Uri.parse('$baseUrl$path'),headers:_headers); _check(r,200); return jsonDecode(r.body); }
+  Future<dynamic> postJson(String path,Map<String,dynamic> body,{int expected=200}) async { final r=await http.post(Uri.parse('$baseUrl$path'),headers:_headers,body:jsonEncode(body)); _check(r,expected); return jsonDecode(r.body); }
+  Future<dynamic> putJson(String path,Map<String,dynamic> body,{int expected=200}) async { final r=await http.put(Uri.parse('$baseUrl$path'),headers:_headers,body:jsonEncode(body)); _check(r,expected); return jsonDecode(r.body); }
+  Future<List<Map<String,dynamic>>> listDoctors() async { final d=await getJson('/api/doctors'); return (d as List<dynamic>).cast<Map<String,dynamic>>(); }
+  Future<List<String>> availableSlots(int doctorId,DateTime date) async { final d='${date.year.toString().padLeft(4,'0')}-${date.month.toString().padLeft(2,'0')}-${date.day.toString().padLeft(2,'0')}'; final data=await getJson('/api/doctors/$doctorId/availability?date=$d') as Map<String,dynamic>; return (data['slots'] as List<dynamic>? ?? const []).map((e)=>e.toString()).toList(); }
+  Future<List<Map<String,dynamic>>> listAppointments() async { final d=await getJson('/api/appointments'); return (d as List<dynamic>).cast<Map<String,dynamic>>(); }
+  Future<List<Map<String,dynamic>>> listRecords() async { final d=await getJson('/api/records'); return (d as List<dynamic>).cast<Map<String,dynamic>>(); }
+  Future<Map<String,dynamic>> getProfile() async { final d=await getJson('/api/profile'); return d as Map<String,dynamic>; }
+  Future<Map<String,dynamic>> updateProfile({required String name,required String phone,required String emergencyContact}) async { final d=await putJson('/api/profile',{'name':name,'phone':phone,'emergencyContact':emergencyContact}); return d as Map<String,dynamic>; }
+  Future<List<Map<String,dynamic>>> listFamilyMembers() async { final d=await getJson('/api/family-members'); return (d as List<dynamic>).cast<Map<String,dynamic>>(); }
+  Future<Map<String,dynamic>> addFamilyMember({required String name,required String relation}) async { final d=await postJson('/api/family-members',{'name':name,'relation':relation},expected:201); return d as Map<String,dynamic>; }
+  Future<String> requestOtp(String phone) async { final r=await http.post(Uri.parse('$baseUrl/api/auth/request-otp'),headers:_headers,body:jsonEncode({'phone':phone})); _check(r,200); return (jsonDecode(r.body) as Map<String,dynamic>)['devOtp']?.toString()??''; }
+  Future<void> verifyOtp(String phone,String otp) async { final r=await http.post(Uri.parse('$baseUrl/api/auth/verify-otp'),headers:_headers,body:jsonEncode({'phone':phone,'otp':otp})); _check(r,200); token=(jsonDecode(r.body) as Map<String,dynamic>)['token']?.toString(); }
+  Future<Map<String,dynamic>> createAppointment({required String patientName,required String phone,required int doctorId,required DateTime appointmentAt,required String mode}) async { final r=await http.post(Uri.parse('$baseUrl/api/appointments'),headers:_headers,body:jsonEncode({'patientName':patientName,'phone':phone,'doctorId':doctorId,'appointmentAt':appointmentAt.toUtc().toIso8601String(),'mode':mode})); _check(r,201); return jsonDecode(r.body) as Map<String,dynamic>; }
+  Future<PaymentOrder> createPaymentOrder({required int appointmentId,required int amount,String currency='INR'}) async { final d=await postJson('/api/payments/orders',{'appointmentId':appointmentId,'amount':amount,'currency':currency},expected:201); return PaymentOrder.fromJson(d as Map<String,dynamic>); }
+  Future<PaymentVerification> verifyPayment({required int appointmentId,required String orderId,required String paymentId,required String signature}) async { final d=await postJson('/api/payments/verify',{'appointmentId':appointmentId,'orderId':orderId,'paymentId':paymentId,'signature':signature}); return PaymentVerification.fromJson(d as Map<String,dynamic>); }
+  void _check(http.Response r,int expected){if(r.statusCode==expected)return;try{final d=jsonDecode(r.body);throw Exception(d is Map&&d['error']!=null?d['error'].toString():'Request failed (${r.statusCode})');}catch(_){throw Exception('Request failed (${r.statusCode})');}}
+}

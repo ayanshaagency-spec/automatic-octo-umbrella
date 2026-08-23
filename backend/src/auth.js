@@ -16,8 +16,9 @@ const verifyOtp = (phone, otp) => {
 
 const base64url = (value) => Buffer.from(value).toString('base64url');
 const createDevToken = (phone) => {
+  const now = Math.floor(Date.now()/1000);
   const header = base64url(JSON.stringify({ alg: 'HS256', typ: 'JWT' }));
-  const payload = base64url(JSON.stringify({ sub: phone, iat: Math.floor(Date.now()/1000) }));
+  const payload = base64url(JSON.stringify({ sub: phone, iat: now, exp: now + 15 * 60 }));
   return `${header}.${payload}.development-token`;
 };
 

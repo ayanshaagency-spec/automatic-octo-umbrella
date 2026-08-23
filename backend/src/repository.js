@@ -24,4 +24,18 @@ async function createAppointment(data) {
   return rows[0];
 }
 
-module.exports = { listDoctors, createAppointment };
+async function listAppointmentsByPhone(phone) {
+  const db = await getDb();
+  if (!db) return null;
+  const { rows } = await db.query(
+    `SELECT a.id, a.doctor_id AS "doctorId", a.appointment_at AS "appointmentAt", a.mode, a.status,
+            p.name AS "patientName"
+       FROM appointments a
+       JOIN patients p ON p.id = a.patient_id
+      WHERE p.phone = $1
+      ORDER BY a.appointment_at DESC`, [phone]
+  );
+  return rows;
+}
+
+module.exports = { listDoctors, createAppointment, listAppointmentsByPhone };

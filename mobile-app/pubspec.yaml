@@ -1,7 +1,7 @@
 name: ayansha_health_care
 description: Ayansha Health Care patient mobile app.
 publish_to: 'none'
-version: 0.1.0+1
+version: 0.2.0+2
 
 environment:
   sdk: '>=3.0.0 <4.0.0'
@@ -10,6 +10,7 @@ dependencies:
   flutter:
     sdk: flutter
   cupertino_icons: ^1.0.8
+  http: ^1.2.2
 
 flutter:
   uses-material-design: true
