@@ -7,6 +7,8 @@ const { getDb } = require('./db');
 const { listDoctors, createAppointment } = require('./repository');
 const send=(res,code,data)=>{res.writeHead(code,{'Content-Type':'application/json'});res.end(JSON.stringify(data));};
 const parseBody=(req,done)=>{let body='';req.on('data',c=>body+=c);req.on('end',()=>{try{done(null,JSON.parse(body||'{}'));}catch(e){done(e);}});};
+const isNonEmptyString=(value)=>typeof value==='string'&&value.trim().length>0;
+const isValidAppointment=(data)=>isNonEmptyString(data.patientName)&&isNonEmptyString(data.phone)&&Number.isInteger(Number(data.doctorId))&&isNonEmptyString(data.appointmentAt)&&(!data.mode||data.mode==='Video'||data.mode==='In-clinic');
 const server=http.createServer(async(req,res)=>{
   if(req.url==='/health') return send(res,200,{ok:true,service:'Ayansha Health Care'});
   if(req.url==='/api/doctors'&&req.method==='GET'){try{const rows=await listDoctors();return send(res,200,rows||doctorsFallback);}catch(e){return send(res,200,doctorsFallback);}}
@@ -14,7 +16,7 @@ const server=http.createServer(async(req,res)=>{
   if(req.url==='/api/auth/request-otp'&&req.method==='POST')return parseBody(req,(err,data)=>{if(err||!data.phone)return send(res,400,{error:'phone is required'});send(res,200,{message:'OTP generated for development',devOtp:issueOtp(data.phone)});});
   if(req.url==='/api/auth/verify-otp'&&req.method==='POST')return parseBody(req,(err,data)=>{if(err||!data.phone||!data.otp)return send(res,400,{error:'phone and otp are required'});if(!verifyOtp(data.phone,String(data.otp)))return send(res,401,{error:'Invalid or expired OTP'});send(res,200,{token:createDevToken(data.phone),user:{phone:data.phone}});});
   if(req.url==='/api/appointments'&&req.method==='GET')return send(res,200,appointments);
-  if(req.url==='/api/appointments'&&req.method==='POST')return parseBody(req,async(err,data)=>{if(err)return send(res,400,{error:'Invalid JSON'});if(!data.patientName||!data.phone||!data.doctorId||!data.appointmentAt)return send(res,422,{error:'patientName, phone, doctorId and appointmentAt are required'});try{const saved=await createAppointment(data);if(saved)return send(res,201,saved);}catch(e){}const appointment={id:appointments.length+1,status:'confirmed',mode:data.mode||'Video',...data};appointments.push(appointment);send(res,201,appointment);});
+  if(req.url==='/api/appointments'&&req.method==='POST')return parseBody(req,async(err,data)=>{if(err)return send(res,400,{error:'Invalid JSON'});if(!isValidAppointment(data))return send(res,422,{error:'patientName, phone, doctorId and appointmentAt are required; mode must be Video or In-clinic'});try{const saved=await createAppointment({...data,doctorId:Number(data.doctorId)});if(saved)return send(res,201,saved);}catch(e){return send(res,503,{error:'Unable to create appointment'});}const appointment={id:appointments.length+1,status:'confirmed',mode:data.mode||'Video',...data,doctorId:Number(data.doctorId)};appointments.push(appointment);send(res,201,appointment);});
   send(res,404,{error:'Not found'});
 });
 server.listen(PORT,()=>console.log(`Ayansha API running on ${PORT}`));
