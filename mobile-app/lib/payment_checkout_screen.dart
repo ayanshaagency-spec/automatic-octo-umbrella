@@ -1,0 +1,15 @@
+import 'package:flutter/material.dart';
+
+class PaymentCheckoutScreen extends StatefulWidget {
+  const PaymentCheckoutScreen({super.key, required this.doctorName, required this.appointmentAt, required this.mode, this.amount = 499});
+  final String doctorName;
+  final DateTime appointmentAt;
+  final String mode;
+  final int amount;
+  @override State<PaymentCheckoutScreen> createState()=>_PaymentCheckoutScreenState();
+}
+class _PaymentCheckoutScreenState extends State<PaymentCheckoutScreen>{String method='UPI';bool processing=false;
+  Future<void> _pay() async {setState(()=>processing=true);await Future<void>.delayed(const Duration(milliseconds:700));if(!mounted)return;setState(()=>processing=false);ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content:Text('Payment gateway is not connected yet. No payment was charged.')));}
+  @override Widget build(BuildContext context){final d=widget.appointmentAt;return Scaffold(appBar:AppBar(title:const Text('Payment Checkout')),body:ListView(padding:const EdgeInsets.all(16),children:[Card(child:Padding(padding:const EdgeInsets.all(18),child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[const Text('Appointment Summary',style:TextStyle(fontSize:20,fontWeight:FontWeight.bold)),const SizedBox(height:14),_row('Doctor',widget.doctorName),_row('Date','${d.day}/${d.month}/${d.year}'),_row('Time','${d.hour.toString().padLeft(2,'0')}:${d.minute.toString().padLeft(2,'0')}'),_row('Mode',widget.mode)]))),const SizedBox(height:16),Card(child:Column(children:[RadioListTile<String>(value:'UPI',groupValue:method,onChanged:(v)=>setState(()=>method=v!),title:const Text('UPI'),secondary:const Icon(Icons.account_balance_wallet_outlined)),RadioListTile<String>(value:'Card',groupValue:method,onChanged:(v)=>setState(()=>method=v!),title:const Text('Credit / Debit Card'),secondary:const Icon(Icons.credit_card)),RadioListTile<String>(value:'Net Banking',groupValue:method,onChanged:(v)=>setState(()=>method=v!),title:const Text('Net Banking'),secondary:const Icon(Icons.account_balance)])),const SizedBox(height:16),Card(child:Padding(padding:const EdgeInsets.all(18),child:Column(children:[_row('Consultation fee','₹${widget.amount}'),const Divider(),_row('Total payable','₹${widget.amount}',bold:true)]))),const SizedBox(height:22),FilledButton.icon(onPressed:processing?null:_pay,icon:const Icon(Icons.lock_outline),label:Text(processing?'Opening secure checkout...':'Continue to secure payment'))]);}
+  Widget _row(String a,String b,{bool bold=false})=>Padding(padding:const EdgeInsets.symmetric(vertical:5),child:Row(mainAxisAlignment:MainAxisAlignment.spaceBetween,children:[Text(a,style:TextStyle(fontWeight:bold?FontWeight.bold:FontWeight.normal)),Text(b,style:TextStyle(fontWeight:bold?FontWeight.bold:FontWeight.w600))]));
+}
