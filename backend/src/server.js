@@ -14,7 +14,20 @@ const server=http.createServer(async(req,res)=>{
   if(req.url==='/api/auth/request-otp'&&req.method==='POST')return parseBody(req,(err,data)=>{if(err||!data.phone)return send(res,400,{error:'phone is required'});send(res,200,{message:'OTP generated for development',devOtp:issueOtp(data.phone)});});
   if(req.url==='/api/auth/verify-otp'&&req.method==='POST')return parseBody(req,(err,data)=>{if(err||!data.phone||!data.otp)return send(res,400,{error:'phone and otp are required'});if(!verifyOtp(data.phone,String(data.otp)))return send(res,401,{error:'Invalid or expired OTP'});send(res,200,{token:createDevToken(data.phone),user:{phone:data.phone}});});
   if(req.url==='/api/appointments'&&req.method==='GET')return send(res,200,appointments);
-  if(req.url==='/api/appointments'&&req.method==='POST')return parseBody(req,async(err,data)=>{if(err)return send(res,400,{error:'Invalid JSON'});if(!data.patientName||!data.phone||!data.doctorId||!data.appointmentAt)return send(res,422,{error:'patientName, phone, doctorId and appointmentAt are required'});try{const saved=await createAppointment(data);if(saved)return send(res,201,saved);}catch(e){}const appointment={id:appointments.length+1,status:'confirmed',mode:data.mode||'Video',...data};appointments.push(appointment);send(res,201,appointment);});
+  if(req.url==='/api/appointments'&&req.method==='POST')return parseBody(req,async(err,data)=>{
+    if(err)return send(res,400,{error:'Invalid JSON'});
+    if(!data.patientName||!data.phone||!data.doctorId||!data.appointmentAt)return send(res,422,{error:'patientName, phone, doctorId and appointmentAt are required'});
+    try {
+      const saved=await createAppointment(data);
+      if(saved)return send(res,201,saved);
+    } catch(e) {
+      if(e.statusCode)return send(res,e.statusCode,{error:e.message});
+      return send(res,503,{error:'Unable to save appointment'});
+    }
+    const appointment={id:appointments.length+1,status:'confirmed',mode:data.mode||'Video',...data};
+    appointments.push(appointment);
+    send(res,201,appointment);
+  });
   send(res,404,{error:'Not found'});
 });
 server.listen(PORT,()=>console.log(`Ayansha API running on ${PORT}`));
