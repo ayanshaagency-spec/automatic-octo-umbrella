@@ -7,6 +7,28 @@ async function listDoctors() {
   return rows;
 }
 
+async function listAppointments(phone) {
+  const db = await getDb();
+  if (!db) return null;
+  const params = [];
+  let where = '';
+  if (phone) {
+    params.push(phone);
+    where = 'WHERE p.phone = $1';
+  }
+  const { rows } = await db.query(
+    `SELECT a.id, a.patient_id, a.doctor_id, d.name AS doctor_name, d.specialty,
+            a.appointment_at, a.mode, a.status
+       FROM appointments a
+       JOIN patients p ON p.id = a.patient_id
+       JOIN doctors d ON d.id = a.doctor_id
+       ${where}
+      ORDER BY a.appointment_at DESC`,
+    params
+  );
+  return rows;
+}
+
 async function createAppointment(data) {
   const db = await getDb();
   if (!db) return null;
@@ -57,4 +79,4 @@ async function createAppointment(data) {
   return rows[0];
 }
 
-module.exports = { listDoctors, createAppointment };
+module.exports = { listDoctors, listAppointments, createAppointment };
