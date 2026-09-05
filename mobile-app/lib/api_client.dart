@@ -10,7 +10,15 @@ class ApiClient {
     final response = await http.get(Uri.parse('$baseUrl/api/doctors')).timeout(const Duration(seconds: 8));
     if (response.statusCode != 200) throw Exception('Unable to load doctors');
     final data = jsonDecode(response.body);
-    return (data as List).cast<Map<String, dynamic>>();
+    return (data as List).map((e) => Map<String, dynamic>.from(e as Map)).toList();
+  }
+
+  Future<List<Map<String, dynamic>>> getAppointments(String phone) async {
+    final uri = Uri.parse('$baseUrl/api/appointments').replace(queryParameters: {'phone': phone});
+    final response = await http.get(uri).timeout(const Duration(seconds: 8));
+    if (response.statusCode != 200) throw Exception('Unable to load appointments');
+    final data = jsonDecode(response.body);
+    return (data as List).map((e) => Map<String, dynamic>.from(e as Map)).toList();
   }
 
   Future<Map<String, dynamic>> createAppointment({
