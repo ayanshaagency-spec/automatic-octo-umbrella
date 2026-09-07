@@ -4,9 +4,9 @@ const doctorsFallback = [{id:1,name:'Dr. Ananya Sharma',specialty:'Cardiology'},
 const appointments = [];
 const { issueOtp, verifyOtp, createDevToken } = require('./auth');
 const { getDb } = require('./db');
-const { listDoctors, listAppointments, createAppointment } = require('./repository');
+const { listDoctors, listAppointments, updateAppointmentStatus, createAppointment } = require('./repository');
 const { listPrescriptions, createPrescription, listHealthRecords, createHealthRecord } = require('./phase3_repository');
-const send=(res,code,data)=>{res.writeHead(code,{'Content-Type':'application/json','Access-Control-Allow-Origin':'*','Access-Control-Allow-Methods':'GET,POST,OPTIONS','Access-Control-Allow-Headers':'Content-Type,Authorization'});res.end(JSON.stringify(data));};
+const send=(res,code,data)=>{res.writeHead(code,{'Content-Type':'application/json','Access-Control-Allow-Origin':'*','Access-Control-Allow-Methods':'GET,POST,PATCH,OPTIONS','Access-Control-Allow-Headers':'Content-Type,Authorization'});res.end(JSON.stringify(data));};
 const parseBody=(req,done)=>{let body='';req.on('data',c=>body+=c);req.on('end',()=>{try{done(null,JSON.parse(body||'{}'));}catch(e){done(e);}});};
 const server=http.createServer(async(req,res)=>{
   if(req.method==='OPTIONS') return send(res,204,{});
@@ -21,6 +21,12 @@ const server=http.createServer(async(req,res)=>{
     catch(e) { return send(res,503,{error:'Unable to load appointments'}); }
     return send(res,200,appointments);
   }
+  const statusMatch=url.pathname.match(/^\/api\/appointments\/(\d+)\/status$/);
+  if(statusMatch&&req.method==='PATCH')return parseBody(req,async(err,data)=>{
+    if(err)return send(res,400,{error:'Invalid JSON'});
+    try { const saved=await updateAppointmentStatus(Number(statusMatch[1]),data.status); if(saved)return send(res,200,saved); return send(res,503,{error:'DATABASE_URL not configured'}); }
+    catch(e) { if(e.statusCode)return send(res,e.statusCode,{error:e.message}); return send(res,503,{error:'Unable to update appointment status'}); }
+  });
   if(url.pathname==='/api/appointments'&&req.method==='POST')return parseBody(req,async(err,data)=>{
     if(err)return send(res,400,{error:'Invalid JSON'});
     if(!data.patientName||!data.phone||!data.doctorId||!data.appointmentAt)return send(res,422,{error:'patientName, phone, doctorId and appointmentAt are required'});
@@ -28,12 +34,9 @@ const server=http.createServer(async(req,res)=>{
     catch(e) { if(e.statusCode)return send(res,e.statusCode,{error:e.message}); return send(res,503,{error:'Unable to save appointment'}); }
     const appointment={id:appointments.length+1,status:'confirmed',mode:data.mode||'Video',...data}; appointments.push(appointment); send(res,201,appointment);
   });
-
   if(url.pathname==='/api/prescriptions'&&req.method==='GET'){
-    const phone=url.searchParams.get('phone');
-    if(!phone)return send(res,422,{error:'phone is required'});
-    try { const rows=await listPrescriptions(phone); return send(res,200,rows||[]); }
-    catch(e) { return send(res,503,{error:'Unable to load prescriptions'}); }
+    const phone=url.searchParams.get('phone'); if(!phone)return send(res,422,{error:'phone is required'});
+    try { const rows=await listPrescriptions(phone); return send(res,200,rows||[]); } catch(e) { return send(res,503,{error:'Unable to load prescriptions'}); }
   }
   if(url.pathname==='/api/prescriptions'&&req.method==='POST')return parseBody(req,async(err,data)=>{
     if(err)return send(res,400,{error:'Invalid JSON'});
@@ -41,17 +44,14 @@ const server=http.createServer(async(req,res)=>{
     catch(e) { if(e.statusCode)return send(res,e.statusCode,{error:e.message}); return send(res,503,{error:'Unable to save prescription'}); }
   });
   if(url.pathname==='/api/health-records'&&req.method==='GET'){
-    const phone=url.searchParams.get('phone');
-    if(!phone)return send(res,422,{error:'phone is required'});
-    try { const rows=await listHealthRecords(phone); return send(res,200,rows||[]); }
-    catch(e) { return send(res,503,{error:'Unable to load health records'}); }
+    const phone=url.searchParams.get('phone'); if(!phone)return send(res,422,{error:'phone is required'});
+    try { const rows=await listHealthRecords(phone); return send(res,200,rows||[]); } catch(e) { return send(res,503,{error:'Unable to load health records'}); }
   }
   if(url.pathname==='/api/health-records'&&req.method==='POST')return parseBody(req,async(err,data)=>{
     if(err)return send(res,400,{error:'Invalid JSON'});
     try { const saved=await createHealthRecord(data); if(saved)return send(res,201,saved); return send(res,503,{error:'DATABASE_URL not configured'}); }
     catch(e) { if(e.statusCode)return send(res,e.statusCode,{error:e.message}); return send(res,503,{error:'Unable to save health record'}); }
   });
-
   send(res,404,{error:'Not found'});
 });
 server.listen(PORT,()=>console.log(`Ayansha API running on ${PORT}`));
