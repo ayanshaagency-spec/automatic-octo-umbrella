@@ -17,8 +17,8 @@ async function listAppointments(phone) {
     where = 'WHERE p.phone = $1';
   }
   const { rows } = await db.query(
-    `SELECT a.id, a.patient_id, a.doctor_id, d.name AS doctor_name, d.specialty,
-            a.appointment_at, a.mode, a.status
+    `SELECT a.id, a.patient_id, a.doctor_id, p.name AS patient_name, p.phone,
+            d.name AS doctor_name, d.specialty, a.appointment_at, a.mode, a.status
        FROM appointments a
        JOIN patients p ON p.id = a.patient_id
        JOIN doctors d ON d.id = a.doctor_id
@@ -27,6 +27,28 @@ async function listAppointments(phone) {
     params
   );
   return rows;
+}
+
+async function updateAppointmentStatus(id, status) {
+  const db = await getDb();
+  if (!db) return null;
+  const allowed = ['confirmed', 'completed', 'cancelled', 'in-progress'];
+  if (!allowed.includes(status)) {
+    const error = new Error(`status must be one of: ${allowed.join(', ')}`);
+    error.statusCode = 422;
+    throw error;
+  }
+  const { rows } = await db.query(
+    `UPDATE appointments SET status = $1 WHERE id = $2
+     RETURNING id, patient_id, doctor_id, appointment_at, mode, status`,
+    [status, id]
+  );
+  if (!rows.length) {
+    const error = new Error('Appointment not found');
+    error.statusCode = 404;
+    throw error;
+  }
+  return rows[0];
 }
 
 async function createAppointment(data) {
@@ -79,4 +101,4 @@ async function createAppointment(data) {
   return rows[0];
 }
 
-module.exports = { listDoctors, listAppointments, createAppointment };
+module.exports = { listDoctors, listAppointments, updateAppointmentStatus, createAppointment };
