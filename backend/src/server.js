@@ -6,9 +6,10 @@ const { issueOtp, verifyOtp, createDevToken } = require('./auth');
 const { getDb } = require('./db');
 const { listDoctors, listAppointments, createAppointment } = require('./repository');
 const { listPrescriptions, createPrescription, listHealthRecords, createHealthRecord } = require('./phase3_repository');
-const send=(res,code,data)=>{res.writeHead(code,{'Content-Type':'application/json'});res.end(JSON.stringify(data));};
+const send=(res,code,data)=>{res.writeHead(code,{'Content-Type':'application/json','Access-Control-Allow-Origin':'*','Access-Control-Allow-Methods':'GET,POST,OPTIONS','Access-Control-Allow-Headers':'Content-Type,Authorization'});res.end(JSON.stringify(data));};
 const parseBody=(req,done)=>{let body='';req.on('data',c=>body+=c);req.on('end',()=>{try{done(null,JSON.parse(body||'{}'));}catch(e){done(e);}});};
 const server=http.createServer(async(req,res)=>{
+  if(req.method==='OPTIONS') return send(res,204,{});
   const url = new URL(req.url, `http://${req.headers.host || 'localhost'}`);
   if(url.pathname==='/health') return send(res,200,{ok:true,service:'Ayansha Health Care'});
   if(url.pathname==='/api/doctors'&&req.method==='GET'){try{const rows=await listDoctors();return send(res,200,rows||doctorsFallback);}catch(e){return send(res,200,doctorsFallback);}}
