@@ -7,37 +7,15 @@
   <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
-  <header class="topbar">
-    <div><strong>AyanSha Health Care</strong><span>Doctor Panel</span></div>
-    <button id="refreshBtn" class="secondary">Refresh</button>
-  </header>
-
+  <header class="topbar"><div><strong>AyanSha Health Care</strong><span>Doctor Panel</span></div><button id="refreshBtn" class="secondary">Refresh</button></header>
   <main class="container">
-    <section class="hero">
-      <div><p class="eyebrow">Clinical workspace</p><h1>Doctor Dashboard</h1><p>Review appointments and create digital prescriptions securely through the shared API.</p></div>
-      <div class="status" id="apiStatus">Checking API…</div>
-    </section>
-
+    <section class="hero"><div><p class="eyebrow">Clinical workspace</p><h1>Doctor Dashboard</h1><p>Review appointments, manage status, prescribe medicines and add patient health records.</p></div><div class="status" id="apiStatus">Checking API…</div></section>
     <section class="grid">
-      <div class="card wide">
-        <div class="card-head"><h2>Appointment Queue</h2><span id="appointmentCount">0</span></div>
-        <div id="appointments" class="list"><div class="empty">Loading appointments…</div></div>
-      </div>
-
-      <div class="card">
-        <h2>Create Prescription</h2>
-        <form id="prescriptionForm">
-          <label>Appointment ID<input name="appointmentId" type="number" required placeholder="e.g. 12" /></label>
-          <label>Diagnosis<input name="diagnosis" required placeholder="Diagnosis" /></label>
-          <label>Notes<textarea name="notes" rows="3" placeholder="Clinical notes"></textarea></label>
-          <div class="medicine-head"><strong>Medicines</strong><button type="button" id="addMedicine" class="secondary small">+ Add</button></div>
-          <div id="medicines"></div>
-          <button class="primary" type="submit">Save Prescription</button>
-          <p id="formMessage" class="message"></p>
-        </form>
-      </div>
+      <div class="card wide"><div class="card-head"><h2>Appointment Queue</h2><span id="appointmentCount">0</span></div><div id="appointments" class="list"><div class="empty">Loading appointments…</div></div></div>
+      <div class="card"><h2>Create Prescription</h2><form id="prescriptionForm"><label>Appointment ID<input name="appointmentId" type="number" required placeholder="e.g. 12" /></label><label>Diagnosis<input name="diagnosis" required placeholder="Diagnosis" /></label><label>Notes<textarea name="notes" rows="3" placeholder="Clinical notes"></textarea></label><div class="medicine-head"><strong>Medicines</strong><button type="button" id="addMedicine" class="secondary small">+ Add</button></div><div id="medicines"></div><button class="primary" type="submit">Save Prescription</button><p id="formMessage" class="message"></p></form></div>
+      <div class="card"><h2>Add Health Record</h2><form id="healthRecordForm"><label>Patient Phone<input name="phone" required inputmode="tel" placeholder="Patient phone" /></label><label>Record Type<select name="recordType" required><option value="lab">Lab</option><option value="visit">Visit</option><option value="diagnosis">Diagnosis</option><option value="imaging">Imaging</option><option value="other">Other</option></select></label><label>Title<input name="title" required placeholder="e.g. Blood Test Report" /></label><label>Record Date<input name="recordDate" type="date" /></label><label>Description<textarea name="description" rows="4" placeholder="Clinical details / findings"></textarea></label><button class="primary" type="submit">Save Health Record</button><p id="recordMessage" class="message"></p></form></div>
     </section>
   </main>
-  <script src="app.js"></script>
+  <script src="app.js"></script><script src="health-record.js"></script>
 </body>
 </html>
