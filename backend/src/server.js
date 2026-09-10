@@ -7,6 +7,7 @@ const { getDb } = require('./db');
 const { listDoctors, listAppointments, updateAppointmentStatus, createAppointment } = require('./repository');
 const { listPrescriptions, createPrescription, listHealthRecords, createHealthRecord } = require('./phase3_repository');
 const { listLabOrders, createLabOrder, updateLabOrderStatus } = require('./phase4_repository');
+const { listPayments, createPayment, updatePaymentStatus } = require('./phase5_payment_repository');
 const send=(res,code,data)=>{res.writeHead(code,{'Content-Type':'application/json','Access-Control-Allow-Origin':'*','Access-Control-Allow-Methods':'GET,POST,PATCH,OPTIONS','Access-Control-Allow-Headers':'Content-Type,Authorization'});res.end(JSON.stringify(data));};
 const parseBody=(req,done)=>{let body='';req.on('data',c=>body+=c);req.on('end',()=>{try{done(null,JSON.parse(body||'{}'));}catch(e){done(e);}});};
 const server=http.createServer(async(req,res)=>{
@@ -67,6 +68,21 @@ const server=http.createServer(async(req,res)=>{
     if(err)return send(res,400,{error:'Invalid JSON'});
     try { const saved=await updateLabOrderStatus(Number(labStatusMatch[1]),data.status); if(saved)return send(res,200,saved); return send(res,503,{error:'DATABASE_URL not configured'}); }
     catch(e) { if(e.statusCode)return send(res,e.statusCode,{error:e.message}); return send(res,503,{error:'Unable to update lab order status'}); }
+  });
+  if(url.pathname==='/api/payments'&&req.method==='GET'){
+    const phone=url.searchParams.get('phone'); if(!phone)return send(res,422,{error:'phone is required'});
+    try { const rows=await listPayments(phone); return send(res,200,rows||[]); } catch(e) { return send(res,503,{error:'Unable to load payments'}); }
+  }
+  if(url.pathname==='/api/payments'&&req.method==='POST')return parseBody(req,async(err,data)=>{
+    if(err)return send(res,400,{error:'Invalid JSON'});
+    try { const saved=await createPayment(data); if(saved)return send(res,201,saved); return send(res,503,{error:'DATABASE_URL not configured'}); }
+    catch(e) { if(e.statusCode)return send(res,e.statusCode,{error:e.message}); return send(res,503,{error:'Unable to create payment'}); }
+  });
+  const paymentStatusMatch=url.pathname.match(/^\/api\/payments\/(\d+)\/status$/);
+  if(paymentStatusMatch&&req.method==='PATCH')return parseBody(req,async(err,data)=>{
+    if(err)return send(res,400,{error:'Invalid JSON'});
+    try { const saved=await updatePaymentStatus(Number(paymentStatusMatch[1]),data.status,data.providerPaymentId); if(saved)return send(res,200,saved); return send(res,503,{error:'DATABASE_URL not configured'}); }
+    catch(e) { if(e.statusCode)return send(res,e.statusCode,{error:e.message}); return send(res,503,{error:'Unable to update payment status'}); }
   });
   send(res,404,{error:'Not found'});
 });
