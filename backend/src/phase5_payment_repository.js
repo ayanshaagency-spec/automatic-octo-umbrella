@@ -1,4 +1,5 @@
 const { getDb } = require('./db');
+const { validatePaymentInput, validateStatusTransition } = require('./phase5_payment_validation');
 
 async function listPayments(phone) {
   const db = await getDb();
@@ -16,24 +17,15 @@ async function listPayments(phone) {
 }
 
 async function createPayment(data) {
+  const validationError = validatePaymentInput(data);
+  if (validationError) {
+    const error = new Error(validationError);
+    error.statusCode = 422;
+    throw error;
+  }
   const db = await getDb();
   if (!db) return null;
-  if (!data.phone || data.amount == null) {
-    const error = new Error('phone and amount are required');
-    error.statusCode = 422;
-    throw error;
-  }
   const amount = Number(data.amount);
-  if (!Number.isFinite(amount) || amount <= 0) {
-    const error = new Error('amount must be a positive number');
-    error.statusCode = 422;
-    throw error;
-  }
-  if (!data.appointmentId && !data.labOrderId) {
-    const error = new Error('appointmentId or labOrderId is required');
-    error.statusCode = 422;
-    throw error;
-  }
   const patient = await db.query('SELECT id FROM patients WHERE phone = $1', [data.phone]);
   if (!patient.rowCount) {
     const error = new Error('Patient not found');
@@ -54,9 +46,15 @@ async function createPayment(data) {
 async function updatePaymentStatus(id, status, providerPaymentId) {
   const db = await getDb();
   if (!db) return null;
-  const allowed = ['created', 'pending', 'paid', 'failed', 'refunded', 'cancelled'];
-  if (!allowed.includes(status)) {
-    const error = new Error(`status must be one of: ${allowed.join(', ')}`);
+  const current = await db.query('SELECT status FROM payments WHERE id = $1', [id]);
+  if (!current.rowCount) {
+    const error = new Error('Payment not found');
+    error.statusCode = 404;
+    throw error;
+  }
+  const validationError = validateStatusTransition(current.rows[0].status, status);
+  if (validationError) {
+    const error = new Error(validationError);
     error.statusCode = 422;
     throw error;
   }
@@ -70,11 +68,6 @@ async function updatePaymentStatus(id, status, providerPaymentId) {
                provider_order_id, provider_payment_id, status, notes, created_at, updated_at`,
     [status, providerPaymentId || null, id]
   );
-  if (!rows.length) {
-    const error = new Error('Payment not found');
-    error.statusCode = 404;
-    throw error;
-  }
   return rows[0];
 }
 
