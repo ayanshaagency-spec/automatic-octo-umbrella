@@ -2,7 +2,10 @@
   "name": "ayansha-health-care-api",
   "version": "0.2.0",
   "private": true,
-  "scripts": {"start": "node src/server.js"},
+  "scripts": {
+    "start": "node src/server.js",
+    "test": "node --test src/phase5_payment_validation.test.js"
+  },
   "engines": {"node": ">=18"},
   "dependencies": {"pg": "^8.13.1"}
 }
