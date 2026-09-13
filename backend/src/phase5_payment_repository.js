@@ -8,7 +8,7 @@ async function listPayments(phone) {
     SELECT pay.id, pay.patient_id, p.name AS patient_name, p.phone,
            pay.appointment_id, pay.lab_order_id, pay.amount, pay.currency,
            pay.provider, pay.provider_order_id, pay.provider_payment_id,
-           pay.status, pay.notes, pay.created_at, pay.updated_at
+           pay.idempotency_key, pay.status, pay.notes, pay.created_at, pay.updated_at
       FROM payments pay
       JOIN patients p ON p.id = pay.patient_id
      WHERE p.phone = $1
@@ -32,15 +32,44 @@ async function createPayment(data) {
     error.statusCode = 404;
     throw error;
   }
-  const { rows } = await db.query(`
-    INSERT INTO payments
-      (patient_id, appointment_id, lab_order_id, amount, currency, provider, provider_order_id, status, notes)
-    VALUES ($1,$2,$3,$4,$5,$6,$7,'created',$8)
-    RETURNING id, patient_id, appointment_id, lab_order_id, amount, currency, provider, provider_order_id, status, notes, created_at, updated_at`,
-    [patient.rows[0].id, data.appointmentId || null, data.labOrderId || null, amount,
-     data.currency || 'INR', data.provider || null, data.providerOrderId || null, data.notes || null]
-  );
-  return rows[0];
+
+  if (data.idempotencyKey) {
+    const existing = await db.query(`
+      SELECT id, patient_id, appointment_id, lab_order_id, amount, currency, provider,
+             provider_order_id, provider_payment_id, idempotency_key, status, notes, created_at, updated_at
+        FROM payments
+       WHERE patient_id = $1 AND idempotency_key = $2`,
+      [patient.rows[0].id, data.idempotencyKey]
+    );
+    if (existing.rowCount) return existing.rows[0];
+  }
+
+  try {
+    const { rows } = await db.query(`
+      INSERT INTO payments
+        (patient_id, appointment_id, lab_order_id, amount, currency, provider, provider_order_id, idempotency_key, status, notes)
+      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,'created',$9)
+      RETURNING id, patient_id, appointment_id, lab_order_id, amount, currency, provider, provider_order_id,
+                provider_payment_id, idempotency_key, status, notes, created_at, updated_at`,
+      [patient.rows[0].id, data.appointmentId || null, data.labOrderId || null, amount,
+       data.currency || 'INR', data.provider || null, data.providerOrderId || null,
+       data.idempotencyKey || null, data.notes || null]
+    );
+    return rows[0];
+  } catch (error) {
+    // Concurrent duplicate requests are resolved by the database unique index.
+    if (data.idempotencyKey && error.code === '23505') {
+      const existing = await db.query(`
+        SELECT id, patient_id, appointment_id, lab_order_id, amount, currency, provider,
+               provider_order_id, provider_payment_id, idempotency_key, status, notes, created_at, updated_at
+          FROM payments
+         WHERE patient_id = $1 AND idempotency_key = $2`,
+        [patient.rows[0].id, data.idempotencyKey]
+      );
+      if (existing.rowCount) return existing.rows[0];
+    }
+    throw error;
+  }
 }
 
 async function updatePaymentStatus(id, status, providerPaymentId) {
@@ -65,7 +94,7 @@ async function updatePaymentStatus(id, status, providerPaymentId) {
            updated_at = NOW()
      WHERE id = $3
      RETURNING id, patient_id, appointment_id, lab_order_id, amount, currency, provider,
-               provider_order_id, provider_payment_id, status, notes, created_at, updated_at`,
+               provider_order_id, provider_payment_id, idempotency_key, status, notes, created_at, updated_at`,
     [status, providerPaymentId || null, id]
   );
   return rows[0];
