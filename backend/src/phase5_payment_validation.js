@@ -15,6 +15,9 @@ function validatePaymentInput(data) {
   if (!Number.isFinite(amount) || amount <= 0) return 'amount must be a positive number';
   if (!data.appointmentId && !data.labOrderId) return 'appointmentId or labOrderId is required';
   if (data.currency && !/^[A-Z]{3,10}$/.test(String(data.currency))) return 'currency must be an uppercase ISO-style code';
+  if (data.idempotencyKey != null && (!String(data.idempotencyKey).trim() || String(data.idempotencyKey).length > 160)) {
+    return 'idempotencyKey must be a non-empty string up to 160 characters';
+  }
   return null;
 }
 
