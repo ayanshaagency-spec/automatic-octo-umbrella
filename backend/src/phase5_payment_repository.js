@@ -16,6 +16,37 @@ async function listPayments(phone) {
   return rows;
 }
 
+async function getPaymentById(id) {
+  const db = await getDb();
+  if (!db) return null;
+  const { rows } = await db.query(`
+    SELECT pay.id, pay.patient_id, p.phone,
+           pay.appointment_id, pay.lab_order_id, pay.amount, pay.currency,
+           pay.provider, pay.provider_order_id, pay.provider_payment_id,
+           pay.idempotency_key, pay.status, pay.notes, pay.created_at, pay.updated_at
+      FROM payments pay
+      JOIN patients p ON p.id = pay.patient_id
+     WHERE pay.id = $1`, [id]);
+  return rows[0] || null;
+}
+
+async function setProviderOrderId(id, provider, providerOrderId) {
+  const db = await getDb();
+  if (!db) return null;
+  const { rows } = await db.query(`
+    UPDATE payments
+       SET provider = $1,
+           provider_order_id = $2,
+           status = CASE WHEN status = 'created' THEN 'pending' ELSE status END,
+           updated_at = NOW()
+     WHERE id = $3
+     RETURNING id, patient_id, appointment_id, lab_order_id, amount, currency, provider,
+               provider_order_id, provider_payment_id, idempotency_key, status, notes, created_at, updated_at`,
+    [provider, providerOrderId, id]
+  );
+  return rows[0] || null;
+}
+
 async function createPayment(data) {
   const validationError = validatePaymentInput(data);
   if (validationError) {
@@ -57,7 +88,6 @@ async function createPayment(data) {
     );
     return rows[0];
   } catch (error) {
-    // Concurrent duplicate requests are resolved by the database unique index.
     if (data.idempotencyKey && error.code === '23505') {
       const existing = await db.query(`
         SELECT id, patient_id, appointment_id, lab_order_id, amount, currency, provider,
@@ -100,4 +130,4 @@ async function updatePaymentStatus(id, status, providerPaymentId) {
   return rows[0];
 }
 
-module.exports = { listPayments, createPayment, updatePaymentStatus };
+module.exports = { listPayments, getPaymentById, setProviderOrderId, createPayment, updatePaymentStatus };
