@@ -7,7 +7,8 @@ const { getDb } = require('./db');
 const { listDoctors, listAppointments, updateAppointmentStatus, createAppointment } = require('./repository');
 const { listPrescriptions, createPrescription, listHealthRecords, createHealthRecord } = require('./phase3_repository');
 const { listLabOrders, createLabOrder, updateLabOrderStatus } = require('./phase4_repository');
-const { listPayments, createPayment, updatePaymentStatus } = require('./phase5_payment_repository');
+const { listPayments, getPaymentById, setProviderOrderId, createPayment, updatePaymentStatus } = require('./phase5_payment_repository');
+const { createPaymentGatewayOrder } = require('./payment_gateway');
 const { getWebhookSecret, verifyWebhookSignature, parseWebhookEvent } = require('./payment_webhook');
 const send=(res,code,data)=>{res.writeHead(code,{'Content-Type':'application/json','Access-Control-Allow-Origin':'*','Access-Control-Allow-Methods':'GET,POST,PATCH,OPTIONS','Access-Control-Allow-Headers':'Content-Type,Authorization,X-Payment-Signature'});res.end(JSON.stringify(data));};
 const parseBody=(req,done)=>{let body='';req.on('data',c=>body+=c);req.on('end',()=>{try{done(null,JSON.parse(body||'{}'));}catch(e){done(e);}});};
@@ -79,6 +80,23 @@ const server=http.createServer(async(req,res)=>{
     if(err)return send(res,400,{error:'Invalid JSON'});
     try { const saved=await createPayment(data); if(saved)return send(res,201,saved); return send(res,503,{error:'DATABASE_URL not configured'}); }
     catch(e) { if(e.statusCode)return send(res,e.statusCode,{error:e.message}); return send(res,503,{error:'Unable to create payment'}); }
+  });
+  const paymentOrderMatch=url.pathname.match(/^\/api\/payments\/(\d+)\/order$/);
+  if(paymentOrderMatch&&req.method==='POST')return parseBody(req,async(err,data)=>{
+    if(err)return send(res,400,{error:'Invalid JSON'});
+    if(!data.phone)return send(res,422,{error:'phone is required'});
+    try {
+      const payment=await getPaymentById(Number(paymentOrderMatch[1]));
+      if(!payment)return send(res,404,{error:'Payment not found'});
+      if(payment.phone!==data.phone)return send(res,403,{error:'Payment does not belong to patient'});
+      if(payment.provider_order_id)return send(res,200,{payment,order:{provider:payment.provider,orderId:payment.provider_order_id,amount:Math.round(Number(payment.amount)*100),currency:payment.currency}});
+      const order=await createPaymentGatewayOrder({amount:payment.amount,currency:payment.currency,receipt:`payment_${payment.id}`});
+      const saved=await setProviderOrderId(payment.id,order.provider,order.orderId);
+      return send(res,200,{payment:saved,order:{provider:order.provider,orderId:order.orderId,amount:order.amount,currency:order.currency}});
+    } catch(e) {
+      if(e.statusCode)return send(res,e.statusCode,{error:e.message});
+      return send(res,502,{error:'Unable to create payment gateway order'});
+    }
   });
   if(url.pathname==='/api/payments/webhook'&&req.method==='POST')return parseRawBody(req,async(err,rawBody)=>{
     if(err)return send(res,400,{error:'Unable to read webhook body'});
