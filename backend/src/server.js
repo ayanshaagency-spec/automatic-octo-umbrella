@@ -8,8 +8,10 @@ const { listDoctors, listAppointments, updateAppointmentStatus, createAppointmen
 const { listPrescriptions, createPrescription, listHealthRecords, createHealthRecord } = require('./phase3_repository');
 const { listLabOrders, createLabOrder, updateLabOrderStatus } = require('./phase4_repository');
 const { listPayments, createPayment, updatePaymentStatus } = require('./phase5_payment_repository');
-const send=(res,code,data)=>{res.writeHead(code,{'Content-Type':'application/json','Access-Control-Allow-Origin':'*','Access-Control-Allow-Methods':'GET,POST,PATCH,OPTIONS','Access-Control-Allow-Headers':'Content-Type,Authorization'});res.end(JSON.stringify(data));};
+const { getWebhookSecret, verifyWebhookSignature, parseWebhookEvent } = require('./payment_webhook');
+const send=(res,code,data)=>{res.writeHead(code,{'Content-Type':'application/json','Access-Control-Allow-Origin':'*','Access-Control-Allow-Methods':'GET,POST,PATCH,OPTIONS','Access-Control-Allow-Headers':'Content-Type,Authorization,X-Payment-Signature'});res.end(JSON.stringify(data));};
 const parseBody=(req,done)=>{let body='';req.on('data',c=>body+=c);req.on('end',()=>{try{done(null,JSON.parse(body||'{}'));}catch(e){done(e);}});};
+const parseRawBody=(req,done)=>{let body='';req.setEncoding('utf8');req.on('data',c=>body+=c);req.on('end',()=>done(null,body));req.on('error',done);};
 const server=http.createServer(async(req,res)=>{
   if(req.method==='OPTIONS') return send(res,204,{});
   const url = new URL(req.url, `http://${req.headers.host || 'localhost'}`);
@@ -77,6 +79,24 @@ const server=http.createServer(async(req,res)=>{
     if(err)return send(res,400,{error:'Invalid JSON'});
     try { const saved=await createPayment(data); if(saved)return send(res,201,saved); return send(res,503,{error:'DATABASE_URL not configured'}); }
     catch(e) { if(e.statusCode)return send(res,e.statusCode,{error:e.message}); return send(res,503,{error:'Unable to create payment'}); }
+  });
+  if(url.pathname==='/api/payments/webhook'&&req.method==='POST')return parseRawBody(req,async(err,rawBody)=>{
+    if(err)return send(res,400,{error:'Unable to read webhook body'});
+    const signature=req.headers['x-payment-signature'];
+    if(!getWebhookSecret())return send(res,503,{error:'Payment webhook is not configured'});
+    if(!verifyWebhookSignature(rawBody,signature))return send(res,401,{error:'Invalid webhook signature'});
+    try {
+      const event=parseWebhookEvent(rawBody);
+      const paymentId=Number(event.paymentId);
+      const status=event.status;
+      if(!Number.isInteger(paymentId)||paymentId<1||typeof status!=='string')return send(res,422,{error:'paymentId and status are required'});
+      const saved=await updatePaymentStatus(paymentId,status,event.providerPaymentId);
+      if(saved)return send(res,200,{ok:true,payment:saved});
+      return send(res,503,{error:'DATABASE_URL not configured'});
+    } catch(e) {
+      if(e.statusCode)return send(res,e.statusCode,{error:e.message});
+      return send(res,503,{error:'Unable to process payment webhook'});
+    }
   });
   const paymentStatusMatch=url.pathname.match(/^\/api\/payments\/(\d+)\/status$/);
   if(paymentStatusMatch&&req.method==='PATCH')return parseBody(req,async(err,data)=>{
