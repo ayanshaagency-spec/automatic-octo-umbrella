@@ -10,6 +10,7 @@ const { listLabOrders, createLabOrder, updateLabOrderStatus } = require('./phase
 const { listPayments, getPaymentById, setProviderOrderId, createPayment, updatePaymentStatus } = require('./phase5_payment_repository');
 const { createPaymentGatewayOrder } = require('./payment_gateway');
 const { getWebhookSecret, verifyWebhookSignature, parseWebhookEvent } = require('./payment_webhook');
+const { isAuthorizedPaymentStatusUpdate } = require('./payment_status_authorization');
 const send=(res,code,data)=>{res.writeHead(code,{'Content-Type':'application/json','Access-Control-Allow-Origin':'*','Access-Control-Allow-Methods':'GET,POST,PATCH,OPTIONS','Access-Control-Allow-Headers':'Content-Type,Authorization,X-Payment-Signature'});res.end(JSON.stringify(data));};
 const parseBody=(req,done)=>{let body='';req.on('data',c=>body+=c);req.on('end',()=>{try{done(null,JSON.parse(body||'{}'));}catch(e){done(e);}});};
 const parseRawBody=(req,done)=>{let body='';req.setEncoding('utf8');req.on('data',c=>body+=c);req.on('end',()=>done(null,body));req.on('error',done);};
@@ -119,6 +120,7 @@ const server=http.createServer(async(req,res)=>{
   const paymentStatusMatch=url.pathname.match(/^\/api\/payments\/(\d+)\/status$/);
   if(paymentStatusMatch&&req.method==='PATCH')return parseBody(req,async(err,data)=>{
     if(err)return send(res,400,{error:'Invalid JSON'});
+    if(!isAuthorizedPaymentStatusUpdate(req.headers))return send(res,403,{error:'Payment status update is restricted'});
     try { const saved=await updatePaymentStatus(Number(paymentStatusMatch[1]),data.status,data.providerPaymentId); if(saved)return send(res,200,saved); return send(res,503,{error:'DATABASE_URL not configured'}); }
     catch(e) { if(e.statusCode)return send(res,e.statusCode,{error:e.message}); return send(res,503,{error:'Unable to update payment status'}); }
   });
