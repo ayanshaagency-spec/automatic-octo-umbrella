@@ -1,14 +1,23 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const { spawn } = require('node:child_process');
+const crypto = require('node:crypto');
 
 const PORT = 3917;
 const BASE_URL = `http://127.0.0.1:${PORT}`;
+const WEBHOOK_SECRET = 'smoke-webhook-secret';
+const ADMIN_TOKEN = 'smoke-admin-token';
 
 function startServer() {
   const child = spawn(process.execPath, ['src/server.js'], {
     cwd: __dirname + '/..',
-    env: { ...process.env, PORT: String(PORT), DATABASE_URL: '' },
+    env: {
+      ...process.env,
+      PORT: String(PORT),
+      DATABASE_URL: '',
+      PAYMENT_WEBHOOK_SECRET: WEBHOOK_SECRET,
+      PAYMENT_STATUS_ADMIN_TOKEN: ADMIN_TOKEN
+    },
     stdio: ['ignore', 'pipe', 'pipe']
   });
   return child;
@@ -29,6 +38,10 @@ async function waitForHealth(child) {
   throw new Error(`API server did not become ready: ${output}`);
 }
 
+function webhookSignature(payload) {
+  return crypto.createHmac('sha256', WEBHOOK_SECRET).update(payload, 'utf8').digest('hex');
+}
+
 test('Phase 5 API smoke/E2E contract', async t => {
   const server = startServer();
   t.after(() => server.kill());
@@ -41,6 +54,7 @@ test('Phase 5 API smoke/E2E contract', async t => {
   const options = await fetch(`${BASE_URL}/api/payments`, { method: 'OPTIONS' });
   assert.equal(options.status, 204);
   assert.match(options.headers.get('access-control-allow-methods'), /POST/);
+  assert.match(options.headers.get('access-control-allow-headers'), /Authorization/);
 
   const invalidJson = await fetch(`${BASE_URL}/api/payments`, {
     method: 'POST',
@@ -50,17 +64,66 @@ test('Phase 5 API smoke/E2E contract', async t => {
   assert.equal(invalidJson.status, 400);
   assert.equal((await invalidJson.json()).error, 'Invalid JSON');
 
+  const invalidPayment = await fetch(`${BASE_URL}/api/payments`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ phone: '9999999999', amount: 100 })
+  });
+  assert.equal(invalidPayment.status, 422);
+  assert.equal((await invalidPayment.json()).error, 'appointmentId or labOrderId is required');
+
   const missingPhone = await fetch(`${BASE_URL}/api/payments`, { method: 'GET' });
   assert.equal(missingPhone.status, 422);
   assert.equal((await missingPhone.json()).error, 'phone is required');
 
-  const missingWebhookSecret = await fetch(`${BASE_URL}/api/payments/webhook`, {
+  const orderMissingPhone = await fetch(`${BASE_URL}/api/payments/1/order`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({})
+  });
+  assert.equal(orderMissingPhone.status, 422);
+  assert.equal((await orderMissingPhone.json()).error, 'phone is required');
+
+  const unauthorizedStatus = await fetch(`${BASE_URL}/api/payments/1/status`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ status: 'paid' })
+  });
+  assert.equal(unauthorizedStatus.status, 403);
+  assert.equal((await unauthorizedStatus.json()).error, 'Payment status update is restricted');
+
+  const authorizedButUnavailable = await fetch(`${BASE_URL}/api/payments/1/status`, {
+    method: 'PATCH',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${ADMIN_TOKEN}`
+    },
+    body: JSON.stringify({ status: 'paid' })
+  });
+  assert.equal(authorizedButUnavailable.status, 503);
+  assert.equal((await authorizedButUnavailable.json()).error, 'DATABASE_URL not configured');
+
+  const invalidSignature = await fetch(`${BASE_URL}/api/payments/webhook`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'X-Payment-Signature': 'invalid-signature'
+    },
     body: JSON.stringify({ paymentId: 1, status: 'paid' })
   });
-  assert.equal(missingWebhookSecret.status, 503);
-  assert.equal((await missingWebhookSecret.json()).error, 'Payment webhook is not configured');
+  assert.equal(invalidSignature.status, 401);
+  assert.equal((await invalidSignature.json()).error, 'Invalid webhook signature');
+
+  const validSignatureButUnavailable = await fetch(`${BASE_URL}/api/payments/webhook`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'X-Payment-Signature': webhookSignature(JSON.stringify({ paymentId: 1, status: 'paid' }))
+    },
+    body: JSON.stringify({ paymentId: 1, status: 'paid' })
+  });
+  assert.equal(validSignatureButUnavailable.status, 503);
+  assert.equal((await validSignatureButUnavailable.json()).error, 'DATABASE_URL not configured');
 
   const notFound = await fetch(`${BASE_URL}/api/definitely-not-a-route`);
   assert.equal(notFound.status, 404);
