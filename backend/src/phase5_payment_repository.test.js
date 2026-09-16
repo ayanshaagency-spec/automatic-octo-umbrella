@@ -1,10 +1,8 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const path = require('node:path');
 
 const dbPath = require.resolve('./db');
 const repositoryPath = require.resolve('./phase5_payment_repository');
-const validationPath = require.resolve('./phase5_payment_validation');
 
 function installFakeDb(fakeDb) {
   delete require.cache[repositoryPath];
@@ -42,7 +40,7 @@ function createPaymentDb() {
       }
 
       if (sql.includes('INSERT INTO payments')) {
-        const [patientId, appointmentId, labOrderId, amount, currency, provider, providerOrderId, idempotencyKey, , notes] = params;
+        const [patientId, appointmentId, labOrderId, amount, currency, provider, providerOrderId, idempotencyKey, notes] = params;
         const existing = payments.find(item => item.patient_id === patientId && item.idempotency_key === idempotencyKey && idempotencyKey);
         if (existing) {
           const error = new Error('duplicate key');
@@ -50,20 +48,10 @@ function createPaymentDb() {
           throw error;
         }
         const payment = {
-          id: nextId++,
-          patient_id: patientId,
-          appointment_id: appointmentId,
-          lab_order_id: labOrderId,
-          amount,
-          currency,
-          provider,
-          provider_order_id: providerOrderId,
-          provider_payment_id: null,
-          idempotency_key: idempotencyKey,
-          status: 'created',
-          notes,
-          created_at: new Date().toISOString(),
-          updated_at: new Date().toISOString()
+          id: nextId++, patient_id: patientId, appointment_id: appointmentId, lab_order_id: labOrderId,
+          amount, currency, provider, provider_order_id: providerOrderId, provider_payment_id: null,
+          idempotency_key: idempotencyKey, status: 'created', notes,
+          created_at: new Date().toISOString(), updated_at: new Date().toISOString()
         };
         payments.push(payment);
         return { rowCount: 1, rows: [payment] };
@@ -105,31 +93,18 @@ function createPaymentDb() {
 test.after(() => {
   delete require.cache[repositoryPath];
   delete require.cache[dbPath];
-  delete require.cache[validationPath];
 });
 
 test('Phase 5 payment repository: create, idempotency and gateway order lifecycle', async () => {
   const fakeDb = createPaymentDb();
   const { createPayment, getPaymentById, setProviderOrderId } = installFakeDb(fakeDb);
 
-  const first = await createPayment({
-    phone: '9999999999',
-    appointmentId: 41,
-    amount: 499,
-    currency: 'INR',
-    idempotencyKey: 'checkout-41-1'
-  });
+  const first = await createPayment({ phone: '9999999999', appointmentId: 41, amount: 499, currency: 'INR', idempotencyKey: 'checkout-41-1' });
   assert.equal(first.status, 'created');
   assert.equal(first.amount, 499);
   assert.equal(first.idempotency_key, 'checkout-41-1');
 
-  const repeated = await createPayment({
-    phone: '9999999999',
-    appointmentId: 41,
-    amount: 499,
-    currency: 'INR',
-    idempotencyKey: 'checkout-41-1'
-  });
+  const repeated = await createPayment({ phone: '9999999999', appointmentId: 41, amount: 499, currency: 'INR', idempotencyKey: 'checkout-41-1' });
   assert.equal(repeated.id, first.id);
   assert.equal(fakeDb.payments.length, 1);
 
@@ -147,13 +122,7 @@ test('Phase 5 payment repository: status lifecycle and invalid transition protec
   const fakeDb = createPaymentDb();
   const { createPayment, updatePaymentStatus } = installFakeDb(fakeDb);
 
-  const payment = await createPayment({
-    phone: '9999999999',
-    labOrderId: 52,
-    amount: 799,
-    currency: 'INR'
-  });
-
+  const payment = await createPayment({ phone: '9999999999', labOrderId: 52, amount: 799, currency: 'INR' });
   const pending = await updatePaymentStatus(payment.id, 'pending');
   assert.equal(pending.status, 'pending');
 
@@ -166,6 +135,6 @@ test('Phase 5 payment repository: status lifecycle and invalid transition protec
 
   await assert.rejects(
     () => updatePaymentStatus(payment.id, 'paid'),
-    error => error.statusCode === 422 && /Cannot transition payment status/.test(error.message)
+    error => error.statusCode === 422 && /invalid payment status transition: refunded -> paid/.test(error.message)
   );
 });
