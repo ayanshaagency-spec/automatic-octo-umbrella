@@ -11,6 +11,8 @@ const { listPayments, getPaymentById, setProviderOrderId, createPayment, updateP
 const { createPaymentGatewayOrder } = require('./payment_gateway');
 const { getWebhookSecret, verifyWebhookSignature, parseWebhookEvent } = require('./payment_webhook');
 const { isAuthorizedPaymentStatusUpdate } = require('./payment_status_authorization');
+const { validateCoordinates, emergencyResponse } = require('./phase6_emergency');
+const { listNearbyHospitals } = require('./phase6_hospital_repository');
 const send=(res,code,data)=>{res.writeHead(code,{'Content-Type':'application/json','Access-Control-Allow-Origin':'*','Access-Control-Allow-Methods':'GET,POST,PATCH,OPTIONS','Access-Control-Allow-Headers':'Content-Type,Authorization,X-Payment-Signature'});res.end(JSON.stringify(data));};
 const parseBody=(req,done)=>{let body='';req.on('data',c=>body+=c);req.on('end',()=>{try{done(null,JSON.parse(body||'{}'));}catch(e){done(e);}});};
 const parseRawBody=(req,done)=>{let body='';req.setEncoding('utf8');req.on('data',c=>body+=c);req.on('end',()=>done(null,body));req.on('error',done);};
@@ -22,6 +24,18 @@ const server=http.createServer(async(req,res)=>{
   if(url.pathname==='/api/db/health'&&req.method==='GET'){try{const db=await getDb();if(!db)return send(res,503,{ok:false,error:'DATABASE_URL not configured'});await db.query('SELECT 1');return send(res,200,{ok:true,database:'connected'});}catch(e){return send(res,503,{ok:false,error:'Database unavailable'});}}
   if(url.pathname==='/api/auth/request-otp'&&req.method==='POST')return parseBody(req,(err,data)=>{if(err||!data.phone)return send(res,400,{error:'phone is required'});send(res,200,{message:'OTP generated for development',devOtp:issueOtp(data.phone)});});
   if(url.pathname==='/api/auth/verify-otp'&&req.method==='POST')return parseBody(req,(err,data)=>{if(err||!data.phone||!data.otp)return send(res,400,{error:'phone and otp are required'});if(!verifyOtp(data.phone,String(data.otp)))return send(res,401,{error:'Invalid or expired OTP'});send(res,200,{token:createDevToken(data.phone),user:{phone:data.phone}});});
+  if(url.pathname==='/api/emergency'&&req.method==='GET')return send(res,200,emergencyResponse());
+  if(url.pathname==='/api/hospitals/nearby'&&req.method==='GET'){
+    try {
+      const { latitude, longitude } = validateCoordinates(url.searchParams.get('latitude'), url.searchParams.get('longitude'));
+      const rows=await listNearbyHospitals(latitude,longitude,url.searchParams.get('radiusKm') || 25,url.searchParams.get('limit') || 20);
+      if(rows===null)return send(res,503,{error:'Hospital directory database is not configured'});
+      return send(res,200,{latitude,longitude,radiusKm:Number(url.searchParams.get('radiusKm') || 25),hospitals:rows});
+    } catch(e) {
+      if(e.statusCode)return send(res,e.statusCode,{error:e.message});
+      return send(res,503,{error:'Unable to load nearby hospitals'});
+    }
+  }
   if(url.pathname==='/api/appointments'&&req.method==='GET'){
     try { const rows=await listAppointments(url.searchParams.get('phone')); if(rows)return send(res,200,rows); }
     catch(e) { return send(res,503,{error:'Unable to load appointments'}); }
