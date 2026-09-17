@@ -4,7 +4,7 @@
   "private": true,
   "scripts": {
     "start": "node src/server.js",
-    "test": "node --test src/phase5_payment_validation.test.js src/payment_webhook.test.js src/payment_gateway.test.js src/api_e2e_smoke.test.js src/payment_status_authorization.test.js src/phase5_payment_repository.test.js src/phase6_emergency.test.js src/phase6_hospital_repository.test.js"
+    "test": "node --test src/phase5_payment_validation.test.js src/payment_webhook.test.js src/payment_gateway.test.js src/api_e2e_smoke.test.js src/payment_status_authorization.test.js src/phase5_payment_repository.test.js src/phase6_emergency.test.js src/phase6_hospital_repository.test.js src/phase6_api_e2e.test.js"
   },
   "engines": {"node": ">=18"},
   "dependencies": {"pg": "^8.13.1"}
