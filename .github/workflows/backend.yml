@@ -4,9 +4,11 @@ on:
   push:
     branches:
       - feat/phase5-payment-mvp
+      - feat/phase6-emergency-hospitals
   pull_request:
     branches:
       - feat/phase5-payment-mvp
+      - feat/phase6-emergency-hospitals
 
 jobs:
   test:
