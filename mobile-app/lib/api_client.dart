@@ -57,3 +57,23 @@ class ApiClient {
     return Map<String, dynamic>.from(jsonDecode(response.body));
   }
 }
+
+  Future<Map<String, dynamic>> getEmergency() async {
+    final response = await http.get(Uri.parse('$baseUrl/api/emergency')).timeout(_timeout);
+    if (response.statusCode != 200) throw _error(response, 'Unable to load emergency services');
+    return Map<String, dynamic>.from(jsonDecode(response.body));
+  }
+
+  Future<List<Map<String, dynamic>>> getNearbyHospitals({required double latitude, required double longitude, double radiusKm = 25, int limit = 20}) async {
+    final uri = Uri.parse('$baseUrl/api/hospitals/nearby').replace(queryParameters: {
+      'latitude': '$latitude',
+      'longitude': '$longitude',
+      'radiusKm': '$radiusKm',
+      'limit': '$limit',
+    });
+    final response = await http.get(uri).timeout(_timeout);
+    if (response.statusCode != 200) throw _error(response, 'Unable to load nearby hospitals');
+    final data = Map<String, dynamic>.from(jsonDecode(response.body));
+    return (data['hospitals'] as List? ?? const []).map((e) => Map<String, dynamic>.from(e as Map)).toList();
+  }
+}
