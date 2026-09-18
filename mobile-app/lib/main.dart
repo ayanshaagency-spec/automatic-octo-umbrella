@@ -46,7 +46,7 @@ class HomeTab extends StatelessWidget {
   @override Widget build(BuildContext c) => Scaffold(appBar: AppBar(title: const Text('AYANSHA', style: TextStyle(fontWeight: FontWeight.bold))), body: ListView(padding: const EdgeInsets.all(16), children: [
     Container(padding: const EdgeInsets.all(20), decoration: BoxDecoration(color: const Color(0xFF073C4A), borderRadius: BorderRadius.circular(22)), child: const Column(crossAxisAlignment: CrossAxisAlignment.start, children: [Text('Good morning 👋', style: TextStyle(color: Colors.white70)), SizedBox(height: 6), Text('Your health, our priority', style: TextStyle(color: Colors.white, fontSize: 24, fontWeight: FontWeight.bold)), SizedBox(height: 8), Text('Find doctors, book care and manage your health in one place.', style: TextStyle(color: Colors.white70))])),
     const SizedBox(height: 22), const Text('Quick Services', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)), const SizedBox(height: 12),
-    GridView.count(shrinkWrap: true, physics: const NeverScrollableScrollPhysics(), crossAxisCount: 2, crossAxisSpacing: 12, mainAxisSpacing: 12, childAspectRatio: 1.45, children: [service(c, 'Find a Doctor', Icons.medical_services_outlined, const DoctorsTab()), service(c, 'Book Appointment', Icons.calendar_month_outlined, const BookingPage()), service(c, 'Video Consultation', Icons.videocam_outlined, const ConsultationPage()), service(c, 'Lab Tests', Icons.science_outlined, const LabsPage()), service(c, 'Health Records', Icons.folder_shared_outlined, const RecordsTab()), service(c, 'Emergency Help', Icons.emergency_outlined, const EmergencyPage())]),
+    GridView.count(shrinkWrap: true, physics: const NeverScrollableScrollPhysics(), crossAxisCount: 2, crossAxisSpacing: 12, mainAxisSpacing: 12, childAspectRatio: 1.45, children: [service(c, 'Find a Doctor', Icons.medical_services_outlined, const DoctorsTab()), service(c, 'Book Appointment', Icons.calendar_month_outlined, const BookingPage()), service(c, 'Video Consultation', Icons.videocam_outlined, const ConsultationPage()), service(c, 'Lab Tests', Icons.science_outlined, const LabsPage()), service(c, 'Health Records', Icons.folder_shared_outlined, const RecordsTab()), service(c, 'Emergency Help', Icons.emergency_outlined, const EmergencyPage()), service(c, 'Nearby Hospitals', Icons.local_hospital_outlined, const NearbyHospitalsPage())]),
     const SizedBox(height: 18), Container(padding: const EdgeInsets.all(16), decoration: BoxDecoration(color: const Color(0xFFFFEEEE), borderRadius: BorderRadius.circular(18)), child: const Row(children: [Icon(Icons.emergency, color: Colors.red), SizedBox(width: 12), Expanded(child: Text('Emergency? Get immediate professional help.', style: TextStyle(fontWeight: FontWeight.w600)))]))
   ]));
 }
@@ -101,5 +101,44 @@ void showRecord(BuildContext c, Map<String, dynamic> r) => showModalBottomSheet(
 class ConsultationPage extends StatelessWidget { const ConsultationPage({super.key}); @override Widget build(BuildContext c) => SimplePage(title: 'Video Consultation', children: [const Card(child: ListTile(leading: Icon(Icons.videocam), title: Text('Secure consultation'), subtitle: Text('Join when your doctor is available.'))), FilledButton.icon(onPressed: () {}, icon: const Icon(Icons.video_call), label: const Text('Join Consultation')), const ListTile(leading: Icon(Icons.receipt_long), title: Text('Digital Prescription'))]); }
 class LabsPage extends StatelessWidget { const LabsPage({super.key}); @override Widget build(BuildContext c) => SimplePage(title: 'Lab Tests', children: ['CBC / Complete Blood Count', 'Diabetes Profile', 'Lipid Profile', 'Home Sample Collection'].map((x) => Card(child: ListTile(title: Text(x), trailing: TextButton(onPressed: () {}, child: const Text('Book'))))).toList()); }
 class ProfileTab extends StatelessWidget { const ProfileTab({super.key}); @override Widget build(BuildContext c) => SimplePage(title: 'My Profile', children: [const CircleAvatar(radius: 38, child: Icon(Icons.person, size: 40)), const Center(child: Text(patientName, style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold))), const ListTile(title: Text('Phone'), subtitle: Text(patientPhone)), const Divider(), ...['Personal Information', 'Family Members', 'Notifications', 'Privacy & Security'].map((x) => ListTile(title: Text(x), trailing: const Icon(Icons.chevron_right)))]); }
-class EmergencyPage extends StatelessWidget { const EmergencyPage({super.key}); @override Widget build(BuildContext c) => SimplePage(title: 'Emergency Help', children: [const Icon(Icons.emergency, color: Colors.red, size: 70), const Text('If this is a life-threatening emergency, contact your local emergency service immediately.', style: TextStyle(fontSize: 17)), FilledButton.icon(onPressed: () {}, icon: const Icon(Icons.phone), label: const Text('Emergency Call'))]); }
+class EmergencyPage extends StatefulWidget { const EmergencyPage({super.key}); @override State<EmergencyPage> createState() => _EmergencyPageState(); }
+class _EmergencyPageState extends State<EmergencyPage> {
+  Map<String, dynamic>? data; bool loading = true; String? error;
+  @override void initState() { super.initState(); load(); }
+  Future<void> load() async { try { final x = await api.getEmergency(); if (mounted) setState(() { data = x; loading = false; }); } catch (e) { if (mounted) setState(() { error = e.toString(); loading = false; }); } }
+  @override Widget build(BuildContext c) {
+    final contacts = data?['contacts'] as List?;
+    final first = contacts != null && contacts.isNotEmpty ? Map<String, dynamic>.from(contacts.first as Map) : <String, dynamic>{};
+    return SimplePage(title: 'Emergency Help', children: [
+      const Icon(Icons.emergency, color: Colors.red, size: 70),
+      const Text('For a life-threatening emergency, contact emergency services immediately.', style: TextStyle(fontSize: 17, fontWeight: FontWeight.w600)),
+      if (loading) const Center(child: Padding(padding: EdgeInsets.all(20), child: CircularProgressIndicator())),
+      if (error != null) Card(child: ListTile(leading: const Icon(Icons.error_outline), title: const Text('Emergency service unavailable'), subtitle: Text(error!))),
+      if (!loading && error == null) Card(color: const Color(0xFFFFEEEE), child: ListTile(leading: const Icon(Icons.phone_in_talk, color: Colors.red), title: Text(first['label']?.toString() ?? 'Emergency'), subtitle: Text(first['number']?.toString() ?? '112'), trailing: const Text('112', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)))),
+      if (!loading && error == null) Text(data?['disclaimer']?.toString() ?? 'Emergency services are for urgent situations.', style: const TextStyle(color: Colors.black54)),
+    ]);
+  }
+}
+
+class NearbyHospitalsPage extends StatefulWidget { const NearbyHospitalsPage({super.key}); @override State<NearbyHospitalsPage> createState() => _NearbyHospitalsPageState(); }
+class _NearbyHospitalsPageState extends State<NearbyHospitalsPage> {
+  final lat = TextEditingController(text: '28.6139'); final lon = TextEditingController(text: '77.2090');
+  bool loading = false; String? error; List<Map<String, dynamic>> hospitals = [];
+  Future<void> search() async {
+    final latitude = double.tryParse(lat.text.trim()); final longitude = double.tryParse(lon.text.trim());
+    if (latitude == null || longitude == null) { setState(() => error = 'Enter valid latitude and longitude.'); return; }
+    setState(() { loading = true; error = null; });
+    try { hospitals = await api.getNearbyHospitals(latitude: latitude, longitude: longitude); } catch (e) { error = e.toString(); } finally { if (mounted) setState(() => loading = false); }
+  }
+  @override Widget build(BuildContext c) => Scaffold(appBar: AppBar(title: const Text('Nearby Hospitals')), body: ListView(padding: const EdgeInsets.all(16), children: [
+    const Text('Find hospitals near a location', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+    const SizedBox(height: 8), const Text('For this demo, enter latitude and longitude.', style: TextStyle(color: Colors.black54)),
+    const SizedBox(height: 12),
+    Row(children: [Expanded(child: TextField(controller: lat, keyboardType: const TextInputType.numberWithOptions(decimal: true, signed: true), decoration: const InputDecoration(labelText: 'Latitude', border: OutlineInputBorder()))), const SizedBox(width: 10), Expanded(child: TextField(controller: lon, keyboardType: const TextInputType.numberWithOptions(decimal: true, signed: true), decoration: const InputDecoration(labelText: 'Longitude', border: OutlineInputBorder())))]),
+    const SizedBox(height: 12), SizedBox(width: double.infinity, child: FilledButton.icon(onPressed: loading ? null : search, icon: const Icon(Icons.search), label: Text(loading ? 'Searching...' : 'Find Nearby Hospitals'))),
+    if (error != null) Card(child: ListTile(leading: const Icon(Icons.error_outline), title: const Text('Could not load hospitals'), subtitle: Text(error!))),
+    if (!loading && error == null && hospitals.isNotEmpty) ...hospitals.map((h) => Card(child: ListTile(leading: const CircleAvatar(child: Icon(Icons.local_hospital)), title: Text(h['name']?.toString() ?? 'Hospital'), subtitle: Text((h['address']?.toString() ?? '') + (h['distanceKm'] != null ? '\\n' + h['distanceKm'].toString() + ' km away' : '')), isThreeLine: true, trailing: h['phone'] != null ? Text(h['phone'].toString()) : null))),
+    if (!loading && error == null && hospitals.isEmpty) const Card(child: ListTile(leading: Icon(Icons.local_hospital_outlined), title: Text('No hospitals found'), subtitle: Text('Try another location.'))),
+  ]);
+}
 class SimplePage extends StatelessWidget { final String title; final List<Widget> children; const SimplePage({super.key, required this.title, required this.children}); @override Widget build(BuildContext c) => Scaffold(appBar: AppBar(title: Text(title)), body: ListView(padding: const EdgeInsets.all(16), children: children.map((x) => Padding(padding: const EdgeInsets.only(bottom: 12), child: x)).toList())); }
