@@ -13,6 +13,7 @@ const { getWebhookSecret, verifyWebhookSignature, parseWebhookEvent } = require(
 const { isAuthorizedPaymentStatusUpdate } = require('./payment_status_authorization');
 const { validateCoordinates, emergencyResponse } = require('./phase6_emergency');
 const { listNearbyHospitals } = require('./phase6_hospital_repository');
+const { isConfigured: isWhatsAppConfigured, sendTemplateMessage, sendAppointmentConfirmation } = require('./whatsapp_service');
 const send=(res,code,data)=>{res.writeHead(code,{'Content-Type':'application/json','Access-Control-Allow-Origin':'*','Access-Control-Allow-Methods':'GET,POST,PATCH,OPTIONS','Access-Control-Allow-Headers':'Content-Type,Authorization,X-Payment-Signature'});res.end(JSON.stringify(data));};
 const parseBody=(req,done)=>{let body='';req.on('data',c=>body+=c);req.on('end',()=>{try{done(null,JSON.parse(body||'{}'));}catch(e){done(e);}});};
 const parseRawBody=(req,done)=>{let body='';req.setEncoding('utf8');req.on('data',c=>body+=c);req.on('end',()=>done(null,body));req.on('error',done);};
@@ -50,9 +51,21 @@ const server=http.createServer(async(req,res)=>{
   if(url.pathname==='/api/appointments'&&req.method==='POST')return parseBody(req,async(err,data)=>{
     if(err)return send(res,400,{error:'Invalid JSON'});
     if(!data.patientName||!data.phone||!data.doctorId||!data.appointmentAt)return send(res,422,{error:'patientName, phone, doctorId and appointmentAt are required'});
-    try { const saved=await createAppointment(data); if(saved)return send(res,201,saved); }
+    try {
+      const saved=await createAppointment(data);
+      if(saved){
+        if(isWhatsAppConfigured()) sendAppointmentConfirmation({phone:data.phone,appointmentAt:saved.appointment_at}).catch(e=>console.error('WhatsApp appointment notification failed:',e.message));
+        return send(res,201,{...saved,whatsappNotification:isWhatsAppConfigured()?'queued':'not_configured'});
+      }
+    }
     catch(e) { if(e.statusCode)return send(res,e.statusCode,{error:e.message}); return send(res,503,{error:'Unable to save appointment'}); }
     const appointment={id:appointments.length+1,status:'confirmed',mode:data.mode||'Video',...data}; appointments.push(appointment); send(res,201,appointment);
+  });
+  if(url.pathname==='/api/whatsapp/status'&&req.method==='GET')return send(res,200,{configured:isWhatsAppConfigured(),provider:'whatsapp-cloud-api'});
+  if(url.pathname==='/api/whatsapp/template'&&req.method==='POST')return parseBody(req,async(err,data)=>{
+    if(err)return send(res,400,{error:'Invalid JSON'});
+    try { const result=await sendTemplateMessage({phone:data.phone,templateName:data.templateName,languageCode:data.languageCode,bodyParameters:Array.isArray(data.bodyParameters)?data.bodyParameters:[]}); return send(res,200,{ok:true,provider:'whatsapp-cloud-api',messageId:result?.messages?.[0]?.id||null}); }
+    catch(e) { if(e.statusCode)return send(res,e.statusCode,{error:e.message}); return send(res,502,{error:'Unable to send WhatsApp message'}); }
   });
   if(url.pathname==='/api/prescriptions'&&req.method==='GET'){
     const phone=url.searchParams.get('phone'); if(!phone)return send(res,422,{error:'phone is required'});
