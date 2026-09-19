@@ -1,0 +1,33 @@
+name: Flutter App Verification
+
+on:
+  push:
+    branches:
+      - feat/client-demo-web-app
+      - feat/phase6-emergency-hospitals
+      - main
+  pull_request:
+    branches:
+      - main
+      - feat/client-demo-web-app
+      - feat/phase6-emergency-hospitals
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: mobile-app
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@fd55a8c9f1b3c4f0b1e5f2c3b0d2a9c8e6f7a4b1
+        with:
+          channel: stable
+      - name: Flutter version
+        run: flutter --version
+      - name: Get dependencies
+        run: flutter pub get
+      - name: Analyze
+        run: flutter analyze
+      - name: Test
+        run: flutter test
