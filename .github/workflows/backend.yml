@@ -5,10 +5,12 @@ on:
     branches:
       - feat/phase5-payment-mvp
       - feat/phase6-emergency-hospitals
+      - feat/client-demo-web-app
   pull_request:
     branches:
       - feat/phase5-payment-mvp
       - feat/phase6-emergency-hospitals
+      - feat/client-demo-web-app
 
 jobs:
   test:
