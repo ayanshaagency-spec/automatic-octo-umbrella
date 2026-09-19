@@ -1,0 +1,86 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="description" content="AyanSha Health Care — patient, doctor and care-management client demo">
+  <title>AyanSha Health Care | Client Demo</title>
+  <link rel="stylesheet" href="./styles.css">
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand"><div class="logo">A</div><div><strong>AyanSha</strong><span>Health Care</span></div></div>
+    <div class="demo-pill">CLIENT DEMO</div>
+    <button id="apiStatus" class="status">Checking API…</button>
+  </header>
+
+  <main>
+    <section class="hero">
+      <div>
+        <p class="eyebrow">PATIENT → AI / DOCTOR → CARE</p>
+        <h1>One connected healthcare journey.</h1>
+        <p class="hero-copy">Appointments, consultations, prescriptions, lab tests, payments, health records and emergency support in one experience.</p>
+        <div class="hero-actions">
+          <button class="primary" data-scroll="patient">Open Patient Demo</button>
+          <button class="secondary" data-scroll="care">Explore Care Flow</button>
+        </div>
+      </div>
+      <div class="journey">
+        <div>AI / Doctor</div><b>→</b><div>Appointment</div><b>→</b><div>Consultation</div><b>→</b><div>Prescription</div><b>→</b><div>Payment</div><b>→</b><div>Records</div>
+      </div>
+    </section>
+
+    <section id="patient" class="section">
+      <div class="section-head"><div><p class="eyebrow">PATIENT APP</p><h2>Patient dashboard</h2></div><span class="tag">Demo-ready</span></div>
+      <div class="grid cards">
+        <article class="card"><span class="icon">🩺</span><h3>Find a Doctor</h3><p>Browse available doctors and start an appointment flow.</p><button class="link" onclick="showToast('Doctor discovery flow opened')">Open</button></article>
+        <article class="card"><span class="icon">📅</span><h3>Appointments</h3><p>Book and manage consultations from one place.</p><button class="link" onclick="showToast('Appointment booking flow opened')">Book</button></article>
+        <article class="card"><span class="icon">🧾</span><h3>Prescriptions</h3><p>Keep digital prescriptions connected to your consultation.</p><button class="link" onclick="showToast('Prescription records opened')">View</button></article>
+        <article class="card"><span class="icon">🧪</span><h3>Lab Tests</h3><p>Request tests and continue into the payment flow.</p><button class="link" onclick="showToast('Lab booking flow opened')">Book test</button></article>
+        <article class="card"><span class="icon">💳</span><h3>Payments</h3><p>Payment lifecycle with provider-ready backend support.</p><button class="link" onclick="showToast('Payment flow opened')">Pay</button></article>
+        <article class="card danger-card"><span class="icon">🚑</span><h3>Emergency Help</h3><p>Quick emergency contact and safety disclaimer.</p><button class="danger" onclick="loadEmergency()">Emergency</button></article>
+      </div>
+    </section>
+
+    <section id="care" class="section flow-section">
+      <div class="section-head"><div><p class="eyebrow">CONNECTED CARE</p><h2>Show the complete journey</h2></div></div>
+      <div class="flow">
+        <div class="flow-item"><b>01</b><span>Patient</span><small>Profile & health context</small></div>
+        <div class="flow-item"><b>02</b><span>AI / Doctor</span><small>Guidance with safety disclaimer</small></div>
+        <div class="flow-item"><b>03</b><span>Appointment</span><small>Consultation booking</small></div>
+        <div class="flow-item"><b>04</b><span>Prescription</span><small>Digital treatment record</small></div>
+        <div class="flow-item"><b>05</b><span>Payment</span><small>Idempotent payment lifecycle</small></div>
+        <div class="flow-item"><b>06</b><span>Health Records</span><small>Longitudinal care history</small></div>
+      </div>
+    </section>
+
+    <section class="section split">
+      <div class="panel">
+        <p class="eyebrow">EMERGENCY</p><h2>Emergency response</h2>
+        <p>Use the backend emergency endpoint to display the configured national emergency contact and safety guidance.</p>
+        <button class="primary" onclick="loadEmergency()">Check emergency API</button>
+        <div id="emergencyResult" class="result">No emergency request made.</div>
+      </div>
+      <div class="panel">
+        <p class="eyebrow">NEARBY HOSPITALS</p><h2>Find nearby hospitals</h2>
+        <div class="form-row"><input id="lat" value="28.6139" aria-label="Latitude"><input id="lng" value="77.2090" aria-label="Longitude"></div>
+        <button class="secondary full" onclick="loadHospitals()">Search hospitals</button>
+        <div id="hospitalResult" class="result">Demo coordinates loaded. Search to query the API.</div>
+      </div>
+    </section>
+
+    <section class="section admin">
+      <div class="section-head"><div><p class="eyebrow">OPERATIONS</p><h2>Doctor & admin console preview</h2></div></div>
+      <div class="grid three">
+        <article class="mini"><strong>Doctor Panel</strong><span>Appointments • consultation • prescriptions • records</span></article>
+        <article class="mini"><strong>Admin Panel</strong><span>Users • doctors • payments • labs • operational monitoring</span></article>
+        <article class="mini"><strong>Security</strong><span>Authenticated flows • protected payment status • webhook verification</span></article>
+      </div>
+    </section>
+  </main>
+
+  <footer><strong>AyanSha Health Care</strong><span>Client demonstration build • Existing Phase 1–6 backend preserved</span></footer>
+  <div id="toast" class="toast"></div>
+  <script src="./app.js"></script>
+</body>
+</html>
