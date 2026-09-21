@@ -5,7 +5,7 @@ const js=fs.readFileSync(__dirname+'/app.js','utf8');
 const required=[
   ['Patient role','role-patient'],['Doctor role','role-doctor'],['Admin role','role-admin'],
   ['Emergency API','/emergency'],['Hospitals API','/hospitals/nearby'],
-  ['Care flow','CONNECTED CARE'],['API status','apiStatus']
+  ['Care flow','CONNECTED CARE'],['API status','apiStatus'],['WhatsApp integration','/whatsapp/status'],['Payment integration','/payments'],['Prescription integration','/prescriptions'],['Health records integration','/health-records']
 ];
 for(const [name,needle] of required){
   if(!html.includes(needle)&&!js.includes(needle)) throw new Error('Missing '+name+': '+needle);
