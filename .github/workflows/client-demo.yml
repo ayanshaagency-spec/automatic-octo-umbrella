@@ -1,0 +1,18 @@
+name: Client Demo Verification
+
+on:
+  push:
+    branches:
+      - feat/client-demo-web-app
+  pull_request:
+    branches:
+      - feat/client-demo-web-app
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Verify client demo
+        run: node web-demo/smoke_test.js
