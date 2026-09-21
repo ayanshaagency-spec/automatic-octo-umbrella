@@ -47,6 +47,20 @@
 
       <div id="role-patient" class="role-panel active">
         <div class="dashboard-head"><div><span class="welcome">PATIENT DASHBOARD</span><h3>Good morning, Patient</h3><p>Your health journey is connected in one place.</p></div><span class="profile-badge">P</span></div>
+        <div class="panel db-panel">
+          <div class="panel-head"><div><p class="eyebrow">DATABASE CONNECTED FORM</p><h3>Book an appointment</h3><p>Submit real patient/appointment data to the existing backend. When DATABASE_URL is configured, the saved record is returned from PostgreSQL and appears below.</p></div><span id="dbStatus" class="tag">Checking database…</span></div>
+          <form id="appointmentForm" class="db-form">
+            <input id="patientName" required placeholder="Patient name">
+            <input id="patientPhone" required placeholder="Phone number">
+            <select id="doctorId" required><option value="">Select doctor</option></select>
+            <input id="appointmentAt" required type="datetime-local">
+            <select id="appointmentMode"><option>Video</option><option>In-clinic</option></select>
+            <button class="primary" type="submit">Save Appointment</button>
+          </form>
+          <div id="appointmentSaveResult" class="result">No appointment submitted yet.</div>
+          <div class="panel-head compact"><h3>Saved appointments</h3><button class="secondary" type="button" onclick="loadAppointments()">Refresh</button></div>
+          <div id="appointmentList" class="result">Loading database records…</div>
+        </div>
         <div class="grid cards">
           <article class="card"><span class="icon">🩺</span><h3>Find a Doctor</h3><p>Browse doctors and begin an appointment flow.</p><button class="link" onclick="showToast('Doctor discovery flow opened')">Open →</button></article>
           <article class="card"><span class="icon">📅</span><h3>Appointments</h3><p>Book and manage consultations.</p><button class="link" onclick="showToast('Appointment booking flow opened')">Book →</button></article>
