@@ -1,9 +1,73 @@
 const API_BASE=(localStorage.getItem('ayansha_api_base')||'/api').replace(/\/$/,'');
 const $=id=>document.getElementById(id);
-function showToast(message){const t=$('toast');t.textContent=message;t.classList.add('show');clearTimeout(window.__toast);window.__toast=setTimeout(()=>t.classList.remove('show'),2200)}
-async function api(path,options={}){const res=await fetch(API_BASE+path,{headers:{'Content-Type':'application/json',...(options.headers||{})},...options});const text=await res.text();let data={};try{data=JSON.parse(text)}catch{data={raw:text}}if(!res.ok)throw new Error(data.error||data.message||('API '+res.status));return data}
-async function checkApi(){try{await api('/health');$('apiStatus').textContent='API ONLINE';$('apiStatus').className='status ok'}catch{$('apiStatus').textContent='DEMO MODE';$('apiStatus').className='status off'}}
-async function loadEmergency(){const box=$('emergencyResult');box.textContent='Checking emergency service…';try{const d=await api('/emergency');const contact=(d.contacts||[]).find(x=>x.type==='Ambulance')||d.contacts?.[0];box.innerHTML='<strong>Emergency: '+(d.emergency?'ACTIVE':'Available')+'</strong><br>Contact: '+(contact?.number||'112')+'<br><small>'+(d.disclaimer||'For life-threatening emergencies, contact emergency services immediately.')+'</small>'}catch(e){box.textContent='Demo fallback: Emergency contact 112. '+e.message}}
-async function loadHospitals(){const box=$('hospitalResult');const lat=$('lat').value,lng=$('lng').value;box.textContent='Searching nearby hospitals…';try{const d=await api('/hospitals/nearby?latitude='+encodeURIComponent(lat)+'&longitude='+encodeURIComponent(lng)+'&radiusKm=25&limit=5');if(!d.hospitals?.length){box.textContent='No hospitals returned for this demo location.';return}box.innerHTML=d.hospitals.map(h=>'<div style="padding:9px 0;border-bottom:1px solid #dfeceb"><strong>'+h.name+'</strong><br><small>'+h.address+' • '+Number(h.distanceKm).toFixed(1)+' km</small></div>').join('')}catch(e){box.textContent='Demo mode: hospital search API is not connected to a database in this environment. '+e.message}}
+
+function showToast(message){
+  const t=$('toast');
+  t.textContent=message;
+  t.classList.add('show');
+  clearTimeout(window.__toast);
+  window.__toast=setTimeout(()=>t.classList.remove('show'),2200);
+}
+
+async function api(path,options={}){
+  const res=await fetch(API_BASE+path,{headers:{'Content-Type':'application/json',...(options.headers||{})},...options});
+  const text=await res.text();
+  let data={};
+  try{data=JSON.parse(text)}catch{data={raw:text}}
+  if(!res.ok)throw new Error(data.error||data.message||('API '+res.status));
+  return data;
+}
+
+async function checkApi(){
+  try{
+    await api('/health');
+    $('apiStatus').textContent='API ONLINE';
+    $('apiStatus').className='status ok';
+  }catch{
+    $('apiStatus').textContent='DEMO MODE';
+    $('apiStatus').className='status off';
+  }
+}
+
+async function loadEmergency(){
+  const box=$('emergencyResult');
+  box.textContent='Checking emergency service…';
+  try{
+    const d=await api('/emergency');
+    const contact=(d.contacts||[]).find(x=>x.type==='Ambulance')||d.contacts?.[0];
+    box.innerHTML='<strong>Emergency: '+(d.emergency?'ACTIVE':'Available')+'</strong><br>Contact: '+(contact?.number||'112')+'<br><small>'+(d.disclaimer||'For life-threatening emergencies, contact emergency services immediately.')+'</small>';
+  }catch(e){
+    box.textContent='Demo fallback: Emergency contact 112. '+e.message;
+  }
+}
+
+async function loadHospitals(){
+  const box=$('hospitalResult');
+  const lat=$('lat').value,lng=$('lng').value;
+  box.textContent='Searching nearby hospitals…';
+  try{
+    const d=await api('/hospitals/nearby?latitude='+encodeURIComponent(lat)+'&longitude='+encodeURIComponent(lng)+'&radiusKm=25&limit=5');
+    if(!d.hospitals?.length){
+      box.textContent='No hospitals returned for this demo location.';
+      return;
+    }
+    box.innerHTML=d.hospitals.map(h=>'<div class="hospital-row"><strong>'+escapeHtml(h.name)+'</strong><br><small>'+escapeHtml(h.address||'')+' • '+Number(h.distanceKm).toFixed(1)+' km</small></div>').join('');
+  }catch(e){
+    box.textContent='Demo mode: hospital search API is not connected to a database in this environment. '+e.message;
+  }
+}
+
+function escapeHtml(value){
+  return String(value??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[c]));
+}
+
+function setRole(role){
+  document.querySelectorAll('.role-tab').forEach(tab=>tab.classList.toggle('active',tab.dataset.role===role));
+  document.querySelectorAll('.role-panel').forEach(panel=>panel.classList.toggle('active',panel.id==='role-'+role));
+  showToast(role.charAt(0).toUpperCase()+role.slice(1)+' experience selected');
+}
+
 document.querySelectorAll('[data-scroll]').forEach(b=>b.addEventListener('click',()=>document.getElementById(b.dataset.scroll).scrollIntoView({behavior:'smooth'})));
+document.querySelectorAll('.role-tab').forEach(tab=>tab.addEventListener('click',()=>setRole(tab.dataset.role)));
+
 checkApi();
