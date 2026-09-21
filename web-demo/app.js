@@ -18,6 +18,65 @@ async function api(path,options={}){
   return data;
 }
 
+async function loadDoctorsForForm(){
+  const select=$('doctorId');
+  try{
+    const doctors=await api('/doctors');
+    select.innerHTML='<option value="">Select doctor</option>'+(doctors||[]).map(d=>'<option value="'+escapeHtml(d.id)+'">'+escapeHtml(d.name)+' • '+escapeHtml(d.specialty||'')+'</option>').join('');
+  }catch(e){
+    select.innerHTML='<option value="">Doctors unavailable</option>';
+  }
+}
+
+async function checkDatabase(){
+  const el=$('dbStatus');
+  try{
+    const d=await api('/db/health');
+    el.textContent=d.ok?'DATABASE CONNECTED':'DATABASE OFFLINE';
+    el.className=d.ok?'tag ok':'tag';
+  }catch(e){
+    el.textContent='DATABASE NOT CONNECTED';
+    el.className='tag';
+  }
+}
+
+async function loadAppointments(){
+  const box=$('appointmentList');
+  const phone=$('patientPhone')?.value?.trim();
+  box.textContent='Loading saved appointments…';
+  try{
+    const rows=await api('/appointments'+(phone?'?phone='+encodeURIComponent(phone):''));
+    if(!Array.isArray(rows)||!rows.length){
+      box.textContent='No saved appointments found in the connected database.';
+      return;
+    }
+    box.innerHTML=rows.map(a=>'<div class="hospital-row"><strong>'+escapeHtml(a.patient_name||a.patientName||'Patient')+'</strong><br><small>Doctor: '+escapeHtml(a.doctor_name||a.doctorId||'—')+' • '+escapeHtml(a.appointment_at||a.appointmentAt||'—')+' • '+escapeHtml(a.status||'—')+'</small></div>').join('');
+  }catch(e){
+    box.textContent='Database record loading unavailable: '+e.message;
+  }
+}
+
+async function submitAppointment(event){
+  event.preventDefault();
+  const result=$('appointmentSaveResult');
+  const payload={
+    patientName:$('patientName').value.trim(),
+    phone:$('patientPhone').value.trim(),
+    doctorId:Number($('doctorId').value),
+    appointmentAt:$('appointmentAt').value,
+    mode:$('appointmentMode').value
+  };
+  result.textContent='Saving appointment to database…';
+  try{
+    const saved=await api('/appointments',{method:'POST',body:JSON.stringify(payload)});
+    result.innerHTML='<strong>Saved successfully.</strong> Appointment ID: '+escapeHtml(saved.id)+' • Status: '+escapeHtml(saved.status||'confirmed');
+    await loadAppointments();
+    showToast('Appointment saved to database');
+  }catch(e){
+    result.textContent='Save failed: '+e.message;
+  }
+}
+
 async function checkApi(){
   try{
     await api('/health');
@@ -109,4 +168,8 @@ async function checkRecords(){
   }
 }
 
+document.getElementById('appointmentForm')?.addEventListener('submit',submitAppointment);
 checkApi();
+checkDatabase();
+loadDoctorsForForm();
+loadAppointments();
