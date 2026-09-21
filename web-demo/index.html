@@ -74,9 +74,9 @@
       <div id="role-doctor" class="role-panel">
         <div class="dashboard-head"><div><span class="welcome">DOCTOR CONSOLE</span><h3>Today’s clinical workspace</h3><p>Appointments, consultation and prescriptions in one workflow.</p></div><span class="profile-badge doctor">D</span></div>
         <div class="grid three">
-          <article class="stat-card"><span>Today’s appointments</span><strong>08</strong><small>2 upcoming</small></article>
-          <article class="stat-card"><span>Consultations</span><strong>05</strong><small>3 completed</small></article>
-          <article class="stat-card"><span>Prescriptions</span><strong>04</strong><small>Ready to review</small></article>
+          <article class="stat-card"><span>Today’s appointments</span><strong id="todayAppointments">—</strong><small id="upcomingAppointments">Loading live data…</small></article>
+          <article class="stat-card"><span>Consultations</span><strong id="completedAppointments">—</strong><small>Completed appointments</small></article>
+          <article class="stat-card"><span>Prescriptions</span><strong id="prescriptionCount">—</strong><small>Live database count</small></article>
         </div>
         <div class="grid doctor-grid">
           <article class="panel"><p class="eyebrow">NEXT PATIENT</p><h3>Patient consultation</h3><p>Review appointment details, consultation notes and health context before issuing a digital prescription.</p><button class="primary" onclick="showToast('Doctor consultation workspace opened')">Open consultation</button></article>
@@ -87,11 +87,11 @@
       <div id="role-admin" class="role-panel">
         <div class="dashboard-head"><div><span class="welcome">ADMIN OPERATIONS</span><h3>Platform command center</h3><p>Monitor users, doctors, appointments, payments and service operations.</p></div><span class="profile-badge admin-badge">A</span></div>
         <div class="grid three">
-          <article class="stat-card"><span>Patients</span><strong>1,248</strong><small>Registered demo data</small></article>
-          <article class="stat-card"><span>Doctors</span><strong>86</strong><small>Across specialties</small></article>
-          <article class="stat-card"><span>Payments</span><strong>₹2.84L</strong><small>Demo transaction view</small></article>
+          <article class="stat-card"><span>Patients</span><strong id="patientCount">—</strong><small>Live database count</small></article>
+          <article class="stat-card"><span>Doctors</span><strong id="doctorCount">—</strong><small>Live database count</small></article>
+          <article class="stat-card"><span>Payments</span><strong id="paidRevenue">—</strong><small id="paymentSummary">Live paid revenue</small></article>
         </div>
-        <div class="grid three admin-tools">
+        <div class="panel live-dashboard-panel"><div class="panel-head"><div><p class="eyebrow">LIVE DATABASE DASHBOARD</p><h3>Recent appointments</h3><p>Only records returned by the connected database are shown here.</p></div><button class="secondary" type="button" onclick="loadDashboardSummary()">Refresh live data</button></div><div id="dashboardSummaryStatus" class="result">Loading live database summary…</div><div id="recentAppointments" class="result">Loading recent appointments…</div></div><div class="grid three admin-tools">
           <article class="mini clickable" onclick="showToast('User management opened')"><strong>User Management</strong><span>Patients • doctors • roles</span></article>
           <article class="mini clickable" onclick="showToast('Payment monitoring opened')"><strong>Payment Monitoring</strong><span>Status • refunds • provider events</span></article>
           <article class="mini clickable" onclick="showToast('Service operations opened')"><strong>Service Operations</strong><span>Appointments • labs • emergency</span></article>
