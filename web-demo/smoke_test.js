@@ -8,7 +8,7 @@ const required=[
   ['Care flow','CONNECTED CARE'],['API status','apiStatus'],['WhatsApp integration','/whatsapp/status'],
   ['Payment integration','/payments'],['Prescription integration','/prescriptions'],['Health records integration','/health-records'],
   ['Live dashboard API','/dashboard/summary'],['Live dashboard status','dashboardSummaryStatus'],
-  ['Recent appointments','recentAppointments'],['Dashboard refresh','loadDashboardSummary']
+  ['Recent appointments','recentAppointments'],['Dashboard refresh','loadDashboardSummary'],['Verification center','verificationStatus'],['Verification detail','verificationDetail'],['Verification loader','loadVerificationStatus']
 ];
 for(const [name,needle] of required){
   if(!html.includes(needle)&&!js.includes(needle)) throw new Error('Missing '+name+': '+needle);
