@@ -112,6 +112,17 @@
       </div>
     </section>
 
+    <section class="section journey-demo">
+      <div class="section-head"><div><p class="eyebrow">END-TO-END CARE</p><h2>Appointment → WhatsApp → Payment → Records</h2><p class="section-copy">Demonstrate the connected patient journey while keeping live credentials optional.</p></div><span class="tag">Integration ready</span></div>
+      <div class="grid four">
+        <article class="mini clickable" onclick="checkWhatsApp()"><strong>1. WhatsApp</strong><span id="whatsappStatus">Check Cloud API configuration</span></article>
+        <article class="mini clickable" onclick="checkPayments()"><strong>2. Payment</strong><span id="paymentStatus">Check payment API</span></article>
+        <article class="mini clickable" onclick="checkPrescriptions()"><strong>3. Prescription</strong><span id="prescriptionStatus">Check prescription API</span></article>
+        <article class="mini clickable" onclick="checkRecords()"><strong>4. Health Records</strong><span id="recordStatus">Check records API</span></article>
+      </div>
+      <div class="integration-note"><strong>Demo note:</strong> WhatsApp live delivery requires Meta Cloud API credentials to be configured securely; the demo never exposes credentials.</div>
+    </section>
+
     <section class="section security">
       <div class="section-head"><div><p class="eyebrow">PLATFORM FOUNDATION</p><h2>Built for a real healthcare product</h2></div></div>
       <div class="grid three">
