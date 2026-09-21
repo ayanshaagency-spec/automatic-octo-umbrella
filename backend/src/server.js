@@ -17,12 +17,51 @@ const { isConfigured: isWhatsAppConfigured, sendTemplateMessage, sendAppointment
 const send=(res,code,data)=>{res.writeHead(code,{'Content-Type':'application/json','Access-Control-Allow-Origin':'*','Access-Control-Allow-Methods':'GET,POST,PATCH,OPTIONS','Access-Control-Allow-Headers':'Content-Type,Authorization,X-Payment-Signature'});res.end(JSON.stringify(data));};
 const parseBody=(req,done)=>{let body='';req.on('data',c=>body+=c);req.on('end',()=>{try{done(null,JSON.parse(body||'{}'));}catch(e){done(e);}});};
 const parseRawBody=(req,done)=>{let body='';req.setEncoding('utf8');req.on('data',c=>body+=c);req.on('end',()=>done(null,body));req.on('error',done);};
+const getDashboardSummary=async()=>{
+  const db=await getDb();
+  if(!db)return null;
+  const [counts,today,revenue,recent]=await Promise.all([
+    db.query(`SELECT
+      (SELECT COUNT(*)::int FROM patients) AS patients,
+      (SELECT COUNT(*)::int FROM doctors) AS doctors,
+      (SELECT COUNT(*)::int FROM appointments) AS appointments,
+      (SELECT COUNT(*)::int FROM prescriptions) AS prescriptions,
+      (SELECT COUNT(*)::int FROM lab_orders) AS lab_orders,
+      (SELECT COUNT(*)::int FROM payments) AS payments`),
+    db.query(`SELECT
+      COUNT(*) FILTER (WHERE appointment_at >= CURRENT_DATE AND appointment_at < CURRENT_DATE + INTERVAL '1 day')::int AS today_appointments,
+      COUNT(*) FILTER (WHERE appointment_at >= NOW() AND status <> 'cancelled')::int AS upcoming_appointments,
+      COUNT(*) FILTER (WHERE status = 'completed')::int AS completed_appointments
+      FROM appointments`),
+    db.query(`SELECT
+      COALESCE(SUM(amount) FILTER (WHERE status='paid'),0)::numeric(12,2) AS paid_revenue,
+      COUNT(*) FILTER (WHERE status='paid')::int AS paid_payments,
+      COUNT(*) FILTER (WHERE status='pending')::int AS pending_payments,
+      COUNT(*) FILTER (WHERE status='failed')::int AS failed_payments
+      FROM payments`),
+    db.query(`SELECT a.id,a.patient_id,a.doctor_id,p.name AS patient_name,p.phone,d.name AS doctor_name,d.specialty,a.appointment_at,a.mode,a.status
+      FROM appointments a
+      LEFT JOIN patients p ON p.id=a.patient_id
+      LEFT JOIN doctors d ON d.id=a.doctor_id
+      ORDER BY a.appointment_at DESC LIMIT 8`)
+  ]);
+  return {counts:counts.rows[0],appointments:today.rows[0],payments:revenue.rows[0],recentAppointments:recent.rows};
+};
 const server=http.createServer(async(req,res)=>{
   if(req.method==='OPTIONS') return send(res,204,{});
   const url = new URL(req.url, `http://${req.headers.host || 'localhost'}`);
   if(url.pathname==='/health') return send(res,200,{ok:true,service:'Ayansha Health Care'});
   if(url.pathname==='/api/doctors'&&req.method==='GET'){try{const rows=await listDoctors();return send(res,200,rows||doctorsFallback);}catch(e){return send(res,200,doctorsFallback);}}
   if(url.pathname==='/api/db/health'&&req.method==='GET'){try{const db=await getDb();if(!db)return send(res,503,{ok:false,error:'DATABASE_URL not configured'});await db.query('SELECT 1');return send(res,200,{ok:true,database:'connected'});}catch(e){return send(res,503,{ok:false,error:'Database unavailable'});}}
+  if(url.pathname==='/api/dashboard/summary'&&req.method==='GET'){
+    try {
+      const summary=await getDashboardSummary();
+      if(!summary)return send(res,503,{ok:false,error:'DATABASE_URL not configured'});
+      return send(res,200,{ok:true,database:'connected',...summary});
+    } catch(e) {
+      return send(res,503,{ok:false,error:'Unable to load dashboard data'});
+    }
+  }
   if(url.pathname==='/api/auth/request-otp'&&req.method==='POST')return parseBody(req,(err,data)=>{if(err||!data.phone)return send(res,400,{error:'phone is required'});send(res,200,{message:'OTP generated for development',devOtp:issueOtp(data.phone)});});
   if(url.pathname==='/api/auth/verify-otp'&&req.method==='POST')return parseBody(req,(err,data)=>{if(err||!data.phone||!data.otp)return send(res,400,{error:'phone and otp are required'});if(!verifyOtp(data.phone,String(data.otp)))return send(res,401,{error:'Invalid or expired OTP'});send(res,200,{token:createDevToken(data.phone),user:{phone:data.phone}});});
   if(url.pathname==='/api/emergency'&&req.method==='GET')return send(res,200,emergencyResponse());
