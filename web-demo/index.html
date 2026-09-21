@@ -3,42 +3,85 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
-  <meta name="description" content="AyanSha Health Care — patient, doctor and care-management client demo">
+  <meta name="description" content="AyanSha Health Care — professional patient, doctor and admin client demonstration">
   <title>AyanSha Health Care | Client Demo</title>
   <link rel="stylesheet" href="./styles.css">
 </head>
 <body>
   <header class="topbar">
     <div class="brand"><div class="logo">A</div><div><strong>AyanSha</strong><span>Health Care</span></div></div>
-    <div class="demo-pill">CLIENT DEMO</div>
-    <button id="apiStatus" class="status">Checking API…</button>
+    <div class="top-actions"><div class="demo-pill">CLIENT DEMO</div><button id="apiStatus" class="status">Checking API…</button></div>
   </header>
 
   <main>
     <section class="hero">
       <div>
-        <p class="eyebrow">PATIENT → AI / DOCTOR → CARE</p>
+        <p class="eyebrow">DIGITAL HEALTHCARE PLATFORM</p>
         <h1>One connected healthcare journey.</h1>
-        <p class="hero-copy">Appointments, consultations, prescriptions, lab tests, payments, health records and emergency support in one experience.</p>
+        <p class="hero-copy">A professional patient, doctor and operations experience connecting appointments, consultation, prescriptions, labs, payments, health records and emergency support.</p>
         <div class="hero-actions">
-          <button class="primary" data-scroll="patient">Open Patient Demo</button>
+          <button class="primary" data-scroll="workspace">Open Live Demo</button>
           <button class="secondary" data-scroll="care">Explore Care Flow</button>
         </div>
+        <div class="trust-row"><span>✓ Existing Phase 1–6 preserved</span><span>✓ Secure payment architecture</span><span>✓ Android / iOS ready</span></div>
       </div>
-      <div class="journey">
-        <div>AI / Doctor</div><b>→</b><div>Appointment</div><b>→</b><div>Consultation</div><b>→</b><div>Prescription</div><b>→</b><div>Payment</div><b>→</b><div>Records</div>
+      <div class="hero-card">
+        <div class="hero-card-top"><span>Platform overview</span><span class="live-dot">● Live demo</span></div>
+        <div class="metric"><strong>6</strong><span>Core care stages</span></div>
+        <div class="metric"><strong>3</strong><span>Role experiences</span></div>
+        <div class="metric"><strong>1</strong><span>Connected platform</span></div>
+        <div class="journey"><div>Doctor</div><b>→</b><div>Appointment</div><b>→</b><div>Prescription</div><b>→</b><div>Records</div></div>
       </div>
     </section>
 
-    <section id="patient" class="section">
-      <div class="section-head"><div><p class="eyebrow">PATIENT APP</p><h2>Patient dashboard</h2></div><span class="tag">Demo-ready</span></div>
-      <div class="grid cards">
-        <article class="card"><span class="icon">🩺</span><h3>Find a Doctor</h3><p>Browse available doctors and start an appointment flow.</p><button class="link" onclick="showToast('Doctor discovery flow opened')">Open</button></article>
-        <article class="card"><span class="icon">📅</span><h3>Appointments</h3><p>Book and manage consultations from one place.</p><button class="link" onclick="showToast('Appointment booking flow opened')">Book</button></article>
-        <article class="card"><span class="icon">🧾</span><h3>Prescriptions</h3><p>Keep digital prescriptions connected to your consultation.</p><button class="link" onclick="showToast('Prescription records opened')">View</button></article>
-        <article class="card"><span class="icon">🧪</span><h3>Lab Tests</h3><p>Request tests and continue into the payment flow.</p><button class="link" onclick="showToast('Lab booking flow opened')">Book test</button></article>
-        <article class="card"><span class="icon">💳</span><h3>Payments</h3><p>Payment lifecycle with provider-ready backend support.</p><button class="link" onclick="showToast('Payment flow opened')">Pay</button></article>
-        <article class="card danger-card"><span class="icon">🚑</span><h3>Emergency Help</h3><p>Quick emergency contact and safety disclaimer.</p><button class="danger" onclick="loadEmergency()">Emergency</button></article>
+    <section id="workspace" class="section workspace">
+      <div class="section-head">
+        <div><p class="eyebrow">INTERACTIVE DEMO</p><h2>Choose a product experience</h2><p class="section-copy">Switch roles to demonstrate how the same healthcare platform serves patients, doctors and administrators.</p></div>
+        <span class="tag">Demo-ready</span>
+      </div>
+      <div class="role-tabs" role="tablist">
+        <button class="role-tab active" data-role="patient" role="tab">Patient</button>
+        <button class="role-tab" data-role="doctor" role="tab">Doctor</button>
+        <button class="role-tab" data-role="admin" role="tab">Admin</button>
+      </div>
+
+      <div id="role-patient" class="role-panel active">
+        <div class="dashboard-head"><div><span class="welcome">PATIENT DASHBOARD</span><h3>Good morning, Patient</h3><p>Your health journey is connected in one place.</p></div><span class="profile-badge">P</span></div>
+        <div class="grid cards">
+          <article class="card"><span class="icon">🩺</span><h3>Find a Doctor</h3><p>Browse doctors and begin an appointment flow.</p><button class="link" onclick="showToast('Doctor discovery flow opened')">Open →</button></article>
+          <article class="card"><span class="icon">📅</span><h3>Appointments</h3><p>Book and manage consultations.</p><button class="link" onclick="showToast('Appointment booking flow opened')">Book →</button></article>
+          <article class="card"><span class="icon">🎥</span><h3>Video Consultation</h3><p>Continue from booking into a virtual consultation.</p><button class="link" onclick="showToast('Video consultation flow opened')">Join →</button></article>
+          <article class="card"><span class="icon">🧾</span><h3>Prescriptions</h3><p>Keep treatment instructions linked to care.</p><button class="link" onclick="showToast('Prescription records opened')">View →</button></article>
+          <article class="card"><span class="icon">🧪</span><h3>Lab Tests</h3><p>Request tests and continue to payment.</p><button class="link" onclick="showToast('Lab booking flow opened')">Book →</button></article>
+          <article class="card danger-card"><span class="icon">🚑</span><h3>Emergency Help</h3><p>Quick access to emergency guidance and nearby hospitals.</p><button class="danger" onclick="loadEmergency()">Emergency</button></article>
+        </div>
+      </div>
+
+      <div id="role-doctor" class="role-panel">
+        <div class="dashboard-head"><div><span class="welcome">DOCTOR CONSOLE</span><h3>Today’s clinical workspace</h3><p>Appointments, consultation and prescriptions in one workflow.</p></div><span class="profile-badge doctor">D</span></div>
+        <div class="grid three">
+          <article class="stat-card"><span>Today’s appointments</span><strong>08</strong><small>2 upcoming</small></article>
+          <article class="stat-card"><span>Consultations</span><strong>05</strong><small>3 completed</small></article>
+          <article class="stat-card"><span>Prescriptions</span><strong>04</strong><small>Ready to review</small></article>
+        </div>
+        <div class="grid doctor-grid">
+          <article class="panel"><p class="eyebrow">NEXT PATIENT</p><h3>Patient consultation</h3><p>Review appointment details, consultation notes and health context before issuing a digital prescription.</p><button class="primary" onclick="showToast('Doctor consultation workspace opened')">Open consultation</button></article>
+          <article class="panel"><p class="eyebrow">CLINICAL TOOLS</p><div class="tool-list"><button onclick="showToast('Patient records opened')">Patient records <b>→</b></button><button onclick="showToast('Prescription workspace opened')">Create prescription <b>→</b></button><button onclick="showToast('Appointment queue opened')">Appointment queue <b>→</b></button></div></article>
+        </div>
+      </div>
+
+      <div id="role-admin" class="role-panel">
+        <div class="dashboard-head"><div><span class="welcome">ADMIN OPERATIONS</span><h3>Platform command center</h3><p>Monitor users, doctors, appointments, payments and service operations.</p></div><span class="profile-badge admin-badge">A</span></div>
+        <div class="grid three">
+          <article class="stat-card"><span>Patients</span><strong>1,248</strong><small>Registered demo data</small></article>
+          <article class="stat-card"><span>Doctors</span><strong>86</strong><small>Across specialties</small></article>
+          <article class="stat-card"><span>Payments</span><strong>₹2.84L</strong><small>Demo transaction view</small></article>
+        </div>
+        <div class="grid three admin-tools">
+          <article class="mini clickable" onclick="showToast('User management opened')"><strong>User Management</strong><span>Patients • doctors • roles</span></article>
+          <article class="mini clickable" onclick="showToast('Payment monitoring opened')"><strong>Payment Monitoring</strong><span>Status • refunds • provider events</span></article>
+          <article class="mini clickable" onclick="showToast('Service operations opened')"><strong>Service Operations</strong><span>Appointments • labs • emergency</span></article>
+        </div>
       </div>
     </section>
 
@@ -57,7 +100,7 @@
     <section class="section split">
       <div class="panel">
         <p class="eyebrow">EMERGENCY</p><h2>Emergency response</h2>
-        <p>Use the backend emergency endpoint to display the configured national emergency contact and safety guidance.</p>
+        <p>Use the existing emergency endpoint to demonstrate configured national emergency contact and safety guidance.</p>
         <button class="primary" onclick="loadEmergency()">Check emergency API</button>
         <div id="emergencyResult" class="result">No emergency request made.</div>
       </div>
@@ -69,12 +112,12 @@
       </div>
     </section>
 
-    <section class="section admin">
-      <div class="section-head"><div><p class="eyebrow">OPERATIONS</p><h2>Doctor & admin console preview</h2></div></div>
+    <section class="section security">
+      <div class="section-head"><div><p class="eyebrow">PLATFORM FOUNDATION</p><h2>Built for a real healthcare product</h2></div></div>
       <div class="grid three">
-        <article class="mini"><strong>Doctor Panel</strong><span>Appointments • consultation • prescriptions • records</span></article>
-        <article class="mini"><strong>Admin Panel</strong><span>Users • doctors • payments • labs • operational monitoring</span></article>
-        <article class="mini"><strong>Security</strong><span>Authenticated flows • protected payment status • webhook verification</span></article>
+        <article class="mini"><strong>Secure backend</strong><span>Authentication-ready APIs, protected payment status and verified webhooks.</span></article>
+        <article class="mini"><strong>Scalable modules</strong><span>Appointments, prescriptions, labs, payments, records and emergency services are separated into clear product capabilities.</span></article>
+        <article class="mini"><strong>Mobile ready</strong><span>Existing Flutter patient experience supports Android/iOS delivery from the same backend.</span></article>
       </div>
     </section>
   </main>
