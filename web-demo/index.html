@@ -91,7 +91,20 @@
           <article class="stat-card"><span>Doctors</span><strong id="doctorCount">—</strong><small>Live database count</small></article>
           <article class="stat-card"><span>Payments</span><strong id="paidRevenue">—</strong><small id="paymentSummary">Live paid revenue</small></article>
         </div>
-        <div class="panel live-dashboard-panel"><div class="panel-head"><div><p class="eyebrow">LIVE DATABASE DASHBOARD</p><h3>Recent appointments</h3><p>Only records returned by the connected database are shown here.</p></div><button class="secondary" type="button" onclick="loadDashboardSummary()">Refresh live data</button></div><div id="dashboardSummaryStatus" class="result">Loading live database summary…</div><div id="recentAppointments" class="result">Loading recent appointments…</div></div><div class="grid three admin-tools">
+        <div class="panel live-dashboard-panel"><div class="panel-head"><div><p class="eyebrow">LIVE DATABASE DASHBOARD</p><h3>Recent appointments</h3><p>Only records returned by the connected database are shown here.</p></div><button class="secondary" type="button" onclick="loadDashboardSummary()">Refresh live data</button></div><div id="dashboardSummaryStatus" class="result">Loading live database summary…</div><div id="recentAppointments" class="result">Loading recent appointments…</div></div>
+        <div class="panel verification-panel">
+          <div class="panel-head">
+            <div><p class="eyebrow">PROJECT VERIFICATION</p><h3>Client Demo Verification Center</h3><p>Source-of-truth status for the current client-demo build.</p></div>
+            <span id="verificationStatus" class="tag">Checking…</span>
+          </div>
+          <div class="grid three verification-grid">
+            <div class="mini"><strong>Phase 1–6</strong><span id="phaseVerification">Preserved • signed off</span></div>
+            <div class="mini"><strong>Dashboard</strong><span id="dashboardVerification">Live DB API + UI connected</span></div>
+            <div class="mini"><strong>CI / Runtime</strong><span id="ciVerification">Workflow evidence pending</span></div>
+          </div>
+          <div id="verificationDetail" class="result">Checking verification evidence…</div>
+        </div>
+        <div class="grid three admin-tools">
           <article class="mini clickable" onclick="showToast('User management opened')"><strong>User Management</strong><span>Patients • doctors • roles</span></article>
           <article class="mini clickable" onclick="showToast('Payment monitoring opened')"><strong>Payment Monitoring</strong><span>Status • refunds • provider events</span></article>
           <article class="mini clickable" onclick="showToast('Service operations opened')"><strong>Service Operations</strong><span>Appointments • labs • emergency</span></article>
