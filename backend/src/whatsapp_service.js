@@ -12,7 +12,7 @@ function getConfig() {
 
 function normalizePhone(phone) {
   if (typeof phone !== 'string') return null;
-  const digits = phone.replace(/\\D/g, '');
+  const digits = phone.replace(/\D/g, '');
   return digits.length >= 10 ? digits : null;
 }
 
