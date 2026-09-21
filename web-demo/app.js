@@ -77,6 +77,38 @@ async function submitAppointment(event){
   }
 }
 
+async function loadDashboardSummary(){
+  const status=$('dashboardSummaryStatus');
+  const recent=$('recentAppointments');
+  status.textContent='Loading live database dashboard…';
+  recent.textContent='Loading recent appointments…';
+  try{
+    const d=await api('/dashboard/summary');
+    $('patientCount').textContent=Number(d.counts?.patients||0).toLocaleString('en-IN');
+    $('doctorCount').textContent=Number(d.counts?.doctors||0).toLocaleString('en-IN');
+    $('prescriptionCount').textContent=Number(d.counts?.prescriptions||0).toLocaleString('en-IN');
+    $('todayAppointments').textContent=Number(d.appointments?.today_appointments||0).toLocaleString('en-IN');
+    $('upcomingAppointments').textContent=Number(d.appointments?.upcoming_appointments||0).toLocaleString('en-IN')+' upcoming';
+    $('completedAppointments').textContent=Number(d.appointments?.completed_appointments||0).toLocaleString('en-IN');
+    const revenue=Number(d.payments?.paid_revenue||0);
+    $('paidRevenue').textContent='₹'+revenue.toLocaleString('en-IN',{maximumFractionDigits:2});
+    $('paymentSummary').textContent=Number(d.payments?.paid_payments||0).toLocaleString('en-IN')+' paid transactions';
+    status.innerHTML='<strong>LIVE DATABASE CONNECTED</strong> • '+Number(d.counts?.appointments||0).toLocaleString('en-IN')+' total appointments • '+Number(d.counts?.payments||0).toLocaleString('en-IN')+' payment records';
+    const rows=Array.isArray(d.recentAppointments)?d.recentAppointments:[];
+    if(!rows.length){
+      recent.textContent='No appointments found in the connected database.';
+      return;
+    }
+    recent.innerHTML=rows.map(a=>'<div class="hospital-row"><strong>'+escapeHtml(a.patient_name||'Patient')+'</strong><br><small>Dr. '+escapeHtml(a.doctor_name||'—')+' • '+escapeHtml(a.appointment_at||'—')+' • '+escapeHtml(a.mode||'—')+' • '+escapeHtml(a.status||'—')+'</small></div>').join('');
+  }catch(e){
+    status.textContent='LIVE DATABASE UNAVAILABLE: '+e.message;
+    recent.textContent='No database records are displayed while the live database is unavailable.';
+    ['patientCount','doctorCount','prescriptionCount','todayAppointments','completedAppointments','paidRevenue'].forEach(id=>{if($(id))$(id).textContent='—';});
+    if($('upcomingAppointments'))$('upcomingAppointments').textContent='Live database unavailable';
+    if($('paymentSummary'))$('paymentSummary').textContent='Live database unavailable';
+  }
+}
+
 async function checkApi(){
   try{
     await api('/health');
@@ -173,3 +205,4 @@ checkApi();
 checkDatabase();
 loadDoctorsForForm();
 loadAppointments();
+loadDashboardSummary();
