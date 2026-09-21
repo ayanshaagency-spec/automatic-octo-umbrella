@@ -70,4 +70,43 @@ function setRole(role){
 document.querySelectorAll('[data-scroll]').forEach(b=>b.addEventListener('click',()=>document.getElementById(b.dataset.scroll).scrollIntoView({behavior:'smooth'})));
 document.querySelectorAll('.role-tab').forEach(tab=>tab.addEventListener('click',()=>setRole(tab.dataset.role)));
 
+async function checkWhatsApp(){
+  const el=$('whatsappStatus');
+  el.textContent='Checking…';
+  try{
+    const d=await api('/whatsapp/status');
+    el.textContent=d.configured?'Cloud API configured':'Code connected • credentials pending';
+  }catch(e){ el.textContent='WhatsApp status unavailable'; }
+}
+async function checkPayments(){
+  const el=$('paymentStatus');
+  el.textContent='Checking…';
+  try{
+    await api('/payments?phone=demo');
+    el.textContent='Payment API online';
+  }catch(e){
+    el.textContent=e.message.includes('phone')?'Payment API online':'Payment API needs database';
+  }
+}
+async function checkPrescriptions(){
+  const el=$('prescriptionStatus');
+  el.textContent='Checking…';
+  try{
+    await api('/prescriptions?phone=demo');
+    el.textContent='Prescription API online';
+  }catch(e){
+    el.textContent=e.message.includes('phone')?'Prescription API online':'Prescription API needs database';
+  }
+}
+async function checkRecords(){
+  const el=$('recordStatus');
+  el.textContent='Checking…';
+  try{
+    await api('/health-records?phone=demo');
+    el.textContent='Health records API online';
+  }catch(e){
+    el.textContent=e.message.includes('phone')?'Records API online':'Records API needs database';
+  }
+}
+
 checkApi();
