@@ -1,0 +1,71 @@
+name: Runtime E2E Verification
+
+on:
+  push:
+    branches:
+      - feat/client-demo-web-app
+  pull_request:
+    branches:
+      - feat/client-demo-web-app
+
+jobs:
+  runtime-e2e:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: ayansha_healthcare
+          POSTGRES_USER: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d ayansha_healthcare"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install backend dependencies
+        working-directory: backend
+        run: npm install
+
+      - name: Start backend against real PostgreSQL
+        working-directory: backend
+        env:
+          PORT: 3918
+          DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/ayansha_healthcare
+          PAYMENT_WEBHOOK_SECRET: runtime-webhook-secret
+          PAYMENT_STATUS_ADMIN_TOKEN: runtime-admin-token
+        run: |
+          node src/server.js > /tmp/ayansha-api.log 2>&1 &
+          echo $! > /tmp/ayansha-api.pid
+          for i in $(seq 1 30); do
+            if curl -fsS http://127.0.0.1:3918/health >/dev/null; then
+              break
+            fi
+            sleep 1
+          done
+          curl -fsS http://127.0.0.1:3918/health
+          curl -fsS http://127.0.0.1:3918/api/db/health
+
+      - name: Verify runtime database connection
+        run: |
+          curl -fsS http://127.0.0.1:3918/api/db/health | grep '"ok":true'
+          curl -fsS http://127.0.0.1:3918/api/emergency | grep '"emergency":true'
+          kill $(cat /tmp/ayansha-api.pid) || true
+
+      - name: Upload runtime log on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ayansha-runtime-e2e-log
+          path: /tmp/ayansha-api.log
