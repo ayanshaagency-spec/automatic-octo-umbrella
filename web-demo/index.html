@@ -12,51 +12,31 @@
     <div class="brand"><div class="logo">A</div><div><strong>AyanSha</strong><span>Health Care</span></div></div>
     <div class="top-actions"><div class="demo-pill">CLIENT DEMO</div><button id="apiStatus" class="status">Checking API…</button></div>
   </header>
-
   <main>
     <section class="hero">
       <div>
         <p class="eyebrow">DIGITAL HEALTHCARE PLATFORM</p>
         <h1>One connected healthcare journey.</h1>
         <p class="hero-copy">A professional patient, doctor and operations experience connecting appointments, consultation, prescriptions, labs, payments, health records and emergency support.</p>
-        <div class="hero-actions">
-          <button class="primary" data-scroll="workspace">Open Live Demo</button>
-          <button class="secondary" data-scroll="care">Explore Care Flow</button>
-        </div>
+        <div class="hero-actions"><button class="primary" data-scroll="workspace">Open Live Demo</button><button class="secondary" data-scroll="care">Explore Care Flow</button></div>
         <div class="trust-row"><span>✓ Existing Phase 1–6 preserved</span><span>✓ Secure payment architecture</span><span>✓ Android / iOS ready</span></div>
       </div>
       <div class="hero-card">
         <div class="hero-card-top"><span>Platform overview</span><span class="live-dot">● Live demo</span></div>
-        <div class="metric"><strong>6</strong><span>Core care stages</span></div>
-        <div class="metric"><strong>3</strong><span>Role experiences</span></div>
-        <div class="metric"><strong>1</strong><span>Connected platform</span></div>
+        <div class="metric"><strong>6</strong><span>Core care stages</span></div><div class="metric"><strong>3</strong><span>Role experiences</span></div><div class="metric"><strong>1</strong><span>Connected platform</span></div>
         <div class="journey"><div>Doctor</div><b>→</b><div>Appointment</div><b>→</b><div>Prescription</div><b>→</b><div>Records</div></div>
       </div>
     </section>
 
     <section id="workspace" class="section workspace">
-      <div class="section-head">
-        <div><p class="eyebrow">INTERACTIVE DEMO</p><h2>Choose a product experience</h2><p class="section-copy">Switch roles to demonstrate how the same healthcare platform serves patients, doctors and administrators.</p></div>
-        <span class="tag">Demo-ready</span>
-      </div>
-      <div class="role-tabs" role="tablist">
-        <button class="role-tab active" data-role="patient" role="tab">Patient</button>
-        <button class="role-tab" data-role="doctor" role="tab">Doctor</button>
-        <button class="role-tab" data-role="admin" role="tab">Admin</button>
-      </div>
+      <div class="section-head"><div><p class="eyebrow">INTERACTIVE DEMO</p><h2>Choose a product experience</h2><p class="section-copy">Switch roles to demonstrate how the same healthcare platform serves patients, doctors and administrators.</p></div><span class="tag">Demo-ready</span></div>
+      <div class="role-tabs" role="tablist"><button class="role-tab active" data-role="patient" role="tab">Patient</button><button class="role-tab" data-role="doctor" role="tab">Doctor</button><button class="role-tab" data-role="admin" role="tab">Admin</button></div>
 
       <div id="role-patient" class="role-panel active">
         <div class="dashboard-head"><div><span class="welcome">PATIENT DASHBOARD</span><h3>Good morning, Patient</h3><p>Your health journey is connected in one place.</p></div><span class="profile-badge">P</span></div>
         <div class="panel db-panel">
           <div class="panel-head"><div><p class="eyebrow">DATABASE CONNECTED FORM</p><h3>Book an appointment</h3><p>Submit real patient/appointment data to the existing backend. When DATABASE_URL is configured, the saved record is returned from PostgreSQL and appears below.</p></div><span id="dbStatus" class="tag">Checking database…</span></div>
-          <form id="appointmentForm" class="db-form">
-            <input id="patientName" required placeholder="Patient name">
-            <input id="patientPhone" required placeholder="Phone number">
-            <select id="doctorId" required><option value="">Select doctor</option></select>
-            <input id="appointmentAt" required type="datetime-local">
-            <select id="appointmentMode"><option>Video</option><option>In-clinic</option></select>
-            <button class="primary" type="submit">Save Appointment</button>
-          </form>
+          <form id="appointmentForm" class="db-form"><input id="patientName" required placeholder="Patient name"><input id="patientPhone" required placeholder="Phone number"><select id="doctorId" required><option value="">Select doctor</option></select><input id="appointmentAt" required type="datetime-local"><select id="appointmentMode"><option>Video</option><option>In-clinic</option></select><button class="primary" type="submit">Save Appointment</button></form>
           <div id="appointmentSaveResult" class="result">No appointment submitted yet.</div>
           <div class="panel-head compact"><h3>Saved appointments</h3><button class="secondary" type="button" onclick="loadAppointments()">Refresh</button></div>
           <div id="appointmentList" class="result">Loading database records…</div>
@@ -73,93 +53,28 @@
 
       <div id="role-doctor" class="role-panel">
         <div class="dashboard-head"><div><span class="welcome">DOCTOR CONSOLE</span><h3>Today’s clinical workspace</h3><p>Appointments, consultation and prescriptions in one workflow.</p></div><span class="profile-badge doctor">D</span></div>
-        <div class="grid three">
-          <article class="stat-card"><span>Today’s appointments</span><strong id="todayAppointments">—</strong><small id="upcomingAppointments">Loading live data…</small></article>
-          <article class="stat-card"><span>Consultations</span><strong id="completedAppointments">—</strong><small>Completed appointments</small></article>
-          <article class="stat-card"><span>Prescriptions</span><strong id="prescriptionCount">—</strong><small>Live database count</small></article>
-        </div>
-        <div class="grid doctor-grid">
-          <article class="panel"><p class="eyebrow">NEXT PATIENT</p><h3>Patient consultation</h3><p>Review appointment details, consultation notes and health context before issuing a digital prescription.</p><button class="primary" onclick="showToast('Doctor consultation workspace opened')">Open consultation</button></article>
-          <article class="panel"><p class="eyebrow">CLINICAL TOOLS</p><div class="tool-list"><button onclick="showToast('Patient records opened')">Patient records <b>→</b></button><button onclick="showToast('Prescription workspace opened')">Create prescription <b>→</b></button><button onclick="showToast('Appointment queue opened')">Appointment queue <b>→</b></button></div></article>
-        </div>
+        <div class="grid three"><article class="stat-card"><span>Today’s appointments</span><strong id="todayAppointments">—</strong><small id="upcomingAppointments">Loading live data…</small></article><article class="stat-card"><span>Consultations</span><strong id="completedAppointments">—</strong><small>Completed appointments</small></article><article class="stat-card"><span>Prescriptions</span><strong id="prescriptionCount">—</strong><small>Live database count</small></article></div>
+        <div class="grid doctor-grid"><article class="panel"><p class="eyebrow">NEXT PATIENT</p><h3>Patient consultation</h3><p>Review appointment details, consultation notes and health context before issuing a digital prescription.</p><button class="primary" onclick="showToast('Doctor consultation workspace opened')">Open consultation</button></article><article class="panel"><p class="eyebrow">CLINICAL TOOLS</p><div class="tool-list"><button onclick="showToast('Patient records opened')">Patient records <b>→</b></button><button onclick="showToast('Prescription workspace opened')">Create prescription <b>→</b></button><button onclick="showToast('Appointment queue opened')">Appointment queue <b>→</b></button></div></article></div>
       </div>
 
       <div id="role-admin" class="role-panel">
         <div class="dashboard-head"><div><span class="welcome">ADMIN OPERATIONS</span><h3>Platform command center</h3><p>Monitor users, doctors, appointments, payments and service operations.</p></div><span class="profile-badge admin-badge">A</span></div>
-        <div class="grid three">
-          <article class="stat-card"><span>Patients</span><strong id="patientCount">—</strong><small>Live database count</small></article>
-          <article class="stat-card"><span>Doctors</span><strong id="doctorCount">—</strong><small>Live database count</small></article>
-          <article class="stat-card"><span>Payments</span><strong id="paidRevenue">—</strong><small id="paymentSummary">Live paid revenue</small></article>
-        </div>
+        <div class="grid three"><article class="stat-card"><span>Patients</span><strong id="patientCount">—</strong><small>Live database count</small></article><article class="stat-card"><span>Doctors</span><strong id="doctorCount">—</strong><small>Live database count</small></article><article class="stat-card"><span>Payments</span><strong id="paidRevenue">—</strong><small id="paymentSummary">Live paid revenue</small></article></div>
         <div class="panel live-dashboard-panel"><div class="panel-head"><div><p class="eyebrow">LIVE DATABASE DASHBOARD</p><h3>Recent appointments</h3><p>Only records returned by the connected database are shown here.</p></div><button class="secondary" type="button" onclick="loadDashboardSummary()">Refresh live data</button></div><div id="dashboardSummaryStatus" class="result">Loading live database summary…</div><div id="recentAppointments" class="result">Loading recent appointments…</div></div>
         <div class="panel verification-panel">
-          <div class="panel-head">
-            <div><p class="eyebrow">PROJECT VERIFICATION</p><h3>Client Demo Verification Center</h3><p>Source-of-truth status for the current client-demo build.</p></div>
-            <span id="verificationStatus" class="tag">Checking…</span>
-          </div>
-          <div class="grid three verification-grid">
-            <div class="mini"><strong>Phase 1–6</strong><span id="phaseVerification">Preserved • signed off</span></div>
-            <div class="mini"><strong>Dashboard</strong><span id="dashboardVerification">Live DB API + UI connected</span></div>
-            <div class="mini"><strong>CI / Runtime</strong><span id="ciVerification">Workflow evidence pending</span></div>
-          </div>
+          <div class="panel-head"><div><p class="eyebrow">PROJECT VERIFICATION</p><h3>Client Demo Verification Center</h3><p>Source-of-truth status for the current client-demo build.</p></div><span id="verificationStatus" class="tag">Checking…</span></div>
+          <div class="grid three verification-grid"><div class="mini"><strong>Phase 1–6</strong><span id="phaseVerification">Preserved • signed off</span></div><div class="mini"><strong>Dashboard</strong><span id="dashboardVerification">Live DB API + UI connected</span></div><div class="mini"><strong>CI / Runtime</strong><span id="ciVerification">CI + runtime E2E passed</span></div></div>
           <div id="verificationDetail" class="result">Checking verification evidence…</div>
         </div>
-        <div class="grid three admin-tools">
-          <article class="mini clickable" onclick="showToast('User management opened')"><strong>User Management</strong><span>Patients • doctors • roles</span></article>
-          <article class="mini clickable" onclick="showToast('Payment monitoring opened')"><strong>Payment Monitoring</strong><span>Status • refunds • provider events</span></article>
-          <article class="mini clickable" onclick="showToast('Service operations opened')"><strong>Service Operations</strong><span>Appointments • labs • emergency</span></article>
-        </div>
+        <div class="grid three admin-tools"><article class="mini clickable" onclick="showToast('User management opened')"><strong>User Management</strong><span>Patients • doctors • roles</span></article><article class="mini clickable" onclick="showToast('Payment monitoring opened')"><strong>Payment Monitoring</strong><span>Status • refunds • provider events</span></article><article class="mini clickable" onclick="showToast('Service operations opened')"><strong>Service Operations</strong><span>Appointments • labs • emergency</span></article></div>
       </div>
     </section>
 
-    <section id="care" class="section flow-section">
-      <div class="section-head"><div><p class="eyebrow">CONNECTED CARE</p><h2>Show the complete journey</h2></div></div>
-      <div class="flow">
-        <div class="flow-item"><b>01</b><span>Patient</span><small>Profile & health context</small></div>
-        <div class="flow-item"><b>02</b><span>AI / Doctor</span><small>Guidance with safety disclaimer</small></div>
-        <div class="flow-item"><b>03</b><span>Appointment</span><small>Consultation booking</small></div>
-        <div class="flow-item"><b>04</b><span>Prescription</span><small>Digital treatment record</small></div>
-        <div class="flow-item"><b>05</b><span>Payment</span><small>Idempotent payment lifecycle</small></div>
-        <div class="flow-item"><b>06</b><span>Health Records</span><small>Longitudinal care history</small></div>
-      </div>
-    </section>
-
-    <section class="section split">
-      <div class="panel">
-        <p class="eyebrow">EMERGENCY</p><h2>Emergency response</h2>
-        <p>Use the existing emergency endpoint to demonstrate configured national emergency contact and safety guidance.</p>
-        <button class="primary" onclick="loadEmergency()">Check emergency API</button>
-        <div id="emergencyResult" class="result">No emergency request made.</div>
-      </div>
-      <div class="panel">
-        <p class="eyebrow">NEARBY HOSPITALS</p><h2>Find nearby hospitals</h2>
-        <div class="form-row"><input id="lat" value="28.6139" aria-label="Latitude"><input id="lng" value="77.2090" aria-label="Longitude"></div>
-        <button class="secondary full" onclick="loadHospitals()">Search hospitals</button>
-        <div id="hospitalResult" class="result">Demo coordinates loaded. Search to query the API.</div>
-      </div>
-    </section>
-
-    <section class="section journey-demo">
-      <div class="section-head"><div><p class="eyebrow">END-TO-END CARE</p><h2>Appointment → WhatsApp → Payment → Records</h2><p class="section-copy">Demonstrate the connected patient journey while keeping live credentials optional.</p></div><span class="tag">Integration ready</span></div>
-      <div class="grid four">
-        <article class="mini clickable" onclick="checkWhatsApp()"><strong>1. WhatsApp</strong><span id="whatsappStatus">Check Cloud API configuration</span></article>
-        <article class="mini clickable" onclick="checkPayments()"><strong>2. Payment</strong><span id="paymentStatus">Check payment API</span></article>
-        <article class="mini clickable" onclick="checkPrescriptions()"><strong>3. Prescription</strong><span id="prescriptionStatus">Check prescription API</span></article>
-        <article class="mini clickable" onclick="checkRecords()"><strong>4. Health Records</strong><span id="recordStatus">Check records API</span></article>
-      </div>
-      <div class="integration-note"><strong>Demo note:</strong> WhatsApp live delivery requires Meta Cloud API credentials to be configured securely; the demo never exposes credentials.</div>
-    </section>
-
-    <section class="section security">
-      <div class="section-head"><div><p class="eyebrow">PLATFORM FOUNDATION</p><h2>Built for a real healthcare product</h2></div></div>
-      <div class="grid three">
-        <article class="mini"><strong>Secure backend</strong><span>Authentication-ready APIs, protected payment status and verified webhooks.</span></article>
-        <article class="mini"><strong>Scalable modules</strong><span>Appointments, prescriptions, labs, payments, records and emergency services are separated into clear product capabilities.</span></article>
-        <article class="mini"><strong>Mobile ready</strong><span>Existing Flutter patient experience supports Android/iOS delivery from the same backend.</span></article>
-      </div>
-    </section>
+    <section id="care" class="section flow-section"><div class="section-head"><div><p class="eyebrow">CONNECTED CARE</p><h2>Show the complete journey</h2></div></div><div class="flow"><div class="flow-item"><b>01</b><span>Patient</span><small>Profile & health context</small></div><div class="flow-item"><b>02</b><span>AI / Doctor</span><small>Guidance with safety disclaimer</small></div><div class="flow-item"><b>03</b><span>Appointment</span><small>Consultation booking</small></div><div class="flow-item"><b>04</b><span>Prescription</span><small>Digital treatment record</small></div><div class="flow-item"><b>05</b><span>Payment</span><small>Idempotent payment lifecycle</small></div><div class="flow-item"><b>06</b><span>Health Records</span><small>Longitudinal care history</small></div></div></section>
+    <section class="section split"><div class="panel"><p class="eyebrow">EMERGENCY</p><h2>Emergency response</h2><p>Use the existing emergency endpoint to demonstrate configured national emergency contact and safety guidance.</p><button class="primary" onclick="loadEmergency()">Check emergency API</button><div id="emergencyResult" class="result">No emergency request made.</div></div><div class="panel"><p class="eyebrow">NEARBY HOSPITALS</p><h2>Find nearby hospitals</h2><div class="form-row"><input id="lat" value="28.6139" aria-label="Latitude"><input id="lng" value="77.2090" aria-label="Longitude"></div><button class="secondary full" onclick="loadHospitals()">Search hospitals</button><div id="hospitalResult" class="result">Demo coordinates loaded. Search to query the API.</div></div></section>
+    <section class="section journey-demo"><div class="section-head"><div><p class="eyebrow">END-TO-END CARE</p><h2>Appointment → WhatsApp → Payment → Records</h2><p class="section-copy">Demonstrate the connected patient journey while keeping live credentials optional.</p></div><span class="tag">Integration ready</span></div><div class="grid four"><article class="mini clickable" onclick="checkWhatsApp()"><strong>1. WhatsApp</strong><span id="whatsappStatus">Check Cloud API configuration</span></article><article class="mini clickable" onclick="checkPayments()"><strong>2. Payment</strong><span id="paymentStatus">Check payment API</span></article><article class="mini clickable" onclick="checkPrescriptions()"><strong>3. Prescription</strong><span id="prescriptionStatus">Check prescription API</span></article><article class="mini clickable" onclick="checkRecords()"><strong>4. Health Records</strong><span id="recordStatus">Check records API</span></article></div><div class="integration-note"><strong>Demo note:</strong> WhatsApp live delivery requires Meta Cloud API credentials to be configured securely; the demo never exposes credentials.</div></section>
+    <section class="section security"><div class="section-head"><div><p class="eyebrow">PLATFORM FOUNDATION</p><h2>Built for a real healthcare product</h2></div></div><div class="grid three"><article class="mini"><strong>Secure backend</strong><span>Authentication-ready APIs, protected payment status and verified webhooks.</span></article><article class="mini"><strong>Scalable modules</strong><span>Appointments, prescriptions, labs, payments, records and emergency services are separated into clear product capabilities.</span></article><article class="mini"><strong>Mobile ready</strong><span>Existing Flutter patient experience supports Android/iOS delivery from the same backend.</span></article></div></section>
   </main>
-
   <footer><strong>AyanSha Health Care</strong><span>Client demonstration build • Existing Phase 1–6 backend preserved</span></footer>
   <div id="toast" class="toast"></div>
   <script src="./app.js"></script>
