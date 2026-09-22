@@ -93,16 +93,16 @@ async function loadVerificationStatus(){
   status.textContent='Checking…'; detail.textContent='Checking current verification evidence…';
   try{
     const d=await api('/health');
-    status.textContent='CODE VERIFIED';
+    status.textContent='CI VERIFIED • RUNTIME E2E PENDING';
     status.className='tag ok';
-    ci.textContent='Source commit verified • CI evidence pending';
-    detail.innerHTML='<strong>Current state:</strong> client-demo code and smoke-test coverage are present on the GitHub source branch. Final CI/runtime evidence is still pending, so the dashboard does not claim full final sign-off.';
+    ci.textContent='CI PASSED • Live runtime/database E2E pending';
+    detail.innerHTML='<strong>Current state:</strong> client-demo code, smoke coverage, and latest GitHub CI checks are verified successfully. Final client sign-off remains pending only for live runtime/database E2E proof.';
     if(d?.ok) showToast('Verification center updated');
   }catch(e){
-    status.textContent='VERIFICATION CHECK FAILED';
+    status.textContent='CI VERIFIED • API UNAVAILABLE';
     status.className='tag';
-    ci.textContent='API unavailable';
-    detail.textContent='Unable to confirm API health from the dashboard environment.';
+    ci.textContent='CI passed • API unavailable in dashboard environment';
+    detail.textContent='GitHub CI evidence is verified, but the dashboard environment could not confirm live API health.';
   }
 }
 
