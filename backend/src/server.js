@@ -79,7 +79,7 @@ const server=http.createServer(async(req,res)=>{
   });
   if(url.pathname==='/api/prescriptions'&&req.method==='GET'){
     const auth=requireAuth(req,res); if(!auth)return;
-    const phone=url.searchParams.get('phone'); if(!phone)return send(res,422,{error:'phone is required'}); if(phone!==auth.sub)return send(res,403,{error:'Patient access denied'}); if(phone!==auth.sub)return send(res,403,{error:'Patient access denied'}); if(phone!==auth.sub)return send(res,403,{error:'Patient access denied'}); if(phone!==auth.sub)return send(res,403,{error:'Patient access denied'});
+    const phone=url.searchParams.get('phone'); if(!phone)return send(res,422,{error:'phone is required'}); if(phone!==auth.sub)return send(res,403,{error:'Patient access denied'});
     try { const rows=await listPrescriptions(phone); return send(res,200,rows||[]); } catch(e) { return send(res,503,{error:'Unable to load prescriptions'}); }
   }
   if(url.pathname==='/api/prescriptions'&&req.method==='POST')return parseBody(req,async(err,data)=>{
@@ -89,7 +89,7 @@ const server=http.createServer(async(req,res)=>{
   });
   if(url.pathname==='/api/health-records'&&req.method==='GET'){
     const auth=requireAuth(req,res); if(!auth)return;
-    const phone=url.searchParams.get('phone'); if(!phone)return send(res,422,{error:'phone is required'});
+    const phone=url.searchParams.get('phone'); if(!phone)return send(res,422,{error:'phone is required'}); if(phone!==auth.sub)return send(res,403,{error:'Patient access denied'});
     try { const rows=await listHealthRecords(phone); return send(res,200,rows||[]); } catch(e) { return send(res,503,{error:'Unable to load health records'}); }
   }
   if(url.pathname==='/api/health-records'&&req.method==='POST')return parseBody(req,async(err,data)=>{
@@ -99,7 +99,7 @@ const server=http.createServer(async(req,res)=>{
   });
   if(url.pathname==='/api/lab-orders'&&req.method==='GET'){
     const auth=requireAuth(req,res); if(!auth)return;
-    const phone=url.searchParams.get('phone'); if(!phone)return send(res,422,{error:'phone is required'});
+    const phone=url.searchParams.get('phone'); if(!phone)return send(res,422,{error:'phone is required'}); if(phone!==auth.sub)return send(res,403,{error:'Patient access denied'});
     try { const rows=await listLabOrders(phone); return send(res,200,rows||[]); } catch(e) { return send(res,503,{error:'Unable to load lab orders'}); }
   }
   if(url.pathname==='/api/lab-orders'&&req.method==='POST')return parseBody(req,async(err,data)=>{const auth=requireAuth(req,res);if(!auth)return;
@@ -115,7 +115,7 @@ const server=http.createServer(async(req,res)=>{
   });
   if(url.pathname==='/api/payments'&&req.method==='GET'){
     const auth=requireAuth(req,res); if(!auth)return;
-    const phone=url.searchParams.get('phone'); if(!phone)return send(res,422,{error:'phone is required'});
+    const phone=url.searchParams.get('phone'); if(!phone)return send(res,422,{error:'phone is required'}); if(phone!==auth.sub)return send(res,403,{error:'Patient access denied'});
     try { const rows=await listPayments(phone); return send(res,200,rows||[]); } catch(e) { return send(res,503,{error:'Unable to load payments'}); }
   }
   if(url.pathname==='/api/payments'&&req.method==='POST')return parseBody(req,async(err,data)=>{const auth=requireAuth(req,res);if(!auth)return;
@@ -124,13 +124,13 @@ const server=http.createServer(async(req,res)=>{
     catch(e) { if(e.statusCode)return send(res,e.statusCode,{error:e.message}); return send(res,503,{error:'Unable to create payment'}); }
   });
   const paymentOrderMatch=url.pathname.match(/^\/api\/payments\/(\d+)\/order$/);
-  if(paymentOrderMatch&&req.method==='POST')return parseBody(req,async(err,data)=>{
+  if(paymentOrderMatch&&req.method==='POST')return parseBody(req,async(err,data)=>{const auth=requireAuth(req,res);if(!auth)return;
     if(err)return send(res,400,{error:'Invalid JSON'});
     if(!data.phone)return send(res,422,{error:'phone is required'});
     try {
       const payment=await getPaymentById(Number(paymentOrderMatch[1]));
       if(!payment)return send(res,404,{error:'Payment not found'});
-      if(payment.phone!==data.phone)return send(res,403,{error:'Payment does not belong to patient'});
+      if(payment.phone!==auth.sub || payment.phone!==data.phone)return send(res,403,{error:'Payment does not belong to patient'});
       if(payment.provider_order_id)return send(res,200,{payment,order:{provider:payment.provider,orderId:payment.provider_order_id,amount:Math.round(Number(payment.amount)*100),currency:payment.currency}});
       const order=await createPaymentGatewayOrder({amount:payment.amount,currency:payment.currency,receipt:`payment_${payment.id}`});
       const saved=await setProviderOrderId(payment.id,order.provider,order.orderId);
