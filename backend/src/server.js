@@ -36,6 +36,7 @@ const server=http.createServer(async(req,res)=>{
   }
   if(url.pathname==='/api/notifications/whatsapp/status'&&req.method==='GET')return send(res,200,whatsappStatus());
   if(url.pathname==='/api/notifications/whatsapp'&&req.method==='POST')return parseBody(req,async(err,data)=>{
+    const auth=requireAuth(req,res); if(!auth)return;
     if(err)return send(res,400,{error:'Invalid JSON'});
     if(!data.to||!data.text||!data.event)return send(res,422,{error:'to, text and event are required'});
     return send(res,whatsappStatus().configured?200:503,await sendWhatsApp({to:data.to,text:data.text,event:data.event}));
@@ -66,6 +67,7 @@ const server=http.createServer(async(req,res)=>{
   }
   const statusMatch=url.pathname.match(/^\/api\/appointments\/(\d+)\/status$/);
   if(statusMatch&&req.method==='PATCH')return parseBody(req,async(err,data)=>{
+    const auth=requireAuth(req,res); if(!auth)return;
     if(err)return send(res,400,{error:'Invalid JSON'});
     try { const saved=await updateAppointmentStatus(Number(statusMatch[1]),data.status); if(saved)return send(res,200,saved); return send(res,503,{error:'DATABASE_URL not configured'}); }
     catch(e) { if(e.statusCode)return send(res,e.statusCode,{error:e.message}); return send(res,503,{error:'Unable to update appointment status'}); }
@@ -83,7 +85,9 @@ const server=http.createServer(async(req,res)=>{
     try { const rows=await listPrescriptions(phone); return send(res,200,rows||[]); } catch(e) { return send(res,503,{error:'Unable to load prescriptions'}); }
   }
   if(url.pathname==='/api/prescriptions'&&req.method==='POST')return parseBody(req,async(err,data)=>{
+    const auth=requireAuth(req,res); if(!auth)return;
     if(err)return send(res,400,{error:'Invalid JSON'});
+    if(!data.phone || data.phone!==auth.sub)return send(res,403,{error:'Patient access denied'});
     try { const saved=await createPrescription(data); if(saved)return send(res,201,saved); return send(res,503,{error:'DATABASE_URL not configured'}); }
     catch(e) { if(e.statusCode)return send(res,e.statusCode,{error:e.message}); return send(res,503,{error:'Unable to save prescription'}); }
   });
@@ -93,7 +97,9 @@ const server=http.createServer(async(req,res)=>{
     try { const rows=await listHealthRecords(phone); return send(res,200,rows||[]); } catch(e) { return send(res,503,{error:'Unable to load health records'}); }
   }
   if(url.pathname==='/api/health-records'&&req.method==='POST')return parseBody(req,async(err,data)=>{
+    const auth=requireAuth(req,res); if(!auth)return;
     if(err)return send(res,400,{error:'Invalid JSON'});
+    if(!data.phone || data.phone!==auth.sub)return send(res,403,{error:'Patient access denied'});
     try { const saved=await createHealthRecord(data); if(saved)return send(res,201,saved); return send(res,503,{error:'DATABASE_URL not configured'}); }
     catch(e) { if(e.statusCode)return send(res,e.statusCode,{error:e.message}); return send(res,503,{error:'Unable to save health record'}); }
   });
@@ -109,6 +115,7 @@ const server=http.createServer(async(req,res)=>{
   });
   const labStatusMatch=url.pathname.match(/^\/api\/lab-orders\/(\d+)\/status$/);
   if(labStatusMatch&&req.method==='PATCH')return parseBody(req,async(err,data)=>{
+    const auth=requireAuth(req,res); if(!auth)return;
     if(err)return send(res,400,{error:'Invalid JSON'});
     try { const saved=await updateLabOrderStatus(Number(labStatusMatch[1]),data.status); if(saved)return send(res,200,saved); return send(res,503,{error:'DATABASE_URL not configured'}); }
     catch(e) { if(e.statusCode)return send(res,e.statusCode,{error:e.message}); return send(res,503,{error:'Unable to update lab order status'}); }
