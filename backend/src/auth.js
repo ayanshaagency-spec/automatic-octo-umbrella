@@ -89,7 +89,7 @@ async function sendOtp(phone, otp) {
 
 async function issueOtp(phone) {
   const normalizedPhone = String(phone).trim();
-  if (!/^\\+?[1-9]\\d{9,14}$/.test(normalizedPhone)) {
+  if (!/^\+?[1-9]\d{9,14}$/.test(normalizedPhone)) {
     throw new AuthError('phone must be a valid international phone number', 422);
   }
   const otp = String(crypto.randomInt(100000, 1000000));
