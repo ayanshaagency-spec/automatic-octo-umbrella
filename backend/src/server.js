@@ -1,4 +1,6 @@
 const http = require('http');
+const fs = require('fs');
+const path = require('path');
 const PORT = process.env.PORT || 3000;
 const doctorsFallback = [{id:1,name:'Dr. Ananya Sharma',specialty:'Cardiology'},{id:2,name:'Dr. Rahul Mehta',specialty:'General Medicine'},{id:3,name:'Dr. Priya Kapoor',specialty:'Dermatology'}];
 const appointments = [];
@@ -13,12 +15,29 @@ const { getWebhookSecret, verifyWebhookSignature, parseWebhookEvent } = require(
 const { isAuthorizedPaymentStatusUpdate } = require('./payment_status_authorization');
 const { validateCoordinates, emergencyResponse } = require('./phase6_emergency');
 const { listNearbyHospitals } = require('./phase6_hospital_repository');
+const { status: whatsappStatus, sendWhatsApp } = require('./whatsapp');
 const send=(res,code,data)=>{res.writeHead(code,{'Content-Type':'application/json','Access-Control-Allow-Origin':'*','Access-Control-Allow-Methods':'GET,POST,PATCH,OPTIONS','Access-Control-Allow-Headers':'Content-Type,Authorization,X-Payment-Signature'});res.end(JSON.stringify(data));};
 const parseBody=(req,done)=>{let body='';req.on('data',c=>body+=c);req.on('end',()=>{try{done(null,JSON.parse(body||'{}'));}catch(e){done(e);}});};
 const parseRawBody=(req,done)=>{let body='';req.setEncoding('utf8');req.on('data',c=>body+=c);req.on('end',()=>done(null,body));req.on('error',done);};
 const server=http.createServer(async(req,res)=>{
   if(req.method==='OPTIONS') return send(res,204,{});
   const url = new URL(req.url, `http://${req.headers.host || 'localhost'}`);
+  if(req.method==='GET' && (url.pathname==='/' || url.pathname.startsWith('/web/'))){
+    const relative=url.pathname==='/'?'index.html':url.pathname.replace(/^\/web\//,'');
+    const file=path.join(__dirname,'../../web',relative);
+    if(file.startsWith(path.join(__dirname,'../../web')) && fs.existsSync(file) && fs.statSync(file).isFile()){
+      const ext=path.extname(file).toLowerCase();
+      const types={'.html':'text/html; charset=utf-8','.css':'text/css; charset=utf-8','.js':'text/javascript; charset=utf-8','.json':'application/json'};
+      res.writeHead(200,{'Content-Type':types[ext]||'application/octet-stream'});
+      return fs.createReadStream(file).pipe(res);
+    }
+  }
+  if(url.pathname==='/api/notifications/whatsapp/status'&&req.method==='GET')return send(res,200,whatsappStatus());
+  if(url.pathname==='/api/notifications/whatsapp'&&req.method==='POST')return parseBody(req,async(err,data)=>{
+    if(err)return send(res,400,{error:'Invalid JSON'});
+    if(!data.to||!data.text||!data.event)return send(res,422,{error:'to, text and event are required'});
+    return send(res,whatsappStatus().configured?200:503,await sendWhatsApp({to:data.to,text:data.text,event:data.event}));
+  });
   if(url.pathname==='/health') return send(res,200,{ok:true,service:'Ayansha Health Care'});
   if(url.pathname==='/api/doctors'&&req.method==='GET'){try{const rows=await listDoctors();return send(res,200,rows||doctorsFallback);}catch(e){return send(res,200,doctorsFallback);}}
   if(url.pathname==='/api/db/health'&&req.method==='GET'){try{const db=await getDb();if(!db)return send(res,503,{ok:false,error:'DATABASE_URL not configured'});await db.query('SELECT 1');return send(res,200,{ok:true,database:'connected'});}catch(e){return send(res,503,{ok:false,error:'Database unavailable'});}}
@@ -52,7 +71,7 @@ const server=http.createServer(async(req,res)=>{
     if(!data.patientName||!data.phone||!data.doctorId||!data.appointmentAt)return send(res,422,{error:'patientName, phone, doctorId and appointmentAt are required'});
     try { const saved=await createAppointment(data); if(saved)return send(res,201,saved); }
     catch(e) { if(e.statusCode)return send(res,e.statusCode,{error:e.message}); return send(res,503,{error:'Unable to save appointment'}); }
-    const appointment={id:appointments.length+1,status:'confirmed',mode:data.mode||'Video',...data}; appointments.push(appointment); send(res,201,appointment);
+    const appointment={id:appointments.length+1,status:'confirmed',mode:data.mode||'Video',...data}; appointments.push(appointment); const wa=await sendWhatsApp({to:data.phone,text:`Ayansha Health Care: appointment ${appointment.id} confirmed for ${data.appointmentAt}.`,event:`appointment-confirmation:${appointment.id}`}); send(res,201,{...appointment,whatsapp:wa});
   });
   if(url.pathname==='/api/prescriptions'&&req.method==='GET'){
     const phone=url.searchParams.get('phone'); if(!phone)return send(res,422,{error:'phone is required'});
