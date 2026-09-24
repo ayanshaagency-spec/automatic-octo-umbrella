@@ -13,6 +13,7 @@ const { listPayments, getPaymentById, setProviderOrderId, createPayment, updateP
 const { createPaymentGatewayOrder } = require('./payment_gateway');
 const { getWebhookSecret, verifyWebhookSignature, parseWebhookEvent } = require('./payment_webhook');
 const { isAuthorizedPaymentStatusUpdate } = require('./payment_status_authorization');
+const isAuthorizedAdmin = req => isAuthorizedPaymentStatusUpdate(req.headers, process.env.ADMIN_API_TOKEN || process.env.PAYMENT_STATUS_ADMIN_TOKEN);
 const { validateCoordinates, emergencyResponse } = require('./phase6_emergency');
 const { listNearbyHospitals } = require('./phase6_hospital_repository');
 const { status: whatsappStatus, sendWhatsApp } = require('./whatsapp');
@@ -67,7 +68,7 @@ const server=http.createServer(async(req,res)=>{
   }
   const statusMatch=url.pathname.match(/^\/api\/appointments\/(\d+)\/status$/);
   if(statusMatch&&req.method==='PATCH')return parseBody(req,async(err,data)=>{
-    const auth=requireAuth(req,res); if(!auth)return;
+    if(!isAuthorizedAdmin(req))return send(res,403,{error:'Admin authorization required'});
     if(err)return send(res,400,{error:'Invalid JSON'});
     try { const saved=await updateAppointmentStatus(Number(statusMatch[1]),data.status); if(saved)return send(res,200,saved); return send(res,503,{error:'DATABASE_URL not configured'}); }
     catch(e) { if(e.statusCode)return send(res,e.statusCode,{error:e.message}); return send(res,503,{error:'Unable to update appointment status'}); }
@@ -115,7 +116,7 @@ const server=http.createServer(async(req,res)=>{
   });
   const labStatusMatch=url.pathname.match(/^\/api\/lab-orders\/(\d+)\/status$/);
   if(labStatusMatch&&req.method==='PATCH')return parseBody(req,async(err,data)=>{
-    const auth=requireAuth(req,res); if(!auth)return;
+    if(!isAuthorizedAdmin(req))return send(res,403,{error:'Admin authorization required'});
     if(err)return send(res,400,{error:'Invalid JSON'});
     try { const saved=await updateLabOrderStatus(Number(labStatusMatch[1]),data.status); if(saved)return send(res,200,saved); return send(res,503,{error:'DATABASE_URL not configured'}); }
     catch(e) { if(e.statusCode)return send(res,e.statusCode,{error:e.message}); return send(res,503,{error:'Unable to update lab order status'}); }
