@@ -151,7 +151,7 @@ test('authenticated patient access and ownership contract', async t => {
   assert.equal(requestOtp.status, 200);
   const otpResult = await requestOtp.json();
   assert.equal(otpResult.delivery, 'development');
-  assert.match(otpResult.devOtp, /^\\d{6}$/);
+  assert.match(otpResult.devOtp, /^\d{6}$/);
 
   const verifyOtp = await fetch(`${BASE_URL}/api/auth/verify-otp`, {
     method: 'POST',
