@@ -36,8 +36,11 @@ async function createPrescription(data) {
   }
 
   const appointment = await db.query(
-    'SELECT id, patient_id, doctor_id FROM appointments WHERE id = $1',
-    [data.appointmentId]
+    `SELECT a.id, a.patient_id, a.doctor_id
+       FROM appointments a
+       JOIN patients pt ON pt.id = a.patient_id
+      WHERE a.id = $1 AND pt.phone = $2`,
+    [data.appointmentId, data.phone]
   );
   if (appointment.rowCount === 0) {
     const error = new Error('Appointment not found');
