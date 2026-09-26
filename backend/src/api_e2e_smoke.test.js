@@ -181,4 +181,36 @@ test('authenticated patient access and ownership contract', async t => {
   });
   assert.equal(invalidSession.status, 401);
   assert.equal((await invalidSession.json()).error, 'Authentication required');
+
+  const prescriptionOwnership = await fetch(`${BASE_URL}/api/prescriptions`, {
+    method: 'POST', headers: { ...authHeaders, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ phone: '+919999999999', appointmentId: 1, diagnosis: 'test', medicines: [{ medicineName: 'Test', dosage: '1', frequency: 'daily', duration: '1 day' }] })
+  });
+  assert.equal(prescriptionOwnership.status, 503);
+  assert.equal((await prescriptionOwnership.json()).error, 'DATABASE_URL not configured');
+
+  const healthRecord = await fetch(`${BASE_URL}/api/health-records`, {
+    method: 'POST', headers: { ...authHeaders, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ phone: '+919999999999', recordType: 'lab', title: 'Test' })
+  });
+  assert.equal(healthRecord.status, 503);
+  assert.equal((await healthRecord.json()).error, 'DATABASE_URL not configured');
+
+  const labOrder = await fetch(`${BASE_URL}/api/lab-orders`, {
+    method: 'POST', headers: { ...authHeaders, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ phone: '+919999999999', testName: 'CBC' })
+  });
+  assert.equal(labOrder.status, 503);
+  assert.equal((await labOrder.json()).error, 'DATABASE_URL not configured');
+
+  const payment = await fetch(`${BASE_URL}/api/payments`, {
+    method: 'POST', headers: { ...authHeaders, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ phone: '+919999999999', amount: 100, appointmentId: 1 })
+  });
+  assert.equal(payment.status, 503);
+  assert.equal((await payment.json()).error, 'DATABASE_URL not configured');
+
+  const whatsappStatus = await fetch(`${BASE_URL}/api/notifications/whatsapp/status`);
+  assert.equal(whatsappStatus.status, 200);
+  assert.equal((await whatsappStatus.json()).configured, false);
 });
