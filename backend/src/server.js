@@ -16,6 +16,7 @@ const isAuthorizedAdmin = req => isAuthorizedPaymentStatusUpdate(req.headers, pr
 const { validateCoordinates, emergencyResponse } = require('./phase6_emergency');
 const { listNearbyHospitals } = require('./phase6_hospital_repository');
 const { status: whatsappStatus, sendWhatsApp } = require('./whatsapp');
+const { getAiStatus, generateSymptomGuidance } = require('./ai');
 
 const configuredOrigins = (process.env.CORS_ALLOWED_ORIGINS || '').split(',').map(v => v.trim()).filter(Boolean);
 const isAllowedOrigin = origin => !origin || configuredOrigins.includes('*') || configuredOrigins.includes(origin) || (process.env.NODE_ENV !== 'production' && /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin));
@@ -36,6 +37,8 @@ const server=http.createServer(async(req,res)=>{
       res.writeHead(200,{'Content-Type':types[ext]||'application/octet-stream'}); return fs.createReadStream(file).pipe(res);
     }
   }
+  if(url.pathname==='/api/ai/status'&&req.method==='GET')return send(res,200,getAiStatus(),req);
+  if(url.pathname==='/api/ai/symptom-guidance'&&req.method==='POST')return parseBody(req,async(err,data)=>{if(err)return send(res,400,{error:'Invalid JSON'},req);if(!data.symptoms||typeof data.symptoms!=='string')return send(res,422,{error:'symptoms is required'},req);try{const result=await generateSymptomGuidance(data.symptoms);return send(res,result.configured?200:503,result,req);}catch(e){return send(res,502,{error:'AI provider request failed'},req);}});
   if(url.pathname==='/api/notifications/whatsapp/status'&&req.method==='GET')return send(res,200,whatsappStatus(),req);
   if(url.pathname==='/api/notifications/whatsapp'&&req.method==='POST')return parseBody(req,async(err,data)=>{
     const auth=requireAuth(req,res); if(!auth)return;
