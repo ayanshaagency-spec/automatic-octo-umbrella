@@ -64,6 +64,30 @@ async function createPayment(data) {
     throw error;
   }
 
+  if (data.appointmentId) {
+    const appointment = await db.query(
+      'SELECT id FROM appointments WHERE id = $1 AND patient_id = $2',
+      [data.appointmentId, patient.rows[0].id]
+    );
+    if (!appointment.rowCount) {
+      const error = new Error('Appointment does not belong to patient');
+      error.statusCode = 403;
+      throw error;
+    }
+  }
+
+  if (data.labOrderId) {
+    const labOrder = await db.query(
+      'SELECT id FROM lab_orders WHERE id = $1 AND patient_id = $2',
+      [data.labOrderId, patient.rows[0].id]
+    );
+    if (!labOrder.rowCount) {
+      const error = new Error('Lab order does not belong to patient');
+      error.statusCode = 403;
+      throw error;
+    }
+  }
+
   if (data.idempotencyKey) {
     const existing = await db.query(`
       SELECT id, patient_id, appointment_id, lab_order_id, amount, currency, provider,
