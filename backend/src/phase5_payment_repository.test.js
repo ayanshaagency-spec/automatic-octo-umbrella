@@ -34,6 +34,14 @@ function createPaymentDb() {
         return { rowCount: patient ? 1 : 0, rows: patient ? [patient] : [] };
       }
 
+      if (sql.includes('SELECT id FROM appointments WHERE id = $1 AND patient_id = $2')) {
+        return { rowCount: 1, rows: [{ id: params[0] }] };
+      }
+
+      if (sql.includes('SELECT id FROM lab_orders WHERE id = $1 AND patient_id = $2')) {
+        return { rowCount: 1, rows: [{ id: params[0] }] };
+      }
+
       if (sql.includes('WHERE patient_id = $1 AND idempotency_key = $2')) {
         const payment = payments.find(item => item.patient_id === params[0] && item.idempotency_key === params[1]);
         return { rowCount: payment ? 1 : 0, rows: payment ? [payment] : [] };
