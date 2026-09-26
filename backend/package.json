@@ -5,7 +5,7 @@
   "scripts": {
     "start": "node src/server.js",
     "db:migrate": "node scripts/migrate.js",
-    "test": "node --check src/server.js && node --test src/phase5_payment_validation.test.js src/payment_webhook.test.js src/payment_gateway.test.js src/api_e2e_smoke.test.js src/payment_status_authorization.test.js src/phase5_payment_repository.test.js src/phase6_emergency.test.js src/phase6_hospital_repository.test.js src/phase6_api_e2e.test.js src/auth.test.js src/real_db_e2e.test.js"
+    "test": "node --check src/server.js && node --test src/phase5_payment_validation.test.js src/payment_webhook.test.js src/payment_gateway.test.js src/api_e2e_smoke.test.js src/payment_status_authorization.test.js src/phase5_payment_repository.test.js src/phase6_emergency.test.js src/phase6_hospital_repository.test.js src/phase6_api_e2e.test.js src/auth.test.js src/ai.test.js src/real_db_e2e.test.js"
   },
   "engines": {
     "node": ">=18"
