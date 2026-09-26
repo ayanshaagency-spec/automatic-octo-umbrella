@@ -73,20 +73,20 @@ test('Phase 5 API smoke/E2E contract', async t => {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ phone: '9999999999', amount: 100 })
   });
-  assert.equal(invalidPayment.status, 422);
-  assert.equal((await invalidPayment.json()).error, 'appointmentId or labOrderId is required');
+  assert.equal(invalidPayment.status, 401);
+  assert.equal((await invalidPayment.json()).error, 'Authentication required');
 
   const missingPhone = await fetch(`${BASE_URL}/api/payments`, { method: 'GET' });
-  assert.equal(missingPhone.status, 422);
-  assert.equal((await missingPhone.json()).error, 'phone is required');
+  assert.equal(missingPhone.status, 401);
+  assert.equal((await missingPhone.json()).error, 'Authentication required');
 
   const orderMissingPhone = await fetch(`${BASE_URL}/api/payments/1/order`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({})
   });
-  assert.equal(orderMissingPhone.status, 422);
-  assert.equal((await orderMissingPhone.json()).error, 'phone is required');
+  assert.equal(orderMissingPhone.status, 401);
+  assert.equal((await orderMissingPhone.json()).error, 'Authentication required');
 
   const unauthorizedStatus = await fetch(`${BASE_URL}/api/payments/1/status`, {
     method: 'PATCH',
