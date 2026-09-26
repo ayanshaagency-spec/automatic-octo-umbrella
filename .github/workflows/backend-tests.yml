@@ -35,5 +35,6 @@ jobs:
           cache: npm
           cache-dependency-path: backend/package.json
       - run: npm install
+      - run: psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f db/schema.sql
       - run: npm run db:migrate
       - run: npm test
