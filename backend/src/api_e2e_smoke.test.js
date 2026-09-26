@@ -7,6 +7,7 @@ const PORT = 3917;
 const BASE_URL = `http://127.0.0.1:${PORT}`;
 const WEBHOOK_SECRET = 'smoke-webhook-secret';
 const ADMIN_TOKEN = 'smoke-admin-token';
+const JWT_SECRET = 'smoke-jwt-secret-that-is-long-enough-for-hmac';
 
 function startServer() {
   const child = spawn(process.execPath, ['src/server.js'], {
@@ -15,8 +16,11 @@ function startServer() {
       ...process.env,
       PORT: String(PORT),
       DATABASE_URL: '',
+      JWT_SECRET,
+      NODE_ENV: 'development',
       PAYMENT_WEBHOOK_SECRET: WEBHOOK_SECRET,
-      PAYMENT_STATUS_ADMIN_TOKEN: ADMIN_TOKEN
+      PAYMENT_STATUS_ADMIN_TOKEN: ADMIN_TOKEN,
+      CORS_ALLOWED_ORIGINS: 'http://allowed.example'
     },
     stdio: ['ignore', 'pipe', 'pipe']
   });
@@ -128,4 +132,53 @@ test('Phase 5 API smoke/E2E contract', async t => {
   const notFound = await fetch(`${BASE_URL}/api/definitely-not-a-route`);
   assert.equal(notFound.status, 404);
   assert.equal((await notFound.json()).error, 'Not found');
+});
+
+test('authenticated patient access and ownership contract', async t => {
+  const server = startServer();
+  t.after(() => server.kill());
+  await waitForHealth(server);
+
+  const unauthenticated = await fetch(`${BASE_URL}/api/appointments`);
+  assert.equal(unauthenticated.status, 401);
+  assert.equal((await unauthenticated.json()).error, 'Authentication required');
+
+  const requestOtp = await fetch(`${BASE_URL}/api/auth/request-otp`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ phone: '+919999999999' })
+  });
+  assert.equal(requestOtp.status, 200);
+  const otpResult = await requestOtp.json();
+  assert.equal(otpResult.delivery, 'development');
+  assert.match(otpResult.devOtp, /^\\d{6}$/);
+
+  const verifyOtp = await fetch(`${BASE_URL}/api/auth/verify-otp`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ phone: '+919999999999', otp: otpResult.devOtp })
+  });
+  assert.equal(verifyOtp.status, 200);
+  const session = await verifyOtp.json();
+  assert.ok(session.token);
+
+  const authHeaders = { Authorization: `Bearer ${session.token}` };
+
+  const ownAppointments = await fetch(`${BASE_URL}/api/appointments`, { headers: authHeaders });
+  assert.equal(ownAppointments.status, 503);
+  assert.equal((await ownAppointments.json()).error, 'DATABASE_URL not configured');
+
+  const foreignAppointments = await fetch(`${BASE_URL}/api/appointments?phone=+919888888888`, { headers: authHeaders });
+  assert.equal(foreignAppointments.status, 403);
+  assert.equal((await foreignAppointments.json()).error, 'Patient access denied');
+
+  const foreignPayment = await fetch(`${BASE_URL}/api/payments?phone=+919888888888`, { headers: authHeaders });
+  assert.equal(foreignPayment.status, 403);
+  assert.equal((await foreignPayment.json()).error, 'Patient access denied');
+
+  const invalidSession = await fetch(`${BASE_URL}/api/appointments`, {
+    headers: { Authorization: 'Bearer invalid.token.value' }
+  });
+  assert.equal(invalidSession.status, 401);
+  assert.equal((await invalidSession.json()).error, 'Authentication required');
 });
