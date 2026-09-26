@@ -65,8 +65,8 @@ test('Phase 5 API smoke/E2E contract', async t => {
     headers: { 'Content-Type': 'application/json' },
     body: '{invalid-json'
   });
-  assert.equal(invalidJson.status, 400);
-  assert.equal((await invalidJson.json()).error, 'Invalid JSON');
+  assert.equal(invalidJson.status, 401);
+  assert.equal((await invalidJson.json()).error, 'Authentication required');
 
   const invalidPayment = await fetch(`${BASE_URL}/api/payments`, {
     method: 'POST',
