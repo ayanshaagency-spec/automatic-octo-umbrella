@@ -210,7 +210,26 @@ test('authenticated patient access and ownership contract', async t => {
   assert.equal(payment.status, 503);
   assert.equal((await payment.json()).error, 'DATABASE_URL not configured');
 
+  const paymentOrderUnavailable = await fetch(`${BASE_URL}/api/payments/1/order`, {
+    method: 'POST',
+    headers: { ...authHeaders, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ phone: '+919999999999' })
+  });
+  assert.equal(paymentOrderUnavailable.status, 503);
+  assert.equal((await paymentOrderUnavailable.json()).error, 'DATABASE_URL not configured');
+
   const whatsappStatus = await fetch(`${BASE_URL}/api/notifications/whatsapp/status`);
   assert.equal(whatsappStatus.status, 200);
   assert.equal((await whatsappStatus.json()).configured, false);
+
+  const aiStatus = await fetch(`${BASE_URL}/api/ai/status`);
+  assert.equal(aiStatus.status, 200);
+  assert.equal((await aiStatus.json()).configured, false);
+
+  const emergency = await fetch(`${BASE_URL}/api/emergency`);
+  assert.equal(emergency.status, 200);
+  assert.equal((await emergency.json()).ok, true);
+
+  const invalidHospitalCoordinates = await fetch(`${BASE_URL}/api/hospitals/nearby?latitude=999&longitude=0`);
+  assert.equal(invalidHospitalCoordinates.status, 422);
 });
