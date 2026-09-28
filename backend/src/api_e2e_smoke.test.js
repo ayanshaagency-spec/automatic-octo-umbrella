@@ -232,7 +232,7 @@ test('authenticated patient access and ownership contract', async t => {
 
   const emergency = await fetch(`${BASE_URL}/api/emergency`);
   assert.equal(emergency.status, 200);
-  assert.equal((await emergency.json()).ok, true);
+  assert.equal((await emergency.json()).emergency, true);
 
   const invalidHospitalCoordinates = await fetch(`${BASE_URL}/api/hospitals/nearby?latitude=999&longitude=0`);
   assert.equal(invalidHospitalCoordinates.status, 422);
