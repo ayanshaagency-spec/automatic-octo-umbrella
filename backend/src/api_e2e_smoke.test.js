@@ -10,18 +10,22 @@ const ADMIN_TOKEN = 'smoke-admin-token';
 const JWT_SECRET = 'smoke-jwt-secret-that-is-long-enough-for-hmac';
 
 function startServer() {
+  const env = {
+    ...process.env,
+    PORT: String(PORT),
+    DATABASE_URL: '',
+    JWT_SECRET,
+    NODE_ENV: 'development',
+    PAYMENT_WEBHOOK_SECRET: WEBHOOK_SECRET,
+    PAYMENT_STATUS_ADMIN_TOKEN: ADMIN_TOKEN,
+    CORS_ALLOWED_ORIGINS: 'http://allowed.example'
+  };
+  delete env.WHATSAPP_PROVIDER_URL;
+  delete env.WHATSAPP_ACCESS_TOKEN;
+  delete env.WHATSAPP_PHONE_NUMBER_ID;
   const child = spawn(process.execPath, ['src/server.js'], {
     cwd: __dirname + '/..',
-    env: {
-      ...process.env,
-      PORT: String(PORT),
-      DATABASE_URL: '',
-      JWT_SECRET,
-      NODE_ENV: 'development',
-      PAYMENT_WEBHOOK_SECRET: WEBHOOK_SECRET,
-      PAYMENT_STATUS_ADMIN_TOKEN: ADMIN_TOKEN,
-      CORS_ALLOWED_ORIGINS: 'http://allowed.example'
-    },
+    env,
     stdio: ['ignore', 'pipe', 'pipe']
   });
   return child;
