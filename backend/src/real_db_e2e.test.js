@@ -6,6 +6,7 @@ const { Client } = require('pg');
 const PORT = 3920;
 const BASE_URL = `http://127.0.0.1:${PORT}`;
 const PHONE = '+919900000001';
+const DOCTOR_PHONE = '+919900000099';
 const JWT_SECRET = 'ci-real-e2e-jwt-secret-long-enough-for-hmac';
 
 async function dbClient() {
@@ -52,8 +53,8 @@ test('real PostgreSQL patient journey E2E', async t => {
 
   const db = await dbClient();
   const doctor = await db.query(
-    `INSERT INTO doctors (name, specialty) VALUES ('CI E2E Doctor', 'General Medicine')
-     RETURNING id`
+    `INSERT INTO doctors (name, specialty, phone) VALUES ('CI E2E Doctor', 'General Medicine', $1)
+     RETURNING id`, [DOCTOR_PHONE]
   );
   const doctorId = doctor.rows[0].id;
   const hospital = await db.query(
@@ -112,13 +113,28 @@ test('real PostgreSQL patient journey E2E', async t => {
   const appointmentBody = await appointment.json();
   assert.equal(appointmentBody.doctor_id, doctorId);
 
+  const doctorOtpRequest = await fetch(`${BASE_URL}/api/doctor/auth/request-otp`, {
+    method: 'POST', headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({phone: DOCTOR_PHONE})
+  });
+  assert.equal(doctorOtpRequest.status, 200);
+  const doctorOtpBody = await doctorOtpRequest.json();
+  assert.ok(doctorOtpBody.devOtp);
+  const doctorOtpVerify = await fetch(`${BASE_URL}/api/doctor/auth/verify-otp`, {
+    method: 'POST', headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({phone: DOCTOR_PHONE, otp: doctorOtpBody.devOtp})
+  });
+  assert.equal(doctorOtpVerify.status, 200);
+  const doctorAuthBody = await doctorOtpVerify.json();
+  const doctorAuth = {Authorization: `Bearer ${doctorAuthBody.token}`, 'Content-Type':'application/json'};
+
   const appointments = await fetch(`${BASE_URL}/api/appointments`, { headers: { Authorization: auth.Authorization } });
   assert.equal(appointments.status, 200);
   assert.equal((await appointments.json()).length, 1);
 
   const healthRecord = await fetch(`${BASE_URL}/api/health-records`, {
-    method: 'POST', headers: auth,
-    body: JSON.stringify({ phone: PHONE, recordType: 'lab', title: 'CI CBC' })
+    method: 'POST', headers: doctorAuth,
+    body: JSON.stringify({ phone: PHONE, doctorPhone: DOCTOR_PHONE, recordType: 'lab', title: 'CI CBC' })
   });
   assert.equal(healthRecord.status, 201);
 
@@ -130,9 +146,9 @@ test('real PostgreSQL patient journey E2E', async t => {
   const labBody = await lab.json();
 
   const prescription = await fetch(`${BASE_URL}/api/prescriptions`, {
-    method: 'POST', headers: auth,
+    method: 'POST', headers: doctorAuth,
     body: JSON.stringify({
-      phone: PHONE,
+      phone: PHONE, doctorPhone: DOCTOR_PHONE,
       appointmentId: appointmentBody.id,
       diagnosis: 'CI test',
       medicines: [{ medicineName: 'Test Medicine', dosage: '1 tablet', frequency: 'daily', duration: '1 day' }]
