@@ -148,6 +148,6 @@ class _NearbyHospitalsPageState extends State<NearbyHospitalsPage> {
         ),
       )),
     if (!loading && error == null && hospitals.isEmpty) const Card(child: ListTile(leading: Icon(Icons.local_hospital_outlined), title: Text('No hospitals found'), subtitle: Text('Try another location.'))),
-  ]);
+  ]));
 }
 class SimplePage extends StatelessWidget { final String title; final List<Widget> children; const SimplePage({super.key, required this.title, required this.children}); @override Widget build(BuildContext c) => Scaffold(appBar: AppBar(title: Text(title)), body: ListView(padding: const EdgeInsets.all(16), children: children.map((x) => Padding(padding: const EdgeInsets.only(bottom: 12), child: x)).toList())); }
