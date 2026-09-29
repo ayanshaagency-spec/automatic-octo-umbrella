@@ -13,7 +13,7 @@ on:
       - ".github/workflows/dart.yml"
 
 jobs:
-  analyze-and-test:
+  analyze-and-build:
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -29,5 +29,12 @@ jobs:
         run: flutter pub get
       - name: Analyze
         run: flutter analyze
-      - name: Run tests
-        run: flutter test
+      - name: Run tests when present
+        run: |
+          if [ -d test ]; then
+            flutter test
+          else
+            echo "No Flutter test directory yet; skipping test execution."
+          fi
+      - name: Build debug APK
+        run: flutter build apk --debug
