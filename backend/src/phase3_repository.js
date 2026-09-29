@@ -39,8 +39,9 @@ async function createPrescription(data) {
     `SELECT a.id, a.patient_id, a.doctor_id
        FROM appointments a
        JOIN patients pt ON pt.id = a.patient_id
-      WHERE a.id = $1 AND pt.phone = $2`,
-    [data.appointmentId, data.phone]
+      JOIN doctors d ON d.id = a.doctor_id
+      WHERE a.id = $1 AND pt.phone = $2 AND d.phone = $3`,
+    [data.appointmentId, data.phone, data.doctorPhone]
   );
   if (appointment.rowCount === 0) {
     const error = new Error('Appointment not found');
@@ -94,12 +95,12 @@ async function listHealthRecords(phone) {
 async function createHealthRecord(data) {
   const db = await getDb();
   if (!db) return null;
-  if (!data.phone || !data.recordType || !data.title) {
+  if (!data.phone || !data.doctorPhone || !data.recordType || !data.title) {
     const error = new Error('phone, recordType and title are required');
     error.statusCode = 422;
     throw error;
   }
-  const patient = await db.query('SELECT id FROM patients WHERE phone = $1', [data.phone]);
+  const patient = await db.query(`SELECT p.id FROM patients p JOIN appointments a ON a.patient_id = p.id JOIN doctors d ON d.id = a.doctor_id WHERE p.phone = $1 AND d.phone = $2 LIMIT 1`, [data.phone, data.doctorPhone]);
   if (patient.rowCount === 0) {
     const error = new Error('Patient not found');
     error.statusCode = 404;
