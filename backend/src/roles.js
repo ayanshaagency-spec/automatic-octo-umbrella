@@ -44,8 +44,12 @@ function verifyAdminCredentials(email, password) {
   return true;
 }
 
+function createDoctorToken(phone) {
+  return signRoleToken(String(phone).trim(), 'doctor');
+}
+
 function createAdminToken(email) {
   return signRoleToken(String(email).trim().toLowerCase(), 'admin');
 }
 
-module.exports = { verifyAdminCredentials, createAdminToken, verifyRoleToken };
+module.exports = { verifyAdminCredentials, createAdminToken, createDoctorToken, verifyRoleToken };
