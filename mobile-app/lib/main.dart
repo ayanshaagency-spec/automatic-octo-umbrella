@@ -139,7 +139,7 @@ class _NearbyHospitalsPageState extends State<NearbyHospitalsPage> {
     if (error != null) Card(child: ListTile(leading: const Icon(Icons.error_outline), title: const Text('Could not load hospitals'), subtitle: Text(error!))),
     if (!loading && error == null && hospitals.isNotEmpty)
       for (final h in hospitals)
-        Card(child: ListTile(leading: const CircleAvatar(child: Icon(Icons.local_hospital)), title: Text(h['name']?.toString() ?? 'Hospital'), subtitle: Text((h['address']?.toString() ?? '') + (h['distanceKm'] != null ? '\\n' + h['distanceKm'].toString() + ' km away' : '')), isThreeLine: true, trailing: h['phone'] != null ? Text(h['phone'].toString()) : null)),,
+        Card(child: ListTile(leading: const CircleAvatar(child: Icon(Icons.local_hospital)), title: Text(h['name']?.toString() ?? 'Hospital'), subtitle: Text((h['address']?.toString() ?? '') + (h['distanceKm'] != null ? '\\n' + h['distanceKm'].toString() + ' km away' : '')), isThreeLine: true, trailing: h['phone'] != null ? Text(h['phone'].toString()) : null)),
     if (!loading && error == null && hospitals.isEmpty) const Card(child: ListTile(leading: Icon(Icons.local_hospital_outlined), title: Text('No hospitals found'), subtitle: Text('Try another location.'))),
   ]);
 }
