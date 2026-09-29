@@ -1,6 +1,7 @@
 const API = (window.AYAN_SHA_API_URL || 'http://localhost:3000').replace(/\/$/, '');
 const form = document.getElementById('healthRecordForm');
 const message = document.getElementById('recordMessage');
+const token = () => sessionStorage.getItem('ayansha_doctor_token');
 
 form?.addEventListener('submit', async (event) => {
   event.preventDefault();
@@ -17,7 +18,7 @@ form?.addEventListener('submit', async (event) => {
   };
   try {
     const res = await fetch(`${API}/api/health-records`, {
-      method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(payload)
+      method: 'POST', headers: {'Content-Type':'application/json', ...(token()?{Authorization:'Bearer '+token()}: {})}, body: JSON.stringify(payload)
     });
     const data = await res.json().catch(() => ({}));
     if (!res.ok) throw new Error(data.error || 'Could not save health record');
