@@ -101,4 +101,41 @@ async function createAppointment(data) {
   return rows[0];
 }
 
-module.exports = { listDoctors, listAppointments, updateAppointmentStatus, createAppointment };
+
+async function getDoctorByPhone(phone) {
+  const db = await getDb();
+  if (!db) return null;
+  const { rows } = await db.query('SELECT id, name, specialty, phone FROM doctors WHERE phone = $1', [phone]);
+  return rows[0] || null;
+}
+
+async function listDoctorAppointments(phone) {
+  const db = await getDb();
+  if (!db) return null;
+  const { rows } = await db.query(
+    `SELECT a.id, a.patient_id, a.doctor_id, p.name AS patient_name, p.phone,
+            d.name AS doctor_name, d.specialty, a.appointment_at, a.mode, a.status
+       FROM appointments a
+       JOIN patients p ON p.id = a.patient_id
+       JOIN doctors d ON d.id = a.doctor_id
+      WHERE d.phone = $1
+      ORDER BY a.appointment_at DESC`, [phone]);
+  return rows;
+}
+
+async function updateDoctorAppointmentStatus(id, doctorPhone, status) {
+  const db = await getDb();
+  if (!db) return null;
+  const allowed = ['confirmed', 'completed', 'cancelled', 'in-progress'];
+  if (!allowed.includes(status)) { const e = new Error(`status must be one of: ${allowed.join(', ')}`); e.statusCode=422; throw e; }
+  const { rows } = await db.query(
+    `UPDATE appointments a SET status = $1
+       FROM doctors d
+      WHERE a.id = $2 AND a.doctor_id = d.id AND d.phone = $3
+      RETURNING a.id, a.patient_id, a.doctor_id, a.appointment_at, a.mode, a.status`,
+    [status,id,doctorPhone]);
+  if (!rows.length) { const e=new Error('Appointment not found or not assigned to doctor'); e.statusCode=404; throw e; }
+  return rows[0];
+}
+
+module.exports = { listDoctors, listAppointments, updateAppointmentStatus, createAppointment, getDoctorByPhone, listDoctorAppointments, updateDoctorAppointmentStatus };
