@@ -90,7 +90,7 @@ class _RecordsTabState extends State<RecordsTab> {
     const SizedBox(height: 20), const Text('Medical Records', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)), const SizedBox(height: 8),
     if (records.isEmpty) const Card(child: ListTile(leading: Icon(Icons.folder_outlined), title: Text('No medical records yet'), subtitle: Text('Reports and history added by your care team will appear here.'))),
     ...records.map((r) => Card(child: ListTile(leading: Icon(recordIcon('${r['record_type'] ?? ''}')), title: Text('${r['title'] ?? 'Medical record'}'), subtitle: Text('${r['record_type'] ?? 'Record'} • ${r['record_date'] ?? ''}'), trailing: const Icon(Icons.chevron_right), onTap: () => showRecord(c, r)))),
-  ]])));
+  ])));;
 }
 
 IconData recordIcon(String type) { final t = type.toLowerCase(); if (t.contains('lab')) return Icons.science_outlined; if (t.contains('prescription')) return Icons.medication_outlined; if (t.contains('visit') || t.contains('appointment')) return Icons.calendar_month_outlined; return Icons.description_outlined; }
