@@ -156,7 +156,7 @@ test('real PostgreSQL patient journey E2E', async t => {
   });
   assert.equal(prescription.status, 201);
 
-  const payment = await fetch(`${BASE_URL}/api/payments`, {
+  const prescriptions = await fetch(`${BASE_URL}/api/prescriptions?phone=${encodeURIComponent(PHONE)}`, {\n    headers: { Authorization: auth.Authorization }\n  });\n  assert.equal(prescriptions.status, 200);\n  assert.equal((await prescriptions.json()).length, 1);\n\n  const healthRecords = await fetch(`${BASE_URL}/api/health-records?phone=${encodeURIComponent(PHONE)}`, {\n    headers: { Authorization: auth.Authorization }\n  });\n  assert.equal(healthRecords.status, 200);\n  assert.equal((await healthRecords.json()).length, 1);\n\n  const labOrders = await fetch(`${BASE_URL}/api/lab-orders?phone=${encodeURIComponent(PHONE)}`, {\n    headers: { Authorization: auth.Authorization }\n  });\n  assert.equal(labOrders.status, 200);\n  assert.equal((await labOrders.json()).length, 1);\n\n  const aiStatus = await fetch(`${BASE_URL}/api/ai/status`);\n  assert.equal(aiStatus.status, 200);\n  assert.equal((await aiStatus.json()).configured, false);\n\n  const whatsappStatus = await fetch(`${BASE_URL}/api/notifications/whatsapp/status`);\n  assert.equal(whatsappStatus.status, 200);\n  assert.equal((await whatsappStatus.json()).configured, false);\n\n  const payment = await fetch(`${BASE_URL}/api/payments`, {
     method: 'POST', headers: auth,
     body: JSON.stringify({
       phone: PHONE,
