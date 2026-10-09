@@ -67,7 +67,7 @@ class _AuthGateState extends State<AuthGate> {
     }
     setState(() { _verifying = true; _error = null; });
     try {
-      final result = await widget.client.verifyOtp(phone: phone, otp: code);
+      final result = await widget.client.verifyOtp(phone: phone, otp: code, name: _name.text.trim());
       final token = result['token']?.toString();
       if (token == null || token.isEmpty) throw Exception('Secure session was not returned.');
       if (!mounted) return;
