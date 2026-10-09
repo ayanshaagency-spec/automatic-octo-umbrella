@@ -55,12 +55,13 @@ class ApiClient {
   Future<Map<String, dynamic>> verifyOtp({
     required String phone,
     required String otp,
+    String? name,
   }) async {
     final response = await http
         .post(
           Uri.parse('$baseUrl/api/auth/verify-otp'),
           headers: {'Content-Type': 'application/json'},
-          body: jsonEncode({'phone': phone.trim(), 'otp': otp.trim()}),
+          body: jsonEncode({'phone': phone.trim(), 'otp': otp.trim(), if (name != null && name.trim().isNotEmpty) 'name': name.trim()}),
         )
         .timeout(_timeout);
     if (response.statusCode != 200) {
