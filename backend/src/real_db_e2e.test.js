@@ -96,6 +96,9 @@ test('real PostgreSQL patient journey E2E', async t => {
   });
   assert.equal(verifyOtp.status, 200);
   const session = await verifyOtp.json();
+  const patientAfterLogin = await db.query('SELECT name FROM patients WHERE phone = $1', [PHONE]);
+  assert.equal(patientAfterLogin.rowCount, 1, 'verified OTP should provision a patient profile');
+  assert.equal(patientAfterLogin.rows[0].name, 'Patient');
   const auth = { Authorization: `Bearer ${session.token}`, 'Content-Type': 'application/json' };
 
   const appointment = await fetch(`${BASE_URL}/api/appointments`, {
@@ -112,6 +115,8 @@ test('real PostgreSQL patient journey E2E', async t => {
   assert.equal(appointment.status, 201);
   const appointmentBody = await appointment.json();
   assert.equal(appointmentBody.doctor_id, doctorId);
+  const patientAfterBooking = await db.query('SELECT name FROM patients WHERE phone = $1', [PHONE]);
+  assert.equal(patientAfterBooking.rows[0].name, 'CI E2E Patient');
 
   const doctorOtpRequest = await fetch(`${BASE_URL}/api/doctor/auth/request-otp`, {
     method: 'POST', headers: {'Content-Type':'application/json'},
