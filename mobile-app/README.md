@@ -10,7 +10,6 @@ This app uses the existing Ayansha Health Care backend. It does not contain a se
    ```sh
    flutter pub get
    flutter analyze
-   flutter test
    flutter run --dart-define=AYANSHA_API_URL=http://10.0.2.2:3000
    ```
 
