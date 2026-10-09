@@ -32,8 +32,7 @@ class _AuthGateState extends State<AuthGate> {
   }
 
   String _normalizedPhone(String value) {
-    final cleaned = value.trim().replaceAll(RegExp(r'[\\s()-]'), '');
-    if (RegExp(r'^\\d{10}$').hasMatch(cleaned)) return cleaned;
+    final cleaned = value.trim().replaceAll(RegExp(r'[\s()-]'), '');
     return cleaned;
   }
 
