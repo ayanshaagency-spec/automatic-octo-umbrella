@@ -8,6 +8,19 @@ class ApiClient {
                 defaultValue: 'http://10.0.2.2:3000');
 
   final String baseUrl;
+  String? _token;
+
+  void setToken(String? token) => _token = token;
+
+  Map<String, String> get _authHeaders => {
+        if (_token != null && _token!.isNotEmpty) 'Authorization': 'Bearer $_token',
+      };
+
+  Map<String, String> get _jsonHeaders => {
+        'Content-Type': 'application/json',
+        ..._authHeaders,
+      };
+
   Duration get _timeout => const Duration(seconds: 8);
 
   List<Map<String, dynamic>> _list(String body) =>
@@ -25,6 +38,37 @@ class ApiClient {
     return Exception(fallback);
   }
 
+  Future<Map<String, dynamic>> requestOtp(String phone) async {
+    final response = await http
+        .post(
+          Uri.parse('$baseUrl/api/auth/request-otp'),
+          headers: _jsonHeaders,
+          body: jsonEncode({'phone': phone.trim()}),
+        )
+        .timeout(_timeout);
+    if (response.statusCode != 200) {
+      throw _error(response, 'Unable to send verification code');
+    }
+    return Map<String, dynamic>.from(jsonDecode(response.body));
+  }
+
+  Future<Map<String, dynamic>> verifyOtp({
+    required String phone,
+    required String otp,
+  }) async {
+    final response = await http
+        .post(
+          Uri.parse('$baseUrl/api/auth/verify-otp'),
+          headers: {'Content-Type': 'application/json'},
+          body: jsonEncode({'phone': phone.trim(), 'otp': otp.trim()}),
+        )
+        .timeout(_timeout);
+    if (response.statusCode != 200) {
+      throw _error(response, 'Invalid or expired verification code');
+    }
+    return Map<String, dynamic>.from(jsonDecode(response.body));
+  }
+
   Future<List<Map<String, dynamic>>> getDoctors() async {
     final response =
         await http.get(Uri.parse('$baseUrl/api/doctors')).timeout(_timeout);
@@ -35,7 +79,7 @@ class ApiClient {
   Future<List<Map<String, dynamic>>> getAppointments(String phone) async {
     final uri = Uri.parse('$baseUrl/api/appointments')
         .replace(queryParameters: {'phone': phone});
-    final response = await http.get(uri).timeout(_timeout);
+    final response = await http.get(uri, headers: _authHeaders).timeout(_timeout);
     if (response.statusCode != 200) {
       throw _error(response, 'Unable to load appointments');
     }
@@ -71,7 +115,7 @@ class ApiClient {
   Future<List<Map<String, dynamic>>> getPrescriptions(String phone) async {
     final uri = Uri.parse('$baseUrl/api/prescriptions')
         .replace(queryParameters: {'phone': phone});
-    final response = await http.get(uri).timeout(_timeout);
+    final response = await http.get(uri, headers: _authHeaders).timeout(_timeout);
     if (response.statusCode != 200) {
       throw _error(response, 'Unable to load prescriptions');
     }
