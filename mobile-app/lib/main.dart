@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'api_client.dart';
 import 'auth_gate.dart';
 import 'labs_page.dart';
+import 'ai_health_page.dart';
 
 void main() => runApp(const AyanshaHealthCareApp());
 
@@ -56,7 +57,7 @@ class HomeTab extends StatelessWidget {
   @override Widget build(BuildContext c) => Scaffold(appBar: AppBar(title: const Text('AYANSHA', style: TextStyle(fontWeight: FontWeight.bold))), body: ListView(padding: const EdgeInsets.all(16), children: [
     Container(padding: const EdgeInsets.all(20), decoration: BoxDecoration(color: const Color(0xFF073C4A), borderRadius: BorderRadius.circular(22)), child: const Column(crossAxisAlignment: CrossAxisAlignment.start, children: [Text('Good morning 👋', style: TextStyle(color: Colors.white70)), SizedBox(height: 6), Text('Your health, our priority', style: TextStyle(color: Colors.white, fontSize: 24, fontWeight: FontWeight.bold)), SizedBox(height: 8), Text('Find doctors, book care and manage your health in one place.', style: TextStyle(color: Colors.white70))])),
     const SizedBox(height: 22), const Text('Quick Services', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)), const SizedBox(height: 12),
-    GridView.count(shrinkWrap: true, physics: const NeverScrollableScrollPhysics(), crossAxisCount: 2, crossAxisSpacing: 12, mainAxisSpacing: 12, childAspectRatio: 1.45, children: [service(c, 'Find a Doctor', Icons.medical_services_outlined, const DoctorsTab()), service(c, 'Book Appointment', Icons.calendar_month_outlined, const BookingPage()), service(c, 'Video Consultation', Icons.videocam_outlined, const ConsultationPage()), service(c, 'Lab Tests', Icons.science_outlined, LabsPage(client: api, phone: patientPhone)), service(c, 'Health Records', Icons.folder_shared_outlined, const RecordsTab()), service(c, 'Emergency Help', Icons.emergency_outlined, const EmergencyPage()), service(c, 'Nearby Hospitals', Icons.local_hospital_outlined, const NearbyHospitalsPage())]),
+    GridView.count(shrinkWrap: true, physics: const NeverScrollableScrollPhysics(), crossAxisCount: 2, crossAxisSpacing: 12, mainAxisSpacing: 12, childAspectRatio: 1.45, children: [service(c, 'Find a Doctor', Icons.medical_services_outlined, const DoctorsTab()), service(c, 'AI Health Assistant', Icons.psychology_outlined, AIHealthPage(client: api)), service(c, 'Book Appointment', Icons.calendar_month_outlined, const BookingPage()), service(c, 'Video Consultation', Icons.videocam_outlined, const ConsultationPage()), service(c, 'Lab Tests', Icons.science_outlined, LabsPage(client: api, phone: patientPhone)), service(c, 'Health Records', Icons.folder_shared_outlined, const RecordsTab()), service(c, 'Emergency Help', Icons.emergency_outlined, const EmergencyPage()), service(c, 'Nearby Hospitals', Icons.local_hospital_outlined, const NearbyHospitalsPage())]),
     const SizedBox(height: 18), Container(padding: const EdgeInsets.all(16), decoration: BoxDecoration(color: const Color(0xFFFFEEEE), borderRadius: BorderRadius.circular(18)), child: const Row(children: [Icon(Icons.emergency, color: Colors.red), SizedBox(width: 12), Expanded(child: Text('Emergency? Get immediate professional help.', style: TextStyle(fontWeight: FontWeight.w600)))]))
   ]));
 }
