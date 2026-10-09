@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'api_client.dart';
+import 'auth_gate.dart';
 
 void main() => runApp(const AyanshaHealthCareApp());
 
@@ -10,7 +11,15 @@ class AyanshaHealthCareApp extends StatelessWidget {
     debugShowCheckedModeBanner: false,
     title: 'Ayansha Health Care',
     theme: ThemeData(colorScheme: ColorScheme.fromSeed(seedColor: const Color(0xFF0E8F8F)), useMaterial3: true, scaffoldBackgroundColor: const Color(0xFFF7FBFC)),
-    home: const HomePage(),
+    home: AuthGate(
+      client: api,
+      onAuthenticated: (phone, token, name) {
+        api.setToken(token);
+        patientPhone = phone;
+        patientName = name;
+        return const HomePage();
+      },
+    ),
   );
 }
 
@@ -31,8 +40,8 @@ class Appointment {
 }
 final api = ApiClient();
 final ValueNotifier<List<Appointment>> appointments = ValueNotifier(const []);
-const patientName = String.fromEnvironment('AYANSHA_PATIENT_NAME', defaultValue: 'Patient');
-const patientPhone = String.fromEnvironment('AYANSHA_PATIENT_PHONE', defaultValue: '9999999999');
+String patientName = const String.fromEnvironment('AYANSHA_PATIENT_NAME', defaultValue: 'Patient');
+String patientPhone = const String.fromEnvironment('AYANSHA_PATIENT_PHONE', defaultValue: '9999999999');
 
 class HomePage extends StatefulWidget { const HomePage({super.key}); @override State<HomePage> createState() => _HomePageState(); }
 class _HomePageState extends State<HomePage> {
