@@ -42,7 +42,7 @@ class ApiClient {
     final response = await http
         .post(
           Uri.parse('$baseUrl/api/auth/request-otp'),
-          headers: _jsonHeaders,
+          headers: {'Content-Type': 'application/json'},
           body: jsonEncode({'phone': phone.trim()}),
         )
         .timeout(_timeout);
@@ -96,7 +96,7 @@ class ApiClient {
     final response = await http
         .post(
           Uri.parse('$baseUrl/api/appointments'),
-          headers: {'Content-Type': 'application/json'},
+          headers: _jsonHeaders,
           body: jsonEncode({
             'patientName': patientName,
             'phone': phone,
@@ -131,7 +131,7 @@ class ApiClient {
     final response = await http
         .post(
           Uri.parse('$baseUrl/api/prescriptions'),
-          headers: {'Content-Type': 'application/json'},
+          headers: _jsonHeaders,
           body: jsonEncode({
             'appointmentId': appointmentId,
             'diagnosis': diagnosis,
@@ -149,7 +149,7 @@ class ApiClient {
   Future<List<Map<String, dynamic>>> getHealthRecords(String phone) async {
     final uri = Uri.parse('$baseUrl/api/health-records')
         .replace(queryParameters: {'phone': phone});
-    final response = await http.get(uri).timeout(_timeout);
+    final response = await http.get(uri, headers: _authHeaders).timeout(_timeout);
     if (response.statusCode != 200) {
       throw _error(response, 'Unable to load health records');
     }
@@ -167,7 +167,7 @@ class ApiClient {
     final response = await http
         .post(
           Uri.parse('$baseUrl/api/health-records'),
-          headers: {'Content-Type': 'application/json'},
+          headers: _jsonHeaders,
           body: jsonEncode({
             'phone': phone,
             'recordType': recordType,
