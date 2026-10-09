@@ -185,6 +185,42 @@ class ApiClient {
     return Map<String, dynamic>.from(jsonDecode(response.body));
   }
 
+  Future<List<Map<String, dynamic>>> getLabOrders(String phone) async {
+    final uri = Uri.parse('$baseUrl/api/lab-orders')
+        .replace(queryParameters: {'phone': phone});
+    final response = await http.get(uri, headers: _authHeaders).timeout(_timeout);
+    if (response.statusCode != 200) {
+      throw _error(response, 'Unable to load lab orders');
+    }
+    return _list(response.body);
+  }
+
+  Future<Map<String, dynamic>> createLabOrder({
+    required String phone,
+    required String testName,
+    String? labName,
+    String? notes,
+    DateTime? scheduledAt,
+  }) async {
+    final response = await http
+        .post(
+          Uri.parse('$baseUrl/api/lab-orders'),
+          headers: _jsonHeaders,
+          body: jsonEncode({
+            'phone': phone,
+            'testName': testName,
+            'labName': labName,
+            'notes': notes,
+            'scheduledAt': scheduledAt?.toIso8601String(),
+          }),
+        )
+        .timeout(_timeout);
+    if (response.statusCode != 201) {
+      throw _error(response, 'Unable to book lab test');
+    }
+    return Map<String, dynamic>.from(jsonDecode(response.body));
+  }
+
   Future<Map<String, dynamic>> getEmergency() async {
     final response =
         await http.get(Uri.parse('$baseUrl/api/emergency')).timeout(_timeout);
