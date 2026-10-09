@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'api_client.dart';
 import 'auth_gate.dart';
+import 'labs_page.dart';
 
 void main() => runApp(const AyanshaHealthCareApp());
 
@@ -55,7 +56,7 @@ class HomeTab extends StatelessWidget {
   @override Widget build(BuildContext c) => Scaffold(appBar: AppBar(title: const Text('AYANSHA', style: TextStyle(fontWeight: FontWeight.bold))), body: ListView(padding: const EdgeInsets.all(16), children: [
     Container(padding: const EdgeInsets.all(20), decoration: BoxDecoration(color: const Color(0xFF073C4A), borderRadius: BorderRadius.circular(22)), child: const Column(crossAxisAlignment: CrossAxisAlignment.start, children: [Text('Good morning 👋', style: TextStyle(color: Colors.white70)), SizedBox(height: 6), Text('Your health, our priority', style: TextStyle(color: Colors.white, fontSize: 24, fontWeight: FontWeight.bold)), SizedBox(height: 8), Text('Find doctors, book care and manage your health in one place.', style: TextStyle(color: Colors.white70))])),
     const SizedBox(height: 22), const Text('Quick Services', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)), const SizedBox(height: 12),
-    GridView.count(shrinkWrap: true, physics: const NeverScrollableScrollPhysics(), crossAxisCount: 2, crossAxisSpacing: 12, mainAxisSpacing: 12, childAspectRatio: 1.45, children: [service(c, 'Find a Doctor', Icons.medical_services_outlined, const DoctorsTab()), service(c, 'Book Appointment', Icons.calendar_month_outlined, const BookingPage()), service(c, 'Video Consultation', Icons.videocam_outlined, const ConsultationPage()), service(c, 'Lab Tests', Icons.science_outlined, const LabsPage()), service(c, 'Health Records', Icons.folder_shared_outlined, const RecordsTab()), service(c, 'Emergency Help', Icons.emergency_outlined, const EmergencyPage()), service(c, 'Nearby Hospitals', Icons.local_hospital_outlined, const NearbyHospitalsPage())]),
+    GridView.count(shrinkWrap: true, physics: const NeverScrollableScrollPhysics(), crossAxisCount: 2, crossAxisSpacing: 12, mainAxisSpacing: 12, childAspectRatio: 1.45, children: [service(c, 'Find a Doctor', Icons.medical_services_outlined, const DoctorsTab()), service(c, 'Book Appointment', Icons.calendar_month_outlined, const BookingPage()), service(c, 'Video Consultation', Icons.videocam_outlined, const ConsultationPage()), service(c, 'Lab Tests', Icons.science_outlined, LabsPage(client: api, phone: patientPhone)), service(c, 'Health Records', Icons.folder_shared_outlined, const RecordsTab()), service(c, 'Emergency Help', Icons.emergency_outlined, const EmergencyPage()), service(c, 'Nearby Hospitals', Icons.local_hospital_outlined, const NearbyHospitalsPage())]),
     const SizedBox(height: 18), Container(padding: const EdgeInsets.all(16), decoration: BoxDecoration(color: const Color(0xFFFFEEEE), borderRadius: BorderRadius.circular(18)), child: const Row(children: [Icon(Icons.emergency, color: Colors.red), SizedBox(width: 12), Expanded(child: Text('Emergency? Get immediate professional help.', style: TextStyle(fontWeight: FontWeight.w600)))]))
   ]));
 }
@@ -108,7 +109,7 @@ List<Widget> medicineItems(dynamic value) { if (value is! List) return [const Te
 void showRecord(BuildContext c, Map<String, dynamic> r) { showModalBottomSheet(context: c, builder: (_) => SafeArea(child: Padding(padding: const EdgeInsets.all(20), child: Text((r['title'] ?? 'Medical Record').toString() + '\n' + (r['description'] ?? '').toString())))); }
 
 class ConsultationPage extends StatelessWidget { const ConsultationPage({super.key}); @override Widget build(BuildContext c) => SimplePage(title: 'Video Consultation', children: [const Card(child: ListTile(leading: Icon(Icons.videocam), title: Text('Secure consultation'), subtitle: Text('Join when your doctor is available.'))), FilledButton.icon(onPressed: () {}, icon: const Icon(Icons.video_call), label: const Text('Join Consultation')), const ListTile(leading: Icon(Icons.receipt_long), title: Text('Digital Prescription'))]); }
-class LabsPage extends StatelessWidget { const LabsPage({super.key}); @override Widget build(BuildContext c) => SimplePage(title: 'Lab Tests', children: ['CBC / Complete Blood Count', 'Diabetes Profile', 'Lipid Profile', 'Home Sample Collection'].map((x) => Card(child: ListTile(title: Text(x), trailing: TextButton(onPressed: () {}, child: const Text('Book'))))).toList()); }
+
 class ProfileTab extends StatelessWidget { const ProfileTab({super.key}); @override Widget build(BuildContext c) => SimplePage(title: 'My Profile', children: [const CircleAvatar(radius: 38, child: Icon(Icons.person, size: 40)), const Center(child: Text(patientName, style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold))), const ListTile(title: Text('Phone'), subtitle: Text(patientPhone)), const Divider(), ...['Personal Information', 'Family Members', 'Notifications', 'Privacy & Security'].map((x) => ListTile(title: Text(x), trailing: const Icon(Icons.chevron_right)))]); }
 class EmergencyPage extends StatefulWidget { const EmergencyPage({super.key}); @override State<EmergencyPage> createState() => _EmergencyPageState(); }
 class _EmergencyPageState extends State<EmergencyPage> {
