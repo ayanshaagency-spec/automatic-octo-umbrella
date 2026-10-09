@@ -221,6 +221,28 @@ class ApiClient {
     return Map<String, dynamic>.from(jsonDecode(response.body));
   }
 
+  Future<Map<String, dynamic>> getAiStatus() async {
+    final response = await http.get(Uri.parse('$baseUrl/api/ai/status')).timeout(_timeout);
+    if (response.statusCode != 200) {
+      throw _error(response, 'Unable to load AI assistant status');
+    }
+    return Map<String, dynamic>.from(jsonDecode(response.body));
+  }
+
+  Future<Map<String, dynamic>> getSymptomGuidance(String symptoms) async {
+    final response = await http
+        .post(
+          Uri.parse('$baseUrl/api/ai/symptom-guidance'),
+          headers: {'Content-Type': 'application/json'},
+          body: jsonEncode({'symptoms': symptoms}),
+        )
+        .timeout(const Duration(seconds: 15));
+    if (response.statusCode != 200) {
+      throw _error(response, 'AI guidance is currently unavailable');
+    }
+    return Map<String, dynamic>.from(jsonDecode(response.body));
+  }
+
   Future<Map<String, dynamic>> getEmergency() async {
     final response =
         await http.get(Uri.parse('$baseUrl/api/emergency')).timeout(_timeout);
