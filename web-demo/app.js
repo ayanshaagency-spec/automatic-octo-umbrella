@@ -130,8 +130,9 @@ async function loadHospitals(){
 
 function saveApiBase(){
   const field=$('apiBaseInput');
-  const value=(field?.value||'').trim().replace(/\\/$/,'');
-  if(value && !/^https?:\\/\\//i.test(value)){showToast('Enter a full backend URL beginning with https://');return;}
+  let value=(field?.value||'').trim();
+  if(value.endsWith('/'))value=value.slice(0,-1);
+  if(value && !(value.startsWith('https://')||value.startsWith('http://'))){showToast('Enter a full backend URL beginning with https://');return;}
   API_BASE=value||'/api';
   if(value)localStorage.setItem('ayansha_api_base',value);else localStorage.removeItem('ayansha_api_base');
   checkApi();checkDatabase();loadDoctorsForForm();loadAppointments();loadDashboardSummary();loadVerificationStatus();
