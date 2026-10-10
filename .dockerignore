@@ -1,0 +1,10 @@
+.git
+.github
+node_modules
+backend/node_modules
+mobile-app
+web/node_modules
+*.log
+.env
+.env.*
+!.env.example

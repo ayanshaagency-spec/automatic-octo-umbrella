@@ -24,7 +24,7 @@ class _BookAppointmentScreenState extends State<BookAppointmentScreen> {
   ];
 
   @override
-  Widget build(Widget context) {
+  Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(title: const Text("Book Appointment")),
       body: Padding(

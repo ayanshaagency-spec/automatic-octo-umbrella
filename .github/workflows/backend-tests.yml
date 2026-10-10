@@ -1,0 +1,41 @@
+name: Backend Tests
+
+on:
+  workflow_dispatch:
+  push:
+    branches: ["**"]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: ayansha
+          POSTGRES_PASSWORD: ayansha
+          POSTGRES_DB: ayansha_healthcare
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd="pg_isready -U ayansha -d ayansha_healthcare"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=10
+    env:
+      DATABASE_URL: postgresql://ayansha:ayansha@localhost:5432/ayansha_healthcare
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: backend/package.json
+      - run: npm install
+      - run: psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f db/schema.sql
+      - run: npm run db:migrate
+      - run: npm test
