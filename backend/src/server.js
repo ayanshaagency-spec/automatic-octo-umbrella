@@ -61,6 +61,7 @@ const server=http.createServer(async(req,res)=>{
       if(!claims) return send(res,401,{error:'Authentication required'});
       req.auth = claims;
       const requestedPhone = url.searchParams.get('phone');
+      if(url.pathname === '/api/appointments' && req.method === 'GET' && !requestedPhone) return send(res,422,{error:'phone is required'});
       if(requestedPhone && requestedPhone !== claims.phone) return send(res,403,{error:'Access denied'});
       if(/\/status$/.test(url.pathname) && req.method === 'PATCH') return send(res,403,{error:'Staff authorization required'});
     }
