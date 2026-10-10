@@ -2,7 +2,7 @@ const http = require('http');
 const PORT = process.env.PORT || 3000;
 const doctorsFallback = [{id:1,name:'Dr. Ananya Sharma',specialty:'Cardiology'},{id:2,name:'Dr. Rahul Mehta',specialty:'General Medicine'},{id:3,name:'Dr. Priya Kapoor',specialty:'Dermatology'}];
 const appointments = [];
-const { issueOtp, verifyOtp, createDevToken } = require('./auth');
+const { issueOtp, verifyOtp, createDevToken, verifyAccessToken } = require('./auth');
 const { getDb } = require('./db');
 const { listDoctors, listAppointments, updateAppointmentStatus, createAppointment } = require('./repository');
 const { listPrescriptions, createPrescription, listHealthRecords, createHealthRecord } = require('./phase3_repository');
@@ -14,7 +14,8 @@ const { isAuthorizedPaymentStatusUpdate } = require('./payment_status_authorizat
 const { validateCoordinates, emergencyResponse } = require('./phase6_emergency');
 const { listNearbyHospitals } = require('./phase6_hospital_repository');
 const { isConfigured: isWhatsAppConfigured, sendTemplateMessage, sendAppointmentConfirmation } = require('./whatsapp_service');
-const send=(res,code,data)=>{res.writeHead(code,{'Content-Type':'application/json','Access-Control-Allow-Origin':'*','Access-Control-Allow-Methods':'GET,POST,PATCH,OPTIONS','Access-Control-Allow-Headers':'Content-Type,Authorization,X-Payment-Signature'});res.end(JSON.stringify(data));};
+const allowedOrigin = process.env.ALLOWED_ORIGIN || (process.env.NODE_ENV === 'production' ? '' : '*');
+const send=(res,code,data)=>{const headers={'Content-Type':'application/json','Access-Control-Allow-Methods':'GET,POST,PATCH,OPTIONS','Access-Control-Allow-Headers':'Content-Type,Authorization,X-Payment-Signature'};if(allowedOrigin)headers['Access-Control-Allow-Origin']=allowedOrigin;res.writeHead(code,headers);res.end(JSON.stringify(data));};
 const parseBody=(req,done)=>{let body='';req.on('data',c=>body+=c);req.on('end',()=>{try{done(null,JSON.parse(body||'{}'));}catch(e){done(e);}});};
 const parseRawBody=(req,done)=>{let body='';req.setEncoding('utf8');req.on('data',c=>body+=c);req.on('end',()=>done(null,body));req.on('error',done);};
 const getDashboardSummary=async()=>{
@@ -50,6 +51,21 @@ const getDashboardSummary=async()=>{
 const server=http.createServer(async(req,res)=>{
   if(req.method==='OPTIONS') return send(res,204,{});
   const url = new URL(req.url, `http://${req.headers.host || 'localhost'}`);
+  const isProduction = process.env.NODE_ENV === 'production';
+  const bearer = (req.headers.authorization || '').match(/^Bearer\s+(.+)$/i);
+  const claims = bearer ? verifyAccessToken(bearer[1]) : null;
+  const patientRoutes = ['/api/appointments','/api/prescriptions','/api/health-records','/api/lab-orders','/api/payments'];
+  if(isProduction && (patientRoutes.some(path => url.pathname === path || url.pathname.startsWith(path + '/')))) {
+    if(url.pathname === '/api/payments/webhook') { /* verified by payment webhook signature below */ }
+    else {
+      if(!claims) return send(res,401,{error:'Authentication required'});
+      req.auth = claims;
+      const requestedPhone = url.searchParams.get('phone');
+      if(requestedPhone && requestedPhone !== claims.phone) return send(res,403,{error:'Access denied'});
+      if(/\/status$/.test(url.pathname) && req.method === 'PATCH') return send(res,403,{error:'Staff authorization required'});
+    }
+  }
+  if(isProduction && (url.pathname === '/api/dashboard/summary' || url.pathname === '/api/whatsapp/template')) return send(res,503,{error:'Administrative authorization is not configured'});
   if(url.pathname==='/health') return send(res,200,{ok:true,service:'Ayansha Health Care'});
   if(url.pathname==='/api/doctors'&&req.method==='GET'){try{const rows=await listDoctors();return send(res,200,rows||doctorsFallback);}catch(e){return send(res,200,doctorsFallback);}}
   if(url.pathname==='/api/db/health'&&req.method==='GET'){try{const db=await getDb();if(!db)return send(res,503,{ok:false,error:'DATABASE_URL not configured'});await db.query('SELECT 1');return send(res,200,{ok:true,database:'connected'});}catch(e){return send(res,503,{ok:false,error:'Database unavailable'});}}
@@ -62,7 +78,7 @@ const server=http.createServer(async(req,res)=>{
       return send(res,503,{ok:false,error:'Unable to load dashboard data'});
     }
   }
-  if(url.pathname==='/api/auth/request-otp'&&req.method==='POST')return parseBody(req,(err,data)=>{if(err||!data.phone)return send(res,400,{error:'phone is required'});send(res,200,{message:'OTP generated for development',devOtp:issueOtp(data.phone)});});
+  if(url.pathname==='/api/auth/request-otp'&&req.method==='POST')return parseBody(req,(err,data)=>{if(err||!data.phone)return send(res,400,{error:'phone is required'});if(isProduction)return send(res,503,{error:'Production SMS OTP provider is not configured'});const devOtp=issueOtp(data.phone);if(!devOtp)return send(res,503,{error:'Development OTP is unavailable'});send(res,200,{message:'Development-only OTP generated',devOtp});});
   if(url.pathname==='/api/auth/verify-otp'&&req.method==='POST')return parseBody(req,(err,data)=>{if(err||!data.phone||!data.otp)return send(res,400,{error:'phone and otp are required'});if(!verifyOtp(data.phone,String(data.otp)))return send(res,401,{error:'Invalid or expired OTP'});send(res,200,{token:createDevToken(data.phone),user:{phone:data.phone}});});
   if(url.pathname==='/api/emergency'&&req.method==='GET')return send(res,200,emergencyResponse());
   if(url.pathname==='/api/hospitals/nearby'&&req.method==='GET'){
@@ -89,6 +105,7 @@ const server=http.createServer(async(req,res)=>{
   });
   if(url.pathname==='/api/appointments'&&req.method==='POST')return parseBody(req,async(err,data)=>{
     if(err)return send(res,400,{error:'Invalid JSON'});
+    if(isProduction && data.phone !== req.auth?.phone)return send(res,403,{error:'Access denied'});
     if(!data.patientName||!data.phone||!data.doctorId||!data.appointmentAt)return send(res,422,{error:'patientName, phone, doctorId and appointmentAt are required'});
     try {
       const saved=await createAppointment(data);
@@ -112,6 +129,7 @@ const server=http.createServer(async(req,res)=>{
   }
   if(url.pathname==='/api/prescriptions'&&req.method==='POST')return parseBody(req,async(err,data)=>{
     if(err)return send(res,400,{error:'Invalid JSON'});
+    if(isProduction && data.phone !== req.auth?.phone)return send(res,403,{error:'Access denied'});
     try { const saved=await createPrescription(data); if(saved)return send(res,201,saved); return send(res,503,{error:'DATABASE_URL not configured'}); }
     catch(e) { if(e.statusCode)return send(res,e.statusCode,{error:e.message}); return send(res,503,{error:'Unable to save prescription'}); }
   });
@@ -121,6 +139,7 @@ const server=http.createServer(async(req,res)=>{
   }
   if(url.pathname==='/api/health-records'&&req.method==='POST')return parseBody(req,async(err,data)=>{
     if(err)return send(res,400,{error:'Invalid JSON'});
+    if(isProduction && data.phone !== req.auth?.phone)return send(res,403,{error:'Access denied'});
     try { const saved=await createHealthRecord(data); if(saved)return send(res,201,saved); return send(res,503,{error:'DATABASE_URL not configured'}); }
     catch(e) { if(e.statusCode)return send(res,e.statusCode,{error:e.message}); return send(res,503,{error:'Unable to save health record'}); }
   });
@@ -130,6 +149,7 @@ const server=http.createServer(async(req,res)=>{
   }
   if(url.pathname==='/api/lab-orders'&&req.method==='POST')return parseBody(req,async(err,data)=>{
     if(err)return send(res,400,{error:'Invalid JSON'});
+    if(isProduction && data.phone !== req.auth?.phone)return send(res,403,{error:'Access denied'});
     try { const saved=await createLabOrder(data); if(saved)return send(res,201,saved); return send(res,503,{error:'DATABASE_URL not configured'}); }
     catch(e) { if(e.statusCode)return send(res,e.statusCode,{error:e.message}); return send(res,503,{error:'Unable to save lab order'}); }
   });
@@ -145,6 +165,7 @@ const server=http.createServer(async(req,res)=>{
   }
   if(url.pathname==='/api/payments'&&req.method==='POST')return parseBody(req,async(err,data)=>{
     if(err)return send(res,400,{error:'Invalid JSON'});
+    if(isProduction && data.phone !== req.auth?.phone)return send(res,403,{error:'Access denied'});
     try { const saved=await createPayment(data); if(saved)return send(res,201,saved); return send(res,503,{error:'DATABASE_URL not configured'}); }
     catch(e) { if(e.statusCode)return send(res,e.statusCode,{error:e.message}); return send(res,503,{error:'Unable to create payment'}); }
   });
@@ -152,6 +173,7 @@ const server=http.createServer(async(req,res)=>{
   if(paymentOrderMatch&&req.method==='POST')return parseBody(req,async(err,data)=>{
     if(err)return send(res,400,{error:'Invalid JSON'});
     if(!data.phone)return send(res,422,{error:'phone is required'});
+    if(isProduction && data.phone !== req.auth?.phone)return send(res,403,{error:'Access denied'});
     try {
       const payment=await getPaymentById(Number(paymentOrderMatch[1]));
       if(!payment)return send(res,404,{error:'Payment not found'});
