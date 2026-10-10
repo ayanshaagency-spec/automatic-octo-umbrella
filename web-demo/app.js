@@ -1,4 +1,4 @@
-const API_BASE=(localStorage.getItem('ayansha_api_base')||'/api').replace(/\/$/,'');
+let API_BASE=(localStorage.getItem('ayansha_api_base')||'/api').replace(/\/$/,'');
 const $=id=>document.getElementById(id);
 
 function showToast(message){
@@ -93,16 +93,16 @@ async function loadVerificationStatus(){
   status.textContent='Checking…'; detail.textContent='Checking current verification evidence…';
   try{
     const d=await api('/health');
-    status.textContent='CI VERIFIED • RUNTIME E2E PENDING';
+    status.textContent='API ONLINE • CI E2E VERIFIED';
     status.className='tag ok';
-    ci.textContent='CI PASSED • Live runtime/database E2E pending';
-    detail.innerHTML='<strong>Current state:</strong> client-demo code, smoke coverage, and latest GitHub CI checks are verified successfully. Final client sign-off remains pending only for live runtime/database E2E proof.';
+    ci.textContent='Backend PostgreSQL E2E passed in GitHub CI';
+    detail.innerHTML='<strong>Verified:</strong> backend patient-journey E2E passed against PostgreSQL in GitHub CI. <strong>Not yet verified here:</strong> this browser demo is connected to the production backend/database and external providers. Those require the actual backend URL and configuration.';
     if(d?.ok) showToast('Verification center updated');
   }catch(e){
     status.textContent='CI VERIFIED • API UNAVAILABLE';
     status.className='tag';
-    ci.textContent='CI passed • API unavailable in dashboard environment';
-    detail.textContent='GitHub CI evidence is verified, but the dashboard environment could not confirm live API health.';
+    ci.textContent='Backend PostgreSQL E2E passed in GitHub CI';
+    detail.textContent='Backend patient-journey E2E has passed in GitHub CI. This browser demo cannot reach its configured API right now; the production backend URL and live database status remain unverified.';
   }
 }
 
@@ -128,6 +128,15 @@ async function loadHospitals(){
   }catch(e){box.textContent='Demo mode: hospital search API is not connected to a database in this environment. '+e.message;}
 }
 
+function saveApiBase(){
+  const field=$('apiBaseInput');
+  const value=(field?.value||'').trim().replace(/\\/$/,'');
+  if(value && !/^https?:\\/\\//i.test(value)){showToast('Enter a full backend URL beginning with https://');return;}
+  API_BASE=value||'/api';
+  if(value)localStorage.setItem('ayansha_api_base',value);else localStorage.removeItem('ayansha_api_base');
+  checkApi();checkDatabase();loadDoctorsForForm();loadAppointments();loadDashboardSummary();loadVerificationStatus();
+  showToast('Backend URL saved for this browser');
+}
 function escapeHtml(value){return String(value??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[c]));}
 function setRole(role){
   document.querySelectorAll('.role-tab').forEach(tab=>tab.classList.toggle('active',tab.dataset.role===role));
@@ -143,4 +152,6 @@ async function checkPrescriptions(){const el=$('prescriptionStatus');el.textCont
 async function checkRecords(){const el=$('recordStatus');el.textContent='Checking…';try{await api('/health-records?phone=demo');el.textContent='Health records API online';}catch(e){el.textContent=e.message.includes('phone')?'Records API online':'Records API needs database';}}
 
 document.getElementById('appointmentForm')?.addEventListener('submit',submitAppointment);
+document.getElementById('saveApiBase')?.addEventListener('click',saveApiBase);
+if($('apiBaseInput'))$('apiBaseInput').value=localStorage.getItem('ayansha_api_base')||'';
 checkApi(); checkDatabase(); loadDoctorsForForm(); loadAppointments(); loadDashboardSummary(); loadVerificationStatus();
