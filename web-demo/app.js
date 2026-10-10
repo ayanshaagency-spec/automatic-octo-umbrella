@@ -10,7 +10,10 @@ function showToast(message){
 }
 
 async function api(path,options={}){
-  const res=await fetch(API_BASE+path,{headers:{'Content-Type':'application/json',...(options.headers||{})},...options});
+  // The backend exposes /health at the root, while product APIs live under /api.
+  const rootBase=API_BASE.replace(/\/api\/?$/,'');
+  const requestUrl=path==='/health'?(rootBase+'/health'||'/health'):(API_BASE+path);
+  const res=await fetch(requestUrl,{headers:{'Content-Type':'application/json',...(options.headers||{})},...options});
   const text=await res.text();
   let data={};
   try{data=JSON.parse(text)}catch{data={raw:text}}
