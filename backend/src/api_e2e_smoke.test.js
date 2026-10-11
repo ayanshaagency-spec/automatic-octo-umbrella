@@ -15,6 +15,8 @@ function startServer() {
     PORT: String(PORT),
     DATABASE_URL: '',
     JWT_SECRET,
+    ADMIN_EMAIL: 'admin@example.test',
+    ADMIN_PASSWORD: 'test-only-admin-password',
     NODE_ENV: 'development',
     PAYMENT_WEBHOOK_SECRET: WEBHOOK_SECRET,
     PAYMENT_STATUS_ADMIN_TOKEN: ADMIN_TOKEN,
@@ -58,6 +60,53 @@ test('Phase 5 API smoke/E2E contract', async t => {
   const health = await fetch(`${BASE_URL}/health`);
   assert.equal(health.status, 200);
   assert.deepEqual(await health.json(), { ok: true, service: 'Ayansha Health Care' });
+
+  const home = await fetch(`${BASE_URL}/`);
+  assert.equal(home.status, 200);
+  assert.match(home.headers.get('content-type'), /text\/html/);
+  const webScript = await fetch(`${BASE_URL}/web/app.js`);
+  assert.equal(webScript.status, 200);
+  assert.match(webScript.headers.get('content-type'), /javascript/);
+  const adminPage = await fetch(`${BASE_URL}/admin`);
+  assert.equal(adminPage.status, 200);
+  assert.match(adminPage.headers.get('content-type'), /text\/html/);
+  assert.equal(adminPage.headers.get('cache-control'), 'no-store');
+  assert.match(await adminPage.text(), /Ayansha Health Care Admin/);
+  const traversal = await fetch(`${BASE_URL}/admin/..%2Fbackend%2Fpackage.json`);
+  assert.equal(traversal.status, 404);
+
+  const adminNoEmail = await fetch(`${BASE_URL}/api/admin/login`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ password: 'test-only-admin-password' })
+  });
+  assert.equal(adminNoEmail.status, 401);
+  assert.equal((await adminNoEmail.json()).error, 'Invalid admin credentials');
+  const adminWrongEmail = await fetch(`${BASE_URL}/api/admin/login`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email: 'wrong@example.test', password: 'test-only-admin-password' })
+  });
+  assert.equal(adminWrongEmail.status, 401);
+  const adminWrongPassword = await fetch(`${BASE_URL}/api/admin/login`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email: 'admin@example.test', password: 'wrong' })
+  });
+  assert.equal(adminWrongPassword.status, 401);
+  const adminLogin = await fetch(`${BASE_URL}/api/admin/login`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email: 'ADMIN@example.test', password: 'test-only-admin-password' })
+  });
+  assert.equal(adminLogin.status, 200);
+  const adminSession = await adminLogin.json();
+  assert.equal(adminSession.user.role, 'admin');
+  assert.ok(adminSession.token);
+  const noAdminAuth = await fetch(`${BASE_URL}/api/admin/appointments`);
+  assert.equal(noAdminAuth.status, 401);
+  assert.equal((await noAdminAuth.json()).error, 'Admin authentication required');
+  const adminAuthButNoDb = await fetch(`${BASE_URL}/api/admin/appointments`, {
+    headers: { Authorization: `Bearer ${adminSession.token}` }
+  });
+  assert.equal(adminAuthButNoDb.status, 503);
+  assert.equal((await adminAuthButNoDb.json()).error, 'DATABASE_URL not configured');
 
   const options = await fetch(`${BASE_URL}/api/payments`, { method: 'OPTIONS' });
   assert.equal(options.status, 204);
