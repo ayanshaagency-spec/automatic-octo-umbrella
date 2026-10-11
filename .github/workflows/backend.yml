@@ -1,0 +1,29 @@
+name: Backend Tests
+
+on:
+  push:
+    branches:
+      - feat/phase5-payment-mvp
+      - feat/phase6-emergency-hospitals
+  pull_request:
+    branches:
+      - feat/phase5-payment-mvp
+      - feat/phase6-emergency-hospitals
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Install dependencies
+        run: npm install
+      - name: Run backend tests
+        run: npm test

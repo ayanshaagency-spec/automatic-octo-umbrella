@@ -1,0 +1,2 @@
+ALTER TABLE doctors ADD COLUMN IF NOT EXISTS phone VARCHAR(30);
+CREATE UNIQUE INDEX IF NOT EXISTS doctors_phone_unique ON doctors(phone) WHERE phone IS NOT NULL;
