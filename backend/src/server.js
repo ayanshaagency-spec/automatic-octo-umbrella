@@ -30,6 +30,15 @@ const requireAuth=(req,res)=>{const payload=verifyToken(getAuthToken(req));if(!p
 const server=http.createServer(async(req,res)=>{
   if(req.method==='OPTIONS') return send(res,204,{},req);
   const url = new URL(req.url, `http://${req.headers.host || 'localhost'}`);
+  // Serve only the existing, fixed admin entry point. No user-controlled file path is accepted.
+  if(req.method==='GET' && url.pathname==='/admin'){
+    const adminFile=path.resolve(__dirname,'../../admin-panel/index.html');
+    if(fs.existsSync(adminFile) && fs.statSync(adminFile).isFile()){
+      res.writeHead(200,{'Content-Type':'text/html; charset=utf-8','X-Content-Type-Options':'nosniff','Cache-Control':'no-store'});
+      return fs.createReadStream(adminFile).pipe(res);
+    }
+    return send(res,503,{error:'Admin panel unavailable'},req);
+  }
   if(req.method==='GET' && (url.pathname==='/' || url.pathname.startsWith('/web/'))){
     const relative=url.pathname==='/'?'index.html':url.pathname.replace(/^\/web\//,'');
     const file=path.join(__dirname,'../../web',relative);
