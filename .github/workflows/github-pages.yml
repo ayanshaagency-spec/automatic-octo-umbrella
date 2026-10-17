@@ -19,7 +19,28 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Validate client demo files
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -d ./web-demo
+          test -s ./web-demo/index.html
+          test -s ./web-demo/styles.css
+          test -s ./web-demo/app.js
+          if find ./web-demo -type f \( -name '.env' -o -name '.env.*' -o -name '*credentials*' -o -name '*secret*' \) | grep -q .; then
+            echo "::error::Potential secret or environment file found in web-demo; refusing to publish."
+            exit 1
+          fi
+          echo "Client demo file validation passed."
+
   deploy:
+    needs: validate
     runs-on: ubuntu-latest
     environment:
       name: github-pages
