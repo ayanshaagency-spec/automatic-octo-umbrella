@@ -7,6 +7,7 @@ const required=[
   ['Emergency API','/emergency'],['Hospitals API','/hospitals/nearby'],
   ['Care flow','CONNECTED CARE'],['API status','apiStatus'],['WhatsApp integration','/whatsapp/status'],
   ['Payment integration','/payments'],['Prescription integration','/prescriptions'],['Health records integration','/health-records'],
+  ['Doctor directory empty state','doctorDirectoryStatus'],['Appointment submit control','appointmentSubmitButton'],
   ['Live dashboard API','/dashboard/summary'],['Live dashboard status','dashboardSummaryStatus'],
   ['Recent appointments','recentAppointments'],['Dashboard refresh','loadDashboardSummary'],['Verification center','verificationStatus'],['Verification detail','verificationDetail'],['Verification loader','loadVerificationStatus']
 ];
@@ -17,4 +18,6 @@ if(!css.includes('.role-panel.active')) throw new Error('Role panel styling miss
 if(!js.includes('setRole')) throw new Error('Role switching behavior missing');
 if(!js.includes('LIVE DATABASE CONNECTED')) throw new Error('Live dashboard success state missing');
 if(!js.includes('LIVE DATABASE UNAVAILABLE')) throw new Error('Live dashboard failure state missing');
-console.log('Client demo smoke test passed: structure, role flows, live dashboard and API hooks present.');
+if(!js.includes('No doctors are currently configured in the live directory')) throw new Error('Doctor directory empty state missing');
+if(!js.includes('select.disabled=true')) throw new Error('Appointment booking is not blocked when doctor data is unavailable');
+console.log('Client demo smoke test passed: structure, role flows, live dashboard, API hooks and doctor-directory empty state present.');
