@@ -68,6 +68,7 @@ jobs:
         env:
           PORT: 3919
           DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/ayansha_healthcare
+          JWT_SECRET: ci-only-pharmacy-jwt-secret-long-enough-123456
         run: |
           node <<'NODE'
           const fs = require('node:fs');
