@@ -71,7 +71,8 @@ test('status transitions cannot skip review or mix home/hospital delivery states
   assert.doesNotThrow(() => validateStatusTransition('requested', 'accepted', 'home'));
   assert.throws(() => validateStatusTransition('requested', 'delivered', 'home'), error => error.statusCode === 409);
   assert.throws(() => validateStatusTransition('packed', 'ready_at_hospital', 'home'), error => error.statusCode === 422);
-  assert.throws(() => validateStatusTransition('packed', 'out_for_delivery', 'hospital'), error => error.statusCode === 422);
+  assert.throws(() => validateStatusTransition('packed', 'out_for_delivery', 'hospital', 'counter_pickup'), error => error.statusCode === 422);
+  assert.doesNotThrow(() => validateStatusTransition('packed', 'out_for_delivery', 'hospital', 'ward_room_delivery'));
   assert.doesNotThrow(() => validateStatusTransition('packed', 'ready_at_hospital', 'hospital', 'ward_room_delivery'));
   assert.doesNotThrow(() => validateStatusTransition('packed', 'ready_for_pickup', 'hospital', 'counter_pickup'));
   assert.throws(() => validateStatusTransition('packed', 'ready_at_hospital', 'hospital', 'counter_pickup'), error => error.statusCode === 422);
