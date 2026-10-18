@@ -42,8 +42,10 @@ jobs:
   deploy:
     needs: validate
     runs-on: ubuntu-latest
+    # The repository's protected github-pages environment rejects this demo branch.
+    # Use a dedicated preview environment; only this workflow publishes static ./web-demo files.
     environment:
-      name: github-pages
+      name: client-demo-preview
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
       - name: Checkout
