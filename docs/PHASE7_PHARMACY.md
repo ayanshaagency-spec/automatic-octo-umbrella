@@ -14,6 +14,7 @@ This phase adds a pharmacy directory and order workflow to the existing Ayansha 
 ## API endpoints
 
 - `GET /api/pharmacy/stores?storeType=hospital|partner&deliveryMethod=hospital|home&city=...`
+- `GET /api/pharmacy/hospitals?city=...`
 - `GET /api/pharmacy/products?storeId=...`
 - `POST /api/pharmacy/orders`
 - `GET /api/pharmacy/orders?phone=...`
