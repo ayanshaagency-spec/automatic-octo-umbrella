@@ -218,11 +218,11 @@ jobs:
               const hospitalOrder = await makeOrder(hospitalPharmacyId,'hospital',Number(hospitalInventory.rows[0].id),1,'ci-hospital-delivery',hospitalPayload);
               assert(hospitalOrder.status===201 && hospitalOrder.data.destination_type==='hospital' && hospitalOrder.data.hospital_fulfillment_method==='ward_room_delivery', 'Hospital ward/room delivery order was not created');
               const authHospital = { authorization:'Bearer '+crossStore.data.token };
-              for (const status of ['accepted','packed','ready_at_hospital','delivered']) {
+              for (const status of ['accepted','packed','out_for_delivery','delivered']) {
                 const result=await api('/api/pharmacy/staff/orders/'+hospitalOrder.data.id+'/status',{
                   method:'PATCH',headers:authHospital,body:JSON.stringify({status})
                 });
-                assert(result.status===200 && result.data.order_status===status,'Hospital delivery status transition failed: '+status+' / '+JSON.stringify(result.data));
+                assert(result.status===200 && result.data.order_status===status,'Hospital ward/room dispatch status transition failed: '+status+' / '+JSON.stringify(result.data));
               }
               const counterPickup = await makeOrder(hospitalPharmacyId,'hospital',Number(hospitalInventory.rows[0].id),1,'ci-hospital-counter-pickup',{...hospitalPayload,hospitalFulfillmentMethod:'counter_pickup',deliveryInstructions:'CI counter pickup'});
               assert(counterPickup.status===201 && counterPickup.data.hospital_fulfillment_method==='counter_pickup', 'Hospital counter-pickup order was not created');
