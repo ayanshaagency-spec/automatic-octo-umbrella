@@ -16,3 +16,5 @@ jobs:
         uses: actions/checkout@v4
       - name: Verify client demo
         run: node web-demo/smoke_test.js
+      - name: Validate demo JavaScript syntax
+        run: node --check web-demo/app.js && node --check web-demo/smoke_test.js
