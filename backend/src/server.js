@@ -3,6 +3,7 @@ const PORT = process.env.PORT || 3000;
 const doctorsFallback = [{id:1,name:'Dr. Ananya Sharma',specialty:'Cardiology'},{id:2,name:'Dr. Rahul Mehta',specialty:'General Medicine'},{id:3,name:'Dr. Priya Kapoor',specialty:'Dermatology'}];
 const appointments = [];
 const { issueOtp, verifyOtp, createDevToken, verifyAccessToken } = require('./auth');
+const { authenticateAdmin, issueAdminToken, verifyAdminToken } = require('./admin_auth');
 const { getDb } = require('./db');
 const { listDoctors, listAppointments, updateAppointmentStatus, createAppointment } = require('./repository');
 const { listPrescriptions, createPrescription, listHealthRecords, createHealthRecord } = require('./phase3_repository');
@@ -67,7 +68,11 @@ const server=http.createServer(async(req,res)=>{
       if(/\/status$/.test(url.pathname) && req.method === 'PATCH') return send(res,403,{error:'Staff authorization required'});
     }
   }
-  if(isProduction && (url.pathname === '/api/dashboard/summary' || url.pathname === '/api/whatsapp/template')) return send(res,503,{error:'Administrative authorization is not configured'});
+  if(isProduction && (url.pathname === '/api/dashboard/summary' || url.pathname === '/api/whatsapp/template')) {
+    const adminClaims = bearer ? verifyAdminToken(bearer[1]) : null;
+    if(!adminClaims) return send(res,401,{error:'Admin authentication required'});
+    req.admin = adminClaims;
+  }
   if(url.pathname==='/health') return send(res,200,{ok:true,service:'Ayansha Health Care'});
   if(url.pathname==='/api/doctors'&&req.method==='GET'){try{const rows=await listDoctors();return send(res,200,rows||doctorsFallback);}catch(e){return send(res,200,doctorsFallback);}}
   if(url.pathname==='/api/db/health'&&req.method==='GET'){try{const db=await getDb();if(!db)return send(res,503,{ok:false,error:'DATABASE_URL not configured'});await db.query('SELECT 1');return send(res,200,{ok:true,database:'connected'});}catch(e){return send(res,503,{ok:false,error:'Database unavailable'});}}
@@ -80,6 +85,19 @@ const server=http.createServer(async(req,res)=>{
       return send(res,503,{ok:false,error:'Unable to load dashboard data'});
     }
   }
+  if(url.pathname==='/api/admin/login'&&req.method==='POST')return parseBody(req,(err,data)=>{
+    if(err)return send(res,400,{error:'Invalid JSON'});
+    if(typeof data.email!=='string'||!data.email.trim()||typeof data.password!=='string'||!data.password)return send(res,422,{error:'email and password are required'});
+    const auth=authenticateAdmin(data.email,data.password,process.env);
+    if(!auth.configured)return send(res,503,{error:'Admin credentials are not securely configured'});
+    if(!auth.authenticated)return send(res,401,{error:'Invalid admin credentials'});
+    try {
+      const token=issueAdminToken(data.email,process.env);
+      return send(res,200,{token,user:{email:process.env.ADMIN_EMAIL.trim().toLowerCase(),role:'admin'},expiresIn:3600});
+    } catch(e) {
+      return send(res,503,{error:'Admin authentication is not available'});
+    }
+  });
   if(url.pathname==='/api/auth/request-otp'&&req.method==='POST')return parseBody(req,(err,data)=>{if(err||!data.phone)return send(res,400,{error:'phone is required'});if(isProduction)return send(res,503,{error:'Production SMS OTP provider is not configured'});const devOtp=issueOtp(data.phone);if(!devOtp)return send(res,503,{error:'Development OTP is unavailable'});send(res,200,{message:'Development-only OTP generated',devOtp});});
   if(url.pathname==='/api/auth/verify-otp'&&req.method==='POST')return parseBody(req,(err,data)=>{if(err||!data.phone||!data.otp)return send(res,400,{error:'phone and otp are required'});if(!verifyOtp(data.phone,String(data.otp)))return send(res,401,{error:'Invalid or expired OTP'});send(res,200,{token:createDevToken(data.phone),user:{phone:data.phone}});});
   if(url.pathname==='/api/emergency'&&req.method==='GET')return send(res,200,emergencyResponse());
