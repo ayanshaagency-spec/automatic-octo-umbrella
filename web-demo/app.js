@@ -487,13 +487,13 @@ async function refreshPharmacyStaffOrders() {
     $('pharmacyStaffOrders').innerHTML=orders.map(order=>{
       const buttons=[];
       if(order.order_status==='requested') {
-        buttons.push('<button type="button" class="secondary" onclick="changePharmacyOrderStatus('+Number(order.id)+',\\'accepted\\')">Accept</button>');
-        buttons.push('<button type="button" class="secondary" onclick="changePharmacyOrderStatus('+Number(order.id)+',\\'rejected\\')">Reject</button>');
+        buttons.push('<button type="button" class="secondary" onclick="changePharmacyOrderStatus('+Number(order.id)+',\'accepted\')">Accept</button>');
+        buttons.push('<button type="button" class="secondary" onclick="changePharmacyOrderStatus('+Number(order.id)+',\'rejected\')">Reject</button>');
       }
-      if(order.order_status==='accepted')buttons.push('<button type="button" class="secondary" onclick="changePharmacyOrderStatus('+Number(order.id)+',\\'packed\\')">Mark packed</button>');
-      if(order.order_status==='packed'&&order.destination_type==='home')buttons.push('<button type="button" class="secondary" onclick="changePharmacyOrderStatus('+Number(order.id)+',\\'out_for_delivery\\')">Send for delivery</button>');
-      if(order.order_status==='packed'&&order.destination_type==='hospital')buttons.push('<button type="button" class="secondary" onclick="changePharmacyOrderStatus('+Number(order.id)+',\\'ready_at_hospital\\')">Ready at hospital</button>');
-      if(['out_for_delivery','ready_at_hospital'].includes(order.order_status))buttons.push('<button type="button" class="primary" onclick="changePharmacyOrderStatus('+Number(order.id)+',\\'delivered\\')">Mark delivered</button>');
+      if(order.order_status==='accepted')buttons.push('<button type="button" class="secondary" onclick="changePharmacyOrderStatus('+Number(order.id)+',\'packed\')">Mark packed</button>');
+      if(order.order_status==='packed'&&order.destination_type==='home')buttons.push('<button type="button" class="secondary" onclick="changePharmacyOrderStatus('+Number(order.id)+',\'out_for_delivery\')">Send for delivery</button>');
+      if(order.order_status==='packed'&&order.destination_type==='hospital')buttons.push('<button type="button" class="secondary" onclick="changePharmacyOrderStatus('+Number(order.id)+',\'ready_at_hospital\')">Ready at hospital</button>');
+      if(['out_for_delivery','ready_at_hospital'].includes(order.order_status))buttons.push('<button type="button" class="primary" onclick="changePharmacyOrderStatus('+Number(order.id)+',\'delivered\')">Mark delivered</button>');
       return '<article class="mini pharmacy-card"><strong>'+escapeHtml(order.order_number)+'</strong>'+
         '<span>Patient: '+escapeHtml(order.patient_name)+' • '+escapeHtml(order.patient_phone)+'</span>'+
         '<small>Destination: '+escapeHtml(order.destination_type==='hospital'?'Hospital — '+(order.hospital_name||''):'Home — '+(order.city||''))+'</small>'+
