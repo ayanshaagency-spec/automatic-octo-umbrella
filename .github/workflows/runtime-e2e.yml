@@ -214,9 +214,9 @@ jobs:
               });
               assert(crossStoreAttempt.status === 404, 'Another pharmacy staff session accessed a foreign store order');
 
-              const hospitalPayload = { hospitalId, recipientName:'CI Patient', recipientPhone:'9999990001', deliveryInstructions:'CI ward desk' };
+              const hospitalPayload = { hospitalId, hospitalFulfillmentMethod:'ward_room_delivery', recipientName:'CI Patient', recipientPhone:'9999990001', deliveryInstructions:'CI ward desk' };
               const hospitalOrder = await makeOrder(hospitalPharmacyId,'hospital',Number(hospitalInventory.rows[0].id),1,'ci-hospital-delivery',hospitalPayload);
-              assert(hospitalOrder.status===201 && hospitalOrder.data.destination_type==='hospital', 'Hospital delivery order was not created');
+              assert(hospitalOrder.status===201 && hospitalOrder.data.destination_type==='hospital' && hospitalOrder.data.hospital_fulfillment_method==='ward_room_delivery', 'Hospital ward/room delivery order was not created');
               const authHospital = { authorization:'Bearer '+crossStore.data.token };
               for (const status of ['accepted','packed','ready_at_hospital','delivered']) {
                 const result=await api('/api/pharmacy/staff/orders/'+hospitalOrder.data.id+'/status',{
@@ -224,6 +224,15 @@ jobs:
                 });
                 assert(result.status===200 && result.data.order_status===status,'Hospital delivery status transition failed: '+status+' / '+JSON.stringify(result.data));
               }
+              const counterPickup = await makeOrder(hospitalPharmacyId,'hospital',Number(hospitalInventory.rows[0].id),1,'ci-hospital-counter-pickup',{...hospitalPayload,hospitalFulfillmentMethod:'counter_pickup',deliveryInstructions:'CI counter pickup'});
+              assert(counterPickup.status===201 && counterPickup.data.hospital_fulfillment_method==='counter_pickup', 'Hospital counter-pickup order was not created');
+              for (const status of ['accepted','packed','ready_for_pickup','delivered']) {
+                const result=await api('/api/pharmacy/staff/orders/'+counterPickup.data.id+'/status',{
+                  method:'PATCH',headers:authHospital,body:JSON.stringify({status})
+                });
+                assert(result.status===200 && result.data.order_status===status,'Counter-pickup status transition failed: '+status+' / '+JSON.stringify(result.data));
+              }
+
               const verifyDb = new Client({connectionString:databaseUrl}); await verifyDb.connect();
               try {
                 const partnerStock=await verifyDb.query('SELECT quantity_available,quantity_reserved FROM pharmacy_inventory WHERE id=$1',[partnerInventory.rows[0].id]);
