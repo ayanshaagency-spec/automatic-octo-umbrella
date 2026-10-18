@@ -110,6 +110,7 @@ async function submitAdminLogin(event){
     await loadDashboardSummary();
     await loadAdminPharmacyHospitals();
     await loadAdminPharmacyStores();
+    await loadAdminPharmacyOrders();
   }catch(e){
     result.textContent='Admin sign-in failed: '+e.message;
   }
@@ -119,6 +120,9 @@ function logoutAdmin(){
   if($('adminPassword'))$('adminPassword').value='';
   updateAdminSessionUi();
   loadDashboardSummary();
+  if($('pharmacyAdminOrderList'))$('pharmacyAdminOrderList').textContent='Sign in as admin to view pharmacy orders.';
+  if($('pharmacyAdminStoreList'))$('pharmacyAdminStoreList').textContent='Sign in as admin to view registered stores.';
+  if($('pharmacyAdminProductList'))$('pharmacyAdminProductList').textContent='Sign in as admin to view store inventory.';
   showToast('Admin signed out');
 }
 async function loadDashboardSummary(){
