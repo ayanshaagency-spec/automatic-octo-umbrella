@@ -342,20 +342,27 @@ async function updatePharmacyStoreApproval(id, data) {
   if (data.active !== undefined && typeof data.active !== 'boolean') throw validationError('active must be true or false');
   const db = await getDb();
   if (!db) return null;
-  const current = await db.query('SELECT is_active, approved_at FROM pharmacy_stores WHERE id = $1 FOR UPDATE', [Number(id)]);
-  if (!current.rowCount) throw validationError('Pharmacy store not found', 404);
-  const approved = data.approved === undefined ? Boolean(current.rows[0].approved_at) : data.approved;
-  const active = data.active === undefined ? Boolean(current.rows[0].is_active) : data.active;
-  if (active && !approved) throw validationError('A store must be approved before activation');
-  const { rows } = await db.query(`
-    UPDATE pharmacy_stores
-       SET is_active = $1,
-           approved_at = CASE WHEN $2 THEN COALESCE(approved_at, NOW()) ELSE NULL END,
-           updated_at = NOW()
-     WHERE id = $3
-     RETURNING id, name, store_type AS "storeType", is_active AS "isActive", approved_at AS "approvedAt"`,
-    [active, approved, Number(id)]);
-  return rows[0];
+  await db.query('BEGIN');
+  try {
+    const current = await db.query('SELECT is_active, approved_at FROM pharmacy_stores WHERE id = $1 FOR UPDATE', [Number(id)]);
+    if (!current.rowCount) throw validationError('Pharmacy store not found', 404);
+    const approved = data.approved === undefined ? Boolean(current.rows[0].approved_at) : data.approved;
+    const active = data.active === undefined ? Boolean(current.rows[0].is_active) : data.active;
+    if (active && !approved) throw validationError('A store must be approved before activation');
+    const { rows } = await db.query(`
+      UPDATE pharmacy_stores
+         SET is_active = $1,
+             approved_at = CASE WHEN $2 THEN COALESCE(approved_at, NOW()) ELSE NULL END,
+             updated_at = NOW()
+       WHERE id = $3
+       RETURNING id, name, store_type AS "storeType", is_active AS "isActive", approved_at AS "approvedAt"`,
+      [active, approved, Number(id)]);
+    await db.query('COMMIT');
+    return rows[0];
+  } catch (error) {
+    await db.query('ROLLBACK');
+    throw error;
+  }
 }
 
 async function listPharmacyAdminProducts(storeId) {
