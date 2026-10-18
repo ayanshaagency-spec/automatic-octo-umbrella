@@ -54,6 +54,46 @@
         </div>
       </div>
 
+
+        <div class="panel pharmacy-panel">
+          <div class="panel-head"><div><p class="eyebrow">PHASE 7 • PHARMACY NETWORK</p><h3>Medicines from hospital & partner pharmacies</h3><p>Choose an approved pharmacy and route the order to a hospital or the patient's home. Prescription medicines require a matching doctor prescription.</p></div><span id="pharmacyStatus" class="tag">Checking directory…</span></div>
+          <div class="pharmacy-filters">
+            <select id="pharmacyStoreType" aria-label="Pharmacy type"><option value="">All approved stores</option><option value="hospital">Hospital Pharmacy</option><option value="partner">Partner Medical Store</option></select>
+            <select id="pharmacyDeliveryMethod" aria-label="Delivery method"><option value="hospital">Deliver to hospital</option><option value="home">Deliver to home</option></select>
+            <input id="pharmacyCity" placeholder="City (e.g. Muzaffarnagar)" aria-label="Pharmacy city" value="Muzaffarnagar">
+            <button id="pharmacyRefreshStores" class="primary" type="button">Find pharmacies</button>
+          </div>
+          <div id="pharmacyStoreStatus" class="result" role="status" aria-live="polite">Loading approved pharmacies…</div>
+          <div class="pharmacy-columns">
+            <div>
+              <label class="pharmacy-label" for="pharmacyStoreSelect">1. Pharmacy store</label>
+              <select id="pharmacyStoreSelect"><option value="">Load approved pharmacies first</option></select>
+              <div id="pharmacyStoreDetails" class="result">Only verified and activated store records are displayed.</div>
+              <h4>2. Available products</h4>
+              <div id="pharmacyProducts" class="result">Select a pharmacy to load its catalogue.</div>
+            </div>
+            <div>
+              <label class="pharmacy-label" for="pharmacyPatientPhone">3. Patient phone</label>
+              <input id="pharmacyPatientPhone" placeholder="Use the patient phone from appointment form" aria-label="Pharmacy patient phone">
+              <label class="pharmacy-label" for="pharmacyHospitalSelect">Delivery hospital</label>
+              <select id="pharmacyHospitalSelect"><option value="">Load active hospitals</option></select>
+              <div id="pharmacyHomeFields" hidden>
+                <label class="pharmacy-label" for="pharmacyAddress1">Home address</label>
+                <input id="pharmacyAddress1" placeholder="House / street / locality">
+                <input id="pharmacyAddress2" placeholder="Address line 2 (optional)">
+                <div class="pharmacy-filters address-grid"><input id="pharmacyDeliveryCity" placeholder="City"><input id="pharmacyDeliveryState" placeholder="State"><input id="pharmacyPincode" inputmode="numeric" maxlength="6" placeholder="6-digit PIN"></div>
+              </div>
+              <label class="pharmacy-label" for="pharmacyPrescriptionId">Doctor prescription ID (required for prescription medicines)</label>
+              <input id="pharmacyPrescriptionId" type="number" min="1" placeholder="Prescription ID from patient records">
+              <button id="pharmacyPlaceOrder" class="primary full pharmacy-place-order" type="button">Place pharmacy order • Cash on delivery</button>
+              <p class="section-copy">Online pharmacy payment is not enabled in this MVP. Production order submission requires patient sign-in and the approved database migration.</p>
+              <div id="pharmacyOrderResult" class="result" role="status" aria-live="polite">No pharmacy order submitted.</div>
+              <button id="pharmacyLoadOrders" class="secondary full" type="button">Load my pharmacy orders</button>
+              <div id="pharmacyOrderHistory" class="result">Order history appears here after patient authentication is available.</div>
+            </div>
+          </div>
+        </div>
+
       <div id="role-doctor" class="role-panel">
         <div class="dashboard-head"><div><span class="welcome">DOCTOR CONSOLE</span><h3>Today’s clinical workspace</h3><p>Appointments, consultation and prescriptions in one workflow.</p></div><span class="profile-badge doctor">D</span></div>
         <div class="grid three"><article class="stat-card"><span>Today’s appointments</span><strong id="todayAppointments">—</strong><small id="upcomingAppointments">Loading live data…</small></article><article class="stat-card"><span>Consultations</span><strong id="completedAppointments">—</strong><small>Completed appointments</small></article><article class="stat-card"><span>Prescriptions</span><strong id="prescriptionCount">—</strong><small>Live database count</small></article></div>
