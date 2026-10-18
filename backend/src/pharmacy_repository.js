@@ -281,22 +281,31 @@ async function updatePharmacyOrderStatus(id, nextStatus) {
 
 
 
-async function listPharmacyAdminOrders(filters = {}) {
+function buildPharmacyAdminOrderFilter(filters = {}) {
   const allowed = ['placed', 'accepted', 'preparing', 'ready', 'out_for_delivery', 'delivered', 'cancelled'];
   if (filters.status && !allowed.includes(filters.status)) throw validationError('Invalid pharmacy order status');
   if (filters.storeId && !isPositiveInteger(filters.storeId)) throw validationError('storeId must be a positive integer');
-  const db = await getDb();
-  if (!db) return null;
+
   const where = [];
   const values = [];
   if (filters.status) {
     values.push(filters.status);
-    where.push(`o.status = ${values.length}`);
+    where.push(`o.status = $${values.length}`);
   }
   if (filters.storeId) {
     values.push(Number(filters.storeId));
-    where.push(`o.store_id = ${values.length}`);
+    where.push(`o.store_id = $${values.length}`);
   }
+  return {
+    whereSql: where.length ? `WHERE ${where.join(' AND ')}` : '',
+    values
+  };
+}
+
+async function listPharmacyAdminOrders(filters = {}) {
+  const { whereSql, values } = buildPharmacyAdminOrderFilter(filters);
+  const db = await getDb();
+  if (!db) return null;
   const { rows } = await db.query(`
     SELECT o.id, o.status, o.delivery_method AS "deliveryMethod",
            o.delivery_hospital_id AS "deliveryHospitalId", h.name AS "deliveryHospitalName",
@@ -316,7 +325,7 @@ async function listPharmacyAdminOrders(filters = {}) {
       JOIN pharmacy_stores s ON s.id = o.store_id
       LEFT JOIN hospitals h ON h.id = o.delivery_hospital_id
       LEFT JOIN pharmacy_order_items oi ON oi.order_id = o.id
-      ${where.length ? 'WHERE ' + where.join(' AND ') : ''}
+      ${whereSql}
      GROUP BY o.id, p.id, s.id, h.name
      ORDER BY o.created_at DESC
      LIMIT 200`, values);
@@ -491,6 +500,7 @@ async function updatePharmacyProduct(id, data) {
 }
 
 module.exports = {
+  buildPharmacyAdminOrderFilter,
   listPharmacyAdminOrders,
   listPharmacyAdminStores,
   createPharmacyStore,
