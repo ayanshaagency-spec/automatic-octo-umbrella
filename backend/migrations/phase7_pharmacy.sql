@@ -50,9 +50,9 @@ CREATE INDEX IF NOT EXISTS idx_pharmacy_products_store_live
 
 CREATE TABLE IF NOT EXISTS pharmacy_orders (
   id BIGSERIAL PRIMARY KEY,
-  patient_id BIGINT NOT NULL REFERENCES patients(id) ON DELETE RESTRICT,
+  patient_id INTEGER NOT NULL REFERENCES patients(id) ON DELETE RESTRICT,
   store_id BIGINT NOT NULL REFERENCES pharmacy_stores(id) ON DELETE RESTRICT,
-  prescription_id BIGINT REFERENCES prescriptions(id) ON DELETE RESTRICT,
+  prescription_id INTEGER REFERENCES prescriptions(id) ON DELETE RESTRICT,
   delivery_method TEXT NOT NULL CHECK (delivery_method IN ('hospital', 'home')),
   delivery_hospital_id BIGINT REFERENCES hospitals(id) ON DELETE RESTRICT,
   delivery_address_line1 TEXT,
