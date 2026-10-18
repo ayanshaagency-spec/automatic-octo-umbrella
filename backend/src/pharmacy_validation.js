@@ -171,8 +171,9 @@ function validateStatusTransition(current, next, destinationType, hospitalFulfil
     error.statusCode = 422;
     throw error;
   }
-  if (next === 'out_for_delivery' && destinationType !== 'home') {
-    const error = new Error('out_for_delivery is only valid for home delivery');
+  if (next === 'out_for_delivery' &&
+      !(destinationType === 'home' || (destinationType === 'hospital' && hospitalFulfillmentMethod === 'ward_room_delivery'))) {
+    const error = new Error('out_for_delivery is only valid for home or hospital ward/room delivery');
     error.statusCode = 422;
     throw error;
   }
