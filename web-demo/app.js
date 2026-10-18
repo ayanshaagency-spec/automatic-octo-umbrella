@@ -17,6 +17,8 @@ async function api(path,options={}){
   const headers={'Content-Type':'application/json',...(options.headers||{})};
   const adminToken=sessionStorage.getItem('ayansha_admin_token');
   if(adminToken&&(path==='/dashboard/summary'||path==='/whatsapp/template'))headers.Authorization='Bearer '+adminToken;
+  const patientToken=sessionStorage.getItem('ayansha_patient_token');
+  if(patientToken&&path.startsWith('/pharmacy/orders'))headers.Authorization='Bearer '+patientToken;
   const res=await fetch(requestUrl,{...options,headers});
   const text=await res.text();
   let data={};
@@ -211,6 +213,139 @@ function setRole(role){
 document.querySelectorAll('[data-scroll]').forEach(b=>b.addEventListener('click',()=>document.getElementById(b.dataset.scroll).scrollIntoView({behavior:'smooth'})));
 document.querySelectorAll('.role-tab').forEach(tab=>tab.addEventListener('click',()=>setRole(tab.dataset.role)));
 
+
+function pharmacyAddressText(store){
+  return [store.address,store.city,store.state].filter(Boolean).map(escapeHtml).join(' • ');
+}
+async function loadPharmacyStores(){
+  const status=$('pharmacyStatus'), detail=$('pharmacyStoreStatus'), select=$('pharmacyStoreSelect');
+  if(!status||!detail||!select)return;
+  status.textContent='Checking directory…';detail.textContent='Loading approved pharmacy stores…';
+  const params=new URLSearchParams();
+  const storeType=$('pharmacyStoreType')?.value||'';
+  const deliveryMethod=$('pharmacyDeliveryMethod')?.value||'hospital';
+  const city=$('pharmacyCity')?.value?.trim()||'';
+  if(storeType)params.set('storeType',storeType);
+  if(deliveryMethod)params.set('deliveryMethod',deliveryMethod);
+  if(city)params.set('city',city);
+  try{
+    const rows=await api('/pharmacy/stores?'+params.toString());
+    if(!Array.isArray(rows)||!rows.length){
+      select.innerHTML='<option value="">No approved stores available</option>';
+      $('pharmacyProducts').textContent='No active stores match this delivery method and city. The administrator must verify and activate real pharmacy records.';
+      $('pharmacyStoreDetails').textContent='No store selected.';
+      status.textContent='No approved stores';
+      detail.textContent='No pharmacy stores are active for this search yet. No demo stores are fabricated.';
+      return;
+    }
+    select.innerHTML='<option value="">Choose an approved pharmacy</option>'+rows.map(s=>'<option value="'+escapeHtml(s.id)+'" data-store-type="'+escapeHtml(s.storeType)+'" data-hospital-id="'+escapeHtml(s.hospitalId||'')+'" data-home="'+Boolean(s.supportsHomeDelivery)+'" data-hospital="'+Boolean(s.supportsHospitalDelivery)+'">'+escapeHtml(s.name)+' • '+(s.storeType==='hospital'?'Hospital Pharmacy':'Partner Store')+'</option>').join('');
+    select.disabled=false;
+    status.textContent=rows.length+' approved store(s)';
+    detail.textContent='Directory loaded. Select a store to view only its currently active, in-stock catalogue.';
+    if(rows.length===1){select.value=String(rows[0].id);await pharmacyStoreChanged();}
+  }catch(e){
+    select.innerHTML='<option value="">Pharmacy directory unavailable</option>';
+    $('pharmacyProducts').textContent='Catalogue unavailable until Phase 7 migration is applied and verified store/product records are approved.';
+    status.textContent='Setup pending';
+    detail.textContent='Pharmacy directory is not ready: '+e.message+'. Production database changes have not been applied automatically.';
+  }
+}
+async function loadPharmacyHospitals(){
+  const select=$('pharmacyHospitalSelect');if(!select)return;
+  select.innerHTML='<option value="">Loading active hospitals…</option>';
+  const city=$('pharmacyCity')?.value?.trim()||'';
+  try{
+    const url='/pharmacy/hospitals'+(city?'?city='+encodeURIComponent(city):'');
+    const rows=await api(url);
+    if(!Array.isArray(rows)||!rows.length){
+      select.innerHTML='<option value="">No active hospitals found</option>';
+      return;
+    }
+    select.innerHTML='<option value="">Select delivery hospital</option>'+rows.map(h=>'<option value="'+escapeHtml(h.id)+'">'+escapeHtml(h.name)+' • '+escapeHtml(h.city||'')+'</option>').join('');
+    const store=$('pharmacyStoreSelect')?.selectedOptions?.[0];
+    if(store?.dataset.storeType==='hospital'&&store.dataset.hospitalId)select.value=store.dataset.hospitalId;
+  }catch(e){
+    select.innerHTML='<option value="">Hospital directory unavailable</option>';
+  }
+}
+async function pharmacyStoreChanged(){
+  const select=$('pharmacyStoreSelect'), selected=select?.selectedOptions?.[0];
+  const details=$('pharmacyStoreDetails'), products=$('pharmacyProducts');
+  if(!select?.value){details.textContent='Select an approved store.';products.textContent='Select a pharmacy to load its catalogue.';return;}
+  details.textContent=(selected?.textContent||'Selected pharmacy')+' • Loading verified store details and inventory…';
+  if($('pharmacyDeliveryMethod')?.value==='hospital'&&selected?.dataset.storeType==='hospital'){
+    await loadPharmacyHospitals();
+    if(selected.dataset.hospitalId)$('pharmacyHospitalSelect').value=selected.dataset.hospitalId;
+  }
+  products.textContent='Loading in-stock products…';
+  try{
+    const rows=await api('/pharmacy/products?storeId='+encodeURIComponent(select.value));
+    if(!Array.isArray(rows)||!rows.length){products.textContent='This approved store has no active in-stock products yet.';return;}
+    products.innerHTML=rows.map(p=>'<label class="pharmacy-product"><input type="checkbox" data-pharmacy-product="'+escapeHtml(p.id)+'" data-pharmacy-rx="'+Boolean(p.requiresPrescription)+'" aria-label="Select '+escapeHtml(p.name)+'"><span><strong>'+escapeHtml(p.name)+(p.strength?' • '+escapeHtml(p.strength):'')+'</strong><small>'+(p.brand?escapeHtml(p.brand)+' • ':'')+(p.packSize?escapeHtml(p.packSize)+' • ':'')+(p.requiresPrescription?'Prescription required':'Non-prescription item')+' • ₹'+Number(p.price).toLocaleString('en-IN',{maximumFractionDigits:2})+' • Stock '+Number(p.stockQuantity)+'</small></span><input type="number" min="1" max="50" value="1" data-pharmacy-qty="'+escapeHtml(p.id)+'" aria-label="Quantity for '+escapeHtml(p.name)+'"></label>').join('');
+  }catch(e){products.textContent='Product catalogue unavailable: '+e.message;}
+}
+function togglePharmacyDeliveryFields(){
+  const hospital=$('pharmacyDeliveryMethod')?.value==='hospital';
+  if($('pharmacyHospitalSelect'))$('pharmacyHospitalSelect').closest('div').hidden=!hospital;
+  if($('pharmacyHomeFields'))$('pharmacyHomeFields').hidden=hospital;
+  const selected=$('pharmacyStoreSelect')?.selectedOptions?.[0];
+  if(hospital&&selected?.dataset.storeType==='hospital'&&selected.dataset.hospitalId){
+    loadPharmacyHospitals().then(()=>{$('pharmacyHospitalSelect').value=selected.dataset.hospitalId;});
+  }
+}
+async function submitPharmacyOrder(){
+  const result=$('pharmacyOrderResult');
+  const phone=$('pharmacyPatientPhone')?.value?.trim();
+  const storeId=Number($('pharmacyStoreSelect')?.value);
+  const deliveryMethod=$('pharmacyDeliveryMethod')?.value;
+  const checked=[...document.querySelectorAll('[data-pharmacy-product]:checked')];
+  if(!phone){result.textContent='Enter the patient phone number first.';return;}
+  if(!storeId){result.textContent='Choose an approved pharmacy store first.';return;}
+  if(!checked.length){result.textContent='Choose at least one in-stock product.';return;}
+  const items=checked.map(el=>({productId:Number(el.dataset.pharmacyProduct),quantity:Number(document.querySelector('[data-pharmacy-qty="'+el.dataset.pharmacyProduct+'"]')?.value)}));
+  if(items.some(item=>!Number.isInteger(item.quantity)||item.quantity<1||item.quantity>50)){result.textContent='Each product quantity must be between 1 and 50.';return;}
+  const needsPrescription=checked.some(el=>el.dataset.pharmacyRx==='true');
+  const prescriptionText=$('pharmacyPrescriptionId')?.value?.trim();
+  if(needsPrescription&&!prescriptionText){result.textContent='At least one selected product requires a doctor prescription. Enter its prescription ID.';return;}
+  const payload={phone,storeId,deliveryMethod,items,paymentMethod:'cash_on_delivery'};
+  if(prescriptionText)payload.prescriptionId=Number(prescriptionText);
+  if(deliveryMethod==='hospital'){
+    payload.deliveryHospitalId=Number($('pharmacyHospitalSelect')?.value);
+    if(!payload.deliveryHospitalId){result.textContent='Choose the destination hospital.';return;}
+  }else{
+    payload.deliveryAddress={
+      line1:$('pharmacyAddress1')?.value?.trim(),
+      line2:$('pharmacyAddress2')?.value?.trim(),
+      city:$('pharmacyDeliveryCity')?.value?.trim(),
+      state:$('pharmacyDeliveryState')?.value?.trim(),
+      pincode:$('pharmacyPincode')?.value?.trim()
+    };
+    if(!payload.deliveryAddress.line1||!payload.deliveryAddress.city||!payload.deliveryAddress.state||!payload.deliveryAddress.pincode){result.textContent='Complete the home delivery address and six-digit PIN code.';return;}
+  }
+  result.textContent='Submitting pharmacy order securely…';
+  try{
+    const saved=await api('/pharmacy/orders',{method:'POST',body:JSON.stringify(payload)});
+    result.innerHTML='<strong>Order placed.</strong> Order ID: '+escapeHtml(saved.id)+' • Status: '+escapeHtml(saved.status)+' • Total: ₹'+Number(saved.totalAmount||0).toLocaleString('en-IN',{maximumFractionDigits:2})+' • Payment: Cash on delivery';
+    showToast('Pharmacy order saved');
+    await loadPharmacyOrders();
+  }catch(e){
+    const message=e.message==='Authentication required'?'Patient sign-in is required before placing an order. The current production SMS OTP provider is not configured.':e.message;
+    result.textContent='Pharmacy order not submitted: '+message;
+  }
+}
+async function loadPharmacyOrders(){
+  const box=$('pharmacyOrderHistory'),phone=$('pharmacyPatientPhone')?.value?.trim();
+  if(!phone){box.textContent='Enter the patient phone number first.';return;}
+  box.textContent='Loading saved pharmacy orders…';
+  try{
+    const rows=await api('/pharmacy/orders?phone='+encodeURIComponent(phone));
+    if(!Array.isArray(rows)||!rows.length){box.textContent='No pharmacy orders found for this patient.';return;}
+    box.innerHTML=rows.map(o=>'<div class="hospital-row"><strong>Order #'+escapeHtml(o.id)+' • '+escapeHtml(o.status)+'</strong><br><small>'+escapeHtml(o.storeName)+' • '+escapeHtml(o.deliveryMethod==='home'?'Home delivery':'Hospital: '+(o.deliveryHospitalName||o.deliveryHospitalId))+' • ₹'+Number(o.totalAmount||0).toLocaleString('en-IN',{maximumFractionDigits:2})+' • '+escapeHtml(o.paymentStatus)+'</small></div>').join('');
+  }catch(e){
+    box.textContent='Order history is protected by patient authentication and requires the approved migration: '+e.message;
+  }
+}
+
 async function checkWhatsApp(){const el=$('whatsappStatus');el.textContent='Checking…';try{const d=await api('/whatsapp/status');el.textContent=d.configured?'Cloud API configured':'Code connected • credentials pending';}catch(e){el.textContent='WhatsApp status unavailable';}}
 async function checkPayments(){const el=$('paymentStatus');el.textContent='Checking…';try{await api('/payments?phone=demo');el.textContent='Payment API online';}catch(e){el.textContent=e.message.includes('phone')?'Payment API online':'Payment API needs database';}}
 async function checkPrescriptions(){const el=$('prescriptionStatus');el.textContent='Checking…';try{await api('/prescriptions?phone=demo');el.textContent='Prescription API online';}catch(e){el.textContent=e.message.includes('phone')?'Prescription API online':'Prescription API needs database';}}
@@ -222,4 +357,17 @@ document.getElementById('adminLoginForm')?.addEventListener('submit',submitAdmin
 document.getElementById('adminLogoutButton')?.addEventListener('click',logoutAdmin);
 if($('apiBaseInput'))$('apiBaseInput').value=localStorage.getItem('ayansha_api_base')||DEFAULT_API_BASE;
 updateAdminSessionUi();
+
+$('pharmacyRefreshStores')?.addEventListener('click',loadPharmacyStores);
+$('pharmacyStoreType')?.addEventListener('change',loadPharmacyStores);
+$('pharmacyDeliveryMethod')?.addEventListener('change',()=>{togglePharmacyDeliveryFields();loadPharmacyStores();});
+$('pharmacyStoreSelect')?.addEventListener('change',pharmacyStoreChanged);
+$('pharmacyPlaceOrder')?.addEventListener('click',submitPharmacyOrder);
+$('pharmacyLoadOrders')?.addEventListener('click',loadPharmacyOrders);
+$('pharmacyCity')?.addEventListener('change',()=>{if($('pharmacyDeliveryMethod')?.value==='hospital')loadPharmacyHospitals();});
+$('patientPhone')?.addEventListener('input',()=>{const dest=$('pharmacyPatientPhone');if(dest&&!dest.matches(':focus'))dest.value=$('patientPhone').value;});
+if($('pharmacyPatientPhone')&&$('patientPhone'))$('pharmacyPatientPhone').value=$('patientPhone').value;
+togglePharmacyDeliveryFields();
+loadPharmacyStores();
+
 checkApi(); checkDatabase(); loadDoctorsForForm(); loadAppointments(); loadDashboardSummary(); loadVerificationStatus();
