@@ -11,7 +11,7 @@ const required=[
   ['Live dashboard API','/dashboard/summary'],['Live dashboard status','dashboardSummaryStatus'],
   ['Recent appointments','recentAppointments'],['Dashboard refresh','loadDashboardSummary'],['Verification center','verificationStatus'],['Verification detail','verificationDetail'],['Verification loader','loadVerificationStatus'],
   ['Pharmacy patient workspace','pharmacyPatientPanel'],['Pharmacy store role','role-pharmacy'],['Pharmacy directory API','/pharmacies'],
-  ['Pharmacy inventory UI','pharmacyInventoryPanel'],['Hospital delivery selector','pharmacyHospitalId'],['Home delivery address','pharmacyHomeAddress'],
+  ['Pharmacy inventory UI','pharmacyInventoryPanel'],['Hospital delivery selector','pharmacyHospitalId'],['Hospital fulfillment selector','pharmacyHospitalFulfillmentMethod'],['Home delivery address','pharmacyHomeAddress'],
   ['Patient pharmacy order API','/pharmacy/orders'],['Store staff login API','/pharmacy/staff/login'],['Store-scoped queue API','/pharmacy/staff/orders'],
   ['Admin pharmacy registration API','/admin/pharmacies'],['Medicine catalogue API','/admin/medicine-catalog'],['Prescription guard copy','Prescription medicines require a matching prescription']
 ];
@@ -28,6 +28,7 @@ console.log('Client demo smoke test passed: structure, role flows, live dashboar
 
 if(!js.includes('searchPharmacies')) throw new Error('Pharmacy directory behavior missing');
 if(!js.includes('submitPharmacyOrder')) throw new Error('Pharmacy order workflow missing');
+if(!js.includes('ready_for_pickup')||!js.includes('ward_room_delivery')) throw new Error('Hospital counter pickup and ward/room states missing');
 if(!js.includes('refreshPharmacyStaffOrders')) throw new Error('Pharmacy staff queue behavior missing');
 if(!js.includes('pharmacy_staff_token')) throw new Error('Store staff session handling missing');
 if(!css.includes('.pharmacy-grid')) throw new Error('Pharmacy workspace styling missing');
