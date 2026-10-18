@@ -16,3 +16,26 @@
 #pharmacyHomeFields[hidden]{display:none}
 @media(max-width:850px){.pharmacy-filters,.pharmacy-columns{grid-template-columns:1fr 1fr}}
 @media(max-width:560px){.pharmacy-filters,.pharmacy-columns,.address-grid{grid-template-columns:1fr}.pharmacy-product{grid-template-columns:auto minmax(0,1fr) 70px}}
+
+.pharmacy-admin-panel{margin-top:20px}
+.pharmacy-admin-form{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;margin:16px 0}
+.pharmacy-admin-form input,.pharmacy-admin-form select{width:100%;min-width:0;padding:12px;border:1px solid #d5e4e2;border-radius:10px;background:#fff;color:var(--ink);font:inherit}
+.pharmacy-admin-form button{align-self:stretch}
+.check-row{display:flex;align-items:center;gap:9px;color:#4a686f;font-size:13px;font-weight:700}
+.check-row input{width:18px;height:18px;flex:none}
+.pharmacy-admin-catalogue,.pharmacy-admin-orders{border-top:1px solid #e3eeed;margin-top:26px;padding-top:24px}
+.pharmacy-admin-catalogue h3,.pharmacy-admin-orders h3{margin:0}
+.panel-head.compact{align-items:center;margin:22px 0 10px}
+.pharmacy-admin-store,.pharmacy-admin-product{display:flex;justify-content:space-between;align-items:center;gap:14px}
+.pharmacy-admin-actions{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.pharmacy-admin-actions button{padding:9px 12px;border-radius:9px;font-size:12px}
+.pharmacy-admin-actions .pharmacy-label{margin:0;min-width:95px}
+.pharmacy-admin-actions input{padding:7px}
+.pharmacy-admin-orders .order-filters{grid-template-columns:minmax(180px,300px)}
+.pharmacy-admin-order{padding:15px 0;border-bottom:1px solid #dfeceb}
+.pharmacy-admin-order:last-child{border-bottom:0}
+.pharmacy-admin-order small{color:var(--muted);line-height:1.6}
+.pharmacy-order-items{margin:9px 0;color:#4e666d;font-size:13px}
+.pharmacy-admin-order-controls{display:flex;align-items:center;gap:9px;flex-wrap:wrap;margin-top:10px}
+.pharmacy-admin-order-controls select{max-width:230px;padding:9px;border:1px solid #d5e4e2;border-radius:9px;background:#fff;color:var(--ink)}
+@media(max-width:750px){.pharmacy-admin-form{grid-template-columns:1fr}.pharmacy-admin-store,.pharmacy-admin-product{align-items:flex-start;flex-direction:column}.pharmacy-admin-actions{width:100%}.pharmacy-admin-actions button{flex:1}.pharmacy-admin-orders .order-filters{grid-template-columns:1fr}}
