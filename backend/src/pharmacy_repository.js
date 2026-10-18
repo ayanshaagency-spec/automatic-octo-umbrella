@@ -152,13 +152,18 @@ async function updatePharmacyVerification(id, isVerified, active) {
   if (active && !isVerified) fail('A pharmacy must be verified before it can be activated', 422);
   const db = await getDb();
   if (!db) return null;
+  const current = await db.query('SELECT id, license_valid_until FROM pharmacies WHERE id = $1', [pharmacyId]);
+  if (!current.rowCount) fail('Pharmacy not found', 404);
+  if (active && current.rows[0].license_valid_until &&
+      String(current.rows[0].license_valid_until).slice(0, 10) < new Date().toISOString().slice(0, 10)) {
+    fail('Expired pharmacy licence cannot be activated', 422);
+  }
   const { rows } = await db.query(
     `UPDATE pharmacies SET is_verified = $1, active = $2, updated_at = NOW()
       WHERE id = $3
-      RETURNING id, name, store_type, hospital_id, license_number, is_verified, active, updated_at`,
+      RETURNING id, name, store_type, hospital_id, license_number, license_valid_until, is_verified, active, updated_at`,
     [isVerified, active, pharmacyId]
   );
-  if (!rows.length) fail('Pharmacy not found', 404);
   return rows[0];
 }
 
@@ -398,6 +403,15 @@ async function createPharmacyOrder(phone, data) {
     return getPatientPharmacyOrder(patientPhone, Number(order.id));
   } catch (error) {
     try { await db.query('ROLLBACK'); } catch (_) {}
+    if (error.code === '23505' && orderData.idempotencyKey) {
+      const existing = await db.query(
+        `SELECT o.id FROM pharmacy_orders o
+          JOIN patients p ON p.id = o.patient_id
+         WHERE p.phone = $1 AND o.idempotency_key = $2`,
+        [patientPhone, orderData.idempotencyKey]
+      );
+      if (existing.rowCount) return getPatientPharmacyOrder(patientPhone, Number(existing.rows[0].id));
+    }
     throw error;
   } finally {
     db.release();
