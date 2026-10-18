@@ -32,10 +32,20 @@ jobs:
             if curl --fail --silent http://127.0.0.1:3000/health >/dev/null; then break; fi
             sleep 1
           done
-          curl --fail --silent http://127.0.0.1:3000/health | grep -q '"ok":true'
-          curl --fail --silent http://127.0.0.1:3000/ | grep -q 'Ayansha Health Care'
-          curl --fail --silent http://127.0.0.1:3000/web/app.js | grep -q 'function'
-          curl --fail --silent http://127.0.0.1:3000/admin | grep -q 'Ayansha Health Care Admin'
+          expect_contains() {
+            local url="$1"
+            local needle="$2"
+            local body
+            body="$(curl --fail --silent "$url")"
+            if [[ "$body" != *"$needle"* ]]; then
+              echo "::error::Smoke check failed for $url."
+              return 1
+            fi
+          }
+          expect_contains http://127.0.0.1:3000/health '"ok":true'
+          expect_contains http://127.0.0.1:3000/ 'Ayansha Health Care'
+          expect_contains http://127.0.0.1:3000/web/app.js 'function'
+          expect_contains http://127.0.0.1:3000/admin 'Ayansha Health Care Admin'
           test "$(curl --silent --output /dev/null --write-out '%{http_code}' http://127.0.0.1:3000/api/db/health)" = "503"
           test "$(curl --silent --output /dev/null --write-out '%{http_code}' http://127.0.0.1:3000/.env)" = "404"
           test "$(curl --silent --output /dev/null --write-out '%{http_code}' http://127.0.0.1:3000/src/server.js)" = "404"
