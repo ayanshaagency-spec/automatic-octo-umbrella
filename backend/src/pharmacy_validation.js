@@ -75,6 +75,7 @@ function validateCreatePharmacyOrder(data) {
   });
   const idempotencyKey = data.idempotencyKey == null ? null : cleanText(data.idempotencyKey, 'idempotencyKey', 160, true);
   if (destinationType === 'hospital') {
+    const hospitalId = positiveId(data.hospitalId, 'hospitalId');
     const hospitalFulfillmentMethod = data.hospitalFulfillmentMethod;
     if (!['counter_pickup', 'ward_room_delivery'].includes(hospitalFulfillmentMethod)) {
       const error = new Error('hospitalFulfillmentMethod must be counter_pickup or ward_room_delivery');
@@ -86,7 +87,7 @@ function validateCreatePharmacyOrder(data) {
       prescriptionId: data.prescriptionId == null ? null : positiveId(data.prescriptionId, 'prescriptionId'),
       destinationType,
       hospitalFulfillmentMethod,
-      hospitalId: positiveId(data.hospitalId, 'hospitalId'),
+      hospitalId,
       addressLine: null,
       city: null,
       state: null,
