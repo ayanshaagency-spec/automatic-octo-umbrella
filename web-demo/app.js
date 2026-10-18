@@ -14,7 +14,10 @@ async function api(path,options={}){
   // The backend exposes /health at the root, while product APIs live under /api.
   const rootBase=API_BASE.replace(/\/api\/?$/,'');
   const requestUrl=path==='/health'?(rootBase+'/health'||'/health'):(API_BASE+path);
-  const res=await fetch(requestUrl,{headers:{'Content-Type':'application/json',...(options.headers||{})},...options});
+  const headers={'Content-Type':'application/json',...(options.headers||{})};
+  const adminToken=sessionStorage.getItem('ayansha_admin_token');
+  if(adminToken&&(path==='/dashboard/summary'||path==='/whatsapp/template'))headers.Authorization='Bearer '+adminToken;
+  const res=await fetch(requestUrl,{...options,headers});
   const text=await res.text();
   let data={};
   try{data=JSON.parse(text)}catch{data={raw:text}}
@@ -81,9 +84,50 @@ async function submitAppointment(event){
   }catch(e){ result.textContent='Save failed: '+e.message; }
 }
 
+function updateAdminSessionUi(){
+  const signedIn=Boolean(sessionStorage.getItem('ayansha_admin_token'));
+  if($('adminLoginButton'))$('adminLoginButton').hidden=signedIn;
+  if($('adminLogoutButton'))$('adminLogoutButton').hidden=!signedIn;
+  if($('adminEmail'))$('adminEmail').disabled=signedIn;
+  if($('adminPassword'))$('adminPassword').disabled=signedIn;
+  if($('adminLoginResult')&&!signedIn)$('adminLoginResult').textContent='Sign in to load protected admin dashboard data.';
+  if($('adminLoginResult')&&signedIn)$('adminLoginResult').textContent='Admin session active in this tab. Sign out when finished.';
+}
+async function submitAdminLogin(event){
+  event.preventDefault();
+  const result=$('adminLoginResult');
+  result.textContent='Signing in securely…';
+  try{
+    const data=await api('/admin/login',{method:'POST',body:JSON.stringify({email:$('adminEmail').value.trim(),password:$('adminPassword').value})});
+    if(!data.token||data.user?.role!=='admin')throw new Error('The backend did not return a valid admin session');
+    sessionStorage.setItem('ayansha_admin_token',data.token);
+    $('adminPassword').value='';
+    updateAdminSessionUi();
+    result.textContent='Signed in. Loading protected dashboard data…';
+    showToast('Admin signed in');
+    await loadDashboardSummary();
+  }catch(e){
+    result.textContent='Admin sign-in failed: '+e.message;
+  }
+}
+function logoutAdmin(){
+  sessionStorage.removeItem('ayansha_admin_token');
+  if($('adminPassword'))$('adminPassword').value='';
+  updateAdminSessionUi();
+  loadDashboardSummary();
+  showToast('Admin signed out');
+}
 async function loadDashboardSummary(){
   const status=$('dashboardSummaryStatus');
   const recent=$('recentAppointments');
+  if(!sessionStorage.getItem('ayansha_admin_token')){
+    status.textContent='ADMIN SIGN-IN REQUIRED';
+    recent.textContent='Sign in with the configured admin account to view live records.';
+    ['patientCount','doctorCount','prescriptionCount','todayAppointments','completedAppointments','paidRevenue'].forEach(id=>{if($(id))$(id).textContent='—';});
+    if($('upcomingAppointments'))$('upcomingAppointments').textContent='Sign in required';
+    if($('paymentSummary'))$('paymentSummary').textContent='Sign in required';
+    return;
+  }
   status.textContent='Loading live database dashboard…'; recent.textContent='Loading recent appointments…';
   try{
     const d=await api('/dashboard/summary');
@@ -174,5 +218,8 @@ async function checkRecords(){const el=$('recordStatus');el.textContent='Checkin
 
 document.getElementById('appointmentForm')?.addEventListener('submit',submitAppointment);
 document.getElementById('saveApiBase')?.addEventListener('click',saveApiBase);
-if($('apiBaseInput'))$('apiBaseInput').value=localStorage.getItem('ayansha_api_base')||'';
+document.getElementById('adminLoginForm')?.addEventListener('submit',submitAdminLogin);
+document.getElementById('adminLogoutButton')?.addEventListener('click',logoutAdmin);
+if($('apiBaseInput'))$('apiBaseInput').value=localStorage.getItem('ayansha_api_base')||DEFAULT_API_BASE;
+updateAdminSessionUi();
 checkApi(); checkDatabase(); loadDoctorsForForm(); loadAppointments(); loadDashboardSummary(); loadVerificationStatus();
