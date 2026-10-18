@@ -10,12 +10,23 @@ test('hospital destination requires an existing hospital id', () => {
   assert.throws(() => validateCreatePharmacyOrder({
     pharmacyId: 1, destinationType: 'hospital', items: [{ inventoryId: 1, quantity: 1 }]
   }), error => error.statusCode === 422 && /hospitalId/.test(error.message));
-  const order = validateCreatePharmacyOrder({
+  assert.throws(() => validateCreatePharmacyOrder({
     pharmacyId: 2, destinationType: 'hospital', hospitalId: 8,
-    items: [{ inventoryId: 4, quantity: 2 }]
-  });
-  assert.equal(order.destinationType, 'hospital');
-  assert.equal(order.hospitalId, 8);
+    items: [{ inventoryId: 4, quantity: 1 }]
+  }), error => error.statusCode === 422 && /hospitalFulfillmentMethod/.test(error.message));
+  for (const method of ['counter_pickup', 'ward_room_delivery']) {
+    const order = validateCreatePharmacyOrder({
+      pharmacyId: 2, destinationType: 'hospital', hospitalId: 8,
+      hospitalFulfillmentMethod: method, items: [{ inventoryId: 4, quantity: 2 }]
+    });
+    assert.equal(order.destinationType, 'hospital');
+    assert.equal(order.hospitalId, 8);
+    assert.equal(order.hospitalFulfillmentMethod, method);
+  }
+  assert.throws(() => validateCreatePharmacyOrder({
+    pharmacyId: 2, destinationType: 'hospital', hospitalId: 8,
+    hospitalFulfillmentMethod: 'home_delivery', items: [{ inventoryId: 4, quantity: 1 }]
+  }), error => error.statusCode === 422);
 });
 
 test('home delivery requires a full address, city, recipient and phone', () => {
@@ -61,5 +72,9 @@ test('status transitions cannot skip review or mix home/hospital delivery states
   assert.throws(() => validateStatusTransition('requested', 'delivered', 'home'), error => error.statusCode === 409);
   assert.throws(() => validateStatusTransition('packed', 'ready_at_hospital', 'home'), error => error.statusCode === 422);
   assert.throws(() => validateStatusTransition('packed', 'out_for_delivery', 'hospital'), error => error.statusCode === 422);
+  assert.doesNotThrow(() => validateStatusTransition('packed', 'ready_at_hospital', 'hospital', 'ward_room_delivery'));
+  assert.doesNotThrow(() => validateStatusTransition('packed', 'ready_for_pickup', 'hospital', 'counter_pickup'));
+  assert.throws(() => validateStatusTransition('packed', 'ready_at_hospital', 'hospital', 'counter_pickup'), error => error.statusCode === 422);
+  assert.throws(() => validateStatusTransition('packed', 'ready_for_pickup', 'hospital', 'ward_room_delivery'), error => error.statusCode === 422);
 });
 
