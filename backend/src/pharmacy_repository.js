@@ -41,6 +41,26 @@ async function listPharmacyStores(filters = {}) {
   return rows;
 }
 
+async function listPharmacyDeliveryHospitals(city) {
+  const db = await getDb();
+  if (!db) return null;
+  const values = [];
+  let cityFilter = '';
+  if (city != null && String(city).trim()) {
+    const normalized = String(city).trim();
+    if (normalized.length > 100) throw validationError('city must be 100 characters or fewer');
+    values.push(normalized);
+    cityFilter = ' AND LOWER(city) = LOWER($1)';
+  }
+  const { rows } = await db.query(`
+    SELECT id, name, address, city, state
+      FROM hospitals
+     WHERE active = TRUE ${cityFilter}
+     ORDER BY name
+     LIMIT 200`, values);
+  return rows;
+}
+
 async function listPharmacyProducts(storeId) {
   if (!isPositiveInteger(storeId)) throw validationError('storeId must be a positive integer');
   const db = await getDb();
@@ -108,7 +128,7 @@ async function createPharmacyOrder(data) {
     const patientId = patient.rows[0].id;
 
     const storeResult = await db.query(`
-      SELECT id, store_type, hospital_id, supports_hospital_delivery, supports_home_delivery
+      SELECT id, name, store_type, hospital_id, supports_hospital_delivery, supports_home_delivery
         FROM pharmacy_stores
        WHERE id = $1 AND is_active = TRUE AND approved_at IS NOT NULL
        FOR UPDATE`, [storeId]);
@@ -252,6 +272,7 @@ async function updatePharmacyOrderStatus(id, nextStatus) {
 
 module.exports = {
   listPharmacyStores,
+  listPharmacyDeliveryHospitals,
   listPharmacyProducts,
   listPharmacyOrders,
   createPharmacyOrder,
