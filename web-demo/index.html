@@ -112,6 +112,45 @@
           </form>
           <div id="adminLoginResult" class="result" role="status" aria-live="polite">Sign in to load protected admin dashboard data.</div>
         </div>
+
+        <div class="panel pharmacy-admin-panel">
+          <div class="panel-head"><div><p class="eyebrow">PHASE 7 • STORE OPERATIONS</p><h3>Register and approve pharmacies</h3><p>Administrators can register hospital pharmacies and external partner medical stores. New stores stay inactive until verified and approved.</p></div><span class="tag">Admin only</span></div>
+          <form id="pharmacyStoreForm" class="db-form pharmacy-admin-form">
+            <input id="pharmacyNewStoreName" required maxlength="160" placeholder="Pharmacy / medical store name">
+            <select id="pharmacyNewStoreType" required><option value="hospital">Hospital Pharmacy</option><option value="partner">External Partner Medical Store</option></select>
+            <select id="pharmacyNewStoreHospital"><option value="">Select linked hospital</option></select>
+            <input id="pharmacyNewStorePhone" maxlength="40" placeholder="Store contact phone (optional)">
+            <input id="pharmacyNewStoreAddress" required maxlength="240" placeholder="Full store address">
+            <input id="pharmacyNewStoreCity" required maxlength="100" placeholder="City">
+            <input id="pharmacyNewStoreState" required maxlength="100" placeholder="State">
+            <label class="check-row"><input id="pharmacyNewStoreHospitalDelivery" type="checkbox" checked> Supports hospital delivery</label>
+            <label class="check-row"><input id="pharmacyNewStoreHomeDelivery" type="checkbox"> Supports home delivery</label>
+            <button class="primary" type="submit">Register inactive pharmacy</button>
+          </form>
+          <div id="pharmacyAdminStoreResult" class="result" role="status" aria-live="polite">Sign in as administrator to manage pharmacy onboarding.</div>
+          <div class="panel-head compact"><h3>Registered stores</h3><button id="pharmacyAdminRefreshStores" class="secondary" type="button">Refresh stores</button></div>
+          <div id="pharmacyAdminStoreList" class="result">Sign in to load registered stores.</div>
+          <div class="pharmacy-admin-catalogue">
+            <h3>Manage catalogue and stock</h3>
+            <label class="pharmacy-label" for="pharmacyAdminCatalogStore">Store to manage</label>
+            <select id="pharmacyAdminCatalogStore"><option value="">Load registered stores first</option></select>
+            <form id="pharmacyProductForm" class="db-form pharmacy-admin-form">
+              <input id="pharmacyNewProductName" required maxlength="180" placeholder="Medicine / product name">
+              <input id="pharmacyNewProductSku" maxlength="120" placeholder="SKU / code (optional)">
+              <input id="pharmacyNewProductBrand" maxlength="120" placeholder="Brand (optional)">
+              <input id="pharmacyNewProductStrength" maxlength="120" placeholder="Strength e.g. 500 mg">
+              <input id="pharmacyNewProductPack" maxlength="120" placeholder="Pack size e.g. 10 tablets">
+              <input id="pharmacyNewProductPrice" required type="number" min="0" step="0.01" placeholder="Price in ₹">
+              <input id="pharmacyNewProductStock" required type="number" min="0" step="1" value="0" placeholder="Stock quantity">
+              <label class="check-row"><input id="pharmacyNewProductRx" type="checkbox" checked> Prescription required by default</label>
+              <label class="check-row"><input id="pharmacyNewProductActive" type="checkbox"> Activate product after verification</label>
+              <button class="primary" type="submit">Add product to store</button>
+            </form>
+            <div id="pharmacyAdminProductResult" class="result" role="status" aria-live="polite">Select a store to manage catalogue.</div>
+            <div id="pharmacyAdminProductList" class="result">Products and stock will appear here.</div>
+          </div>
+        </div>
+
         <div class="grid three"><article class="stat-card"><span>Patients</span><strong id="patientCount">—</strong><small>Live database count</small></article><article class="stat-card"><span>Doctors</span><strong id="doctorCount">—</strong><small>Live database count</small></article><article class="stat-card"><span>Payments</span><strong id="paidRevenue">—</strong><small id="paymentSummary">Live paid revenue</small></article></div>
         <div class="panel live-dashboard-panel"><div class="panel-head"><div><p class="eyebrow">LIVE DATABASE DASHBOARD</p><h3>Recent appointments</h3><p>Only records returned by the connected database are shown here.</p></div><button class="secondary" type="button" onclick="loadDashboardSummary()">Refresh live data</button></div><div id="dashboardSummaryStatus" class="result">Loading live database summary…</div><div id="recentAppointments" class="result">Loading recent appointments…</div></div>
         <div class="panel verification-panel">
