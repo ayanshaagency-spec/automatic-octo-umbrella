@@ -359,15 +359,15 @@ async function createPharmacyOrder(phone, data) {
     const orderResult = await db.query(
       `INSERT INTO pharmacy_orders
         (order_number, patient_id, patient_phone, pharmacy_id, prescription_id, destination_type,
-         hospital_id, address_line, city, state, postal_code, recipient_name, recipient_phone,
+         hospital_fulfillment_method, hospital_id, address_line, city, state, postal_code, recipient_name, recipient_phone,
          delivery_instructions, order_status, subtotal, idempotency_key)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,'requested',$15,$16)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,'requested',$16,$17)
        RETURNING id, order_number, patient_id, patient_phone, pharmacy_id, prescription_id,
-                 destination_type, hospital_id, address_line, city, state, postal_code,
+                 destination_type, hospital_fulfillment_method, hospital_id, address_line, city, state, postal_code,
                  recipient_name, recipient_phone, delivery_instructions, order_status,
                  subtotal, currency, created_at, updated_at`,
       [orderNumber, patient.id, patientPhone, orderData.pharmacyId, orderData.prescriptionId,
-       orderData.destinationType, orderData.hospitalId, orderData.addressLine, orderData.city,
+       orderData.destinationType, orderData.hospitalFulfillmentMethod, orderData.hospitalId, orderData.addressLine, orderData.city,
        orderData.state, orderData.postalCode, orderData.recipientName, orderData.recipientPhone,
        orderData.deliveryInstructions, subtotal, orderData.idempotencyKey]
     );
@@ -447,7 +447,7 @@ async function listPharmacyStaffOrders(pharmacyId) {
   if (!db) return null;
   const { rows } = await db.query(
     `SELECT o.id, o.order_number, o.patient_id, o.patient_phone, o.prescription_id,
-            o.destination_type, o.hospital_id, h.name AS hospital_name,
+            o.destination_type, o.hospital_fulfillment_method, o.hospital_id, h.name AS hospital_name,
             o.address_line, o.city, o.state, o.postal_code, o.recipient_name,
             o.recipient_phone, o.delivery_instructions, o.order_status, o.subtotal,
             o.currency, o.created_at, o.updated_at,
@@ -477,7 +477,7 @@ async function setPharmacyOrderStatus(orderId, pharmacyId, nextStatus, staffId, 
     );
     if (!found.rowCount) fail('Pharmacy order not found for this store', 404);
     const order = found.rows[0];
-    validateStatusTransition(order.order_status, nextStatus, order.destination_type);
+    validateStatusTransition(order.order_status, nextStatus, order.destination_type, order.hospital_fulfillment_method);
     const itemRows = await db.query(
       'SELECT inventory_id, quantity, prescription_required FROM pharmacy_order_items WHERE order_id = $1',
       [id]
