@@ -350,6 +350,108 @@ server.listen(PORT,()=>console.log(`Ayansha API running on ${PORT}`));
     }
   });
 
+
+  const pharmacyAdminProductsMatch=url.pathname.match(new RegExp('^/api/pharmacy/admin/stores/([0-9]+)/products
+    try {
+      const rows=await listPharmacyStores({
+        storeType:url.searchParams.get('storeType')||null,
+        deliveryMethod:url.searchParams.get('deliveryMethod')||null,
+        city:url.searchParams.get('city')||null
+      });
+      if(rows===null)return send(res,503,{error:'DATABASE_URL not configured'});
+      return send(res,200,rows);
+    } catch(e) {
+      if(e.statusCode)return send(res,e.statusCode,{error:e.message});
+      return send(res,503,{error:'Unable to load pharmacy stores'});
+    }
+  }
+
+  if(url.pathname==='/api/pharmacy/hospitals'&&req.method==='GET'){
+    try {
+      const rows=await listPharmacyDeliveryHospitals(url.searchParams.get('city'));
+      if(rows===null)return send(res,503,{error:'DATABASE_URL not configured'});
+      return send(res,200,rows);
+    } catch(e) {
+      if(e.statusCode)return send(res,e.statusCode,{error:e.message});
+      return send(res,503,{error:'Unable to load delivery hospitals'});
+    }
+  }
+
+  if(url.pathname==='/api/pharmacy/products'&&req.method==='GET'){
+    try {
+      const rows=await listPharmacyProducts(url.searchParams.get('storeId'));
+      if(rows===null)return send(res,503,{error:'DATABASE_URL not configured'});
+      return send(res,200,rows);
+    } catch(e) {
+      if(e.statusCode)return send(res,e.statusCode,{error:e.message});
+      return send(res,503,{error:'Unable to load pharmacy products'});
+    }
+  }
+  if(url.pathname==='/api/pharmacy/orders'&&req.method==='GET'){
+    const phone=url.searchParams.get('phone');
+    if(!phone)return send(res,422,{error:'phone is required'});
+    if(isProduction && phone.trim() !== req.auth?.phone)return send(res,403,{error:'Access denied'});
+    try {
+      const rows=await listPharmacyOrders(phone);
+      if(rows===null)return send(res,503,{error:'DATABASE_URL not configured'});
+      return send(res,200,rows);
+    } catch(e) {
+      if(e.statusCode)return send(res,e.statusCode,{error:e.message});
+      return send(res,503,{error:'Unable to load pharmacy orders'});
+    }
+  }
+  if(url.pathname==='/api/pharmacy/orders'&&req.method==='POST')return parseBody(req,async(err,data)=>{
+    if(err)return send(res,400,{error:'Invalid JSON'});
+    if(isProduction && String(data?.phone||'').trim() !== req.auth?.phone)return send(res,403,{error:'Access denied'});
+    try {
+      const saved=await createPharmacyOrder(data);
+      if(saved)return send(res,201,saved);
+      return send(res,503,{error:'DATABASE_URL not configured'});
+    } catch(e) {
+      if(e.statusCode)return send(res,e.statusCode,{error:e.message});
+      return send(res,503,{error:'Unable to create pharmacy order'});
+    }
+  });
+  const pharmacyStatusMatch=url.pathname.match(/^\/api\/pharmacy\/orders\/(\d+)\/status$/);
+  if(pharmacyStatusMatch&&req.method==='PATCH')return parseBody(req,async(err,data)=>{
+    if(err)return send(res,400,{error:'Invalid JSON'});
+    if(isProduction && !req.admin)return send(res,401,{error:'Admin authentication required'});
+    try {
+      const saved=await updatePharmacyOrderStatus(Number(pharmacyStatusMatch[1]),data.status);
+      if(saved)return send(res,200,saved);
+      return send(res,503,{error:'DATABASE_URL not configured'});
+    } catch(e) {
+      if(e.statusCode)return send(res,e.statusCode,{error:e.message});
+      return send(res,503,{error:'Unable to update pharmacy order status'});
+    }
+  });
+
+  send(res,404,{error:'Not found'});
+});
+server.listen(PORT,()=>console.log(`Ayansha API running on ${PORT}`));
+));
+  if(pharmacyAdminProductsMatch&&req.method==='GET'){
+    try {
+      const rows=await listPharmacyAdminProducts(Number(pharmacyAdminProductsMatch[1]));
+      if(rows===null)return send(res,503,{error:'DATABASE_URL not configured'});
+      return send(res,200,rows);
+    } catch(e) {
+      if(e.statusCode)return send(res,e.statusCode,{error:e.message});
+      return send(res,503,{error:'Unable to load pharmacy store catalogue'});
+    }
+  }
+  if(pharmacyAdminProductsMatch&&req.method==='POST')return parseBody(req,async(err,data)=>{
+    if(err)return send(res,400,{error:'Invalid JSON'});
+    try {
+      const saved=await createPharmacyProduct(Number(pharmacyAdminProductsMatch[1]),data);
+      if(saved)return send(res,201,saved);
+      return send(res,503,{error:'DATABASE_URL not configured'});
+    } catch(e) {
+      if(e.statusCode)return send(res,e.statusCode,{error:e.message});
+      return send(res,503,{error:'Unable to register pharmacy product'});
+    }
+  });
+
   if(url.pathname==='/api/pharmacy/stores'&&req.method==='GET'){
     try {
       const rows=await listPharmacyStores({
