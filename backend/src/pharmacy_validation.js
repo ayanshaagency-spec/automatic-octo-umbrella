@@ -4,9 +4,10 @@ const STATUS_TRANSITIONS = {
   requested: ['accepted', 'rejected', 'cancelled'],
   accepted: ['packed', 'cancelled'],
   rejected: [],
-  packed: ['out_for_delivery', 'ready_at_hospital', 'cancelled'],
+  packed: ['out_for_delivery', 'ready_at_hospital', 'ready_for_pickup', 'cancelled'],
   out_for_delivery: ['delivered'],
   ready_at_hospital: ['delivered'],
+  ready_for_pickup: ['delivered'],
   delivered: [],
   cancelled: []
 };
@@ -74,10 +75,17 @@ function validateCreatePharmacyOrder(data) {
   });
   const idempotencyKey = data.idempotencyKey == null ? null : cleanText(data.idempotencyKey, 'idempotencyKey', 160, true);
   if (destinationType === 'hospital') {
+    const hospitalFulfillmentMethod = data.hospitalFulfillmentMethod;
+    if (!['counter_pickup', 'ward_room_delivery'].includes(hospitalFulfillmentMethod)) {
+      const error = new Error('hospitalFulfillmentMethod must be counter_pickup or ward_room_delivery');
+      error.statusCode = 422;
+      throw error;
+    }
     return {
       pharmacyId: positiveId(data.pharmacyId, 'pharmacyId'),
       prescriptionId: data.prescriptionId == null ? null : positiveId(data.prescriptionId, 'prescriptionId'),
       destinationType,
+      hospitalFulfillmentMethod,
       hospitalId: positiveId(data.hospitalId, 'hospitalId'),
       addressLine: null,
       city: null,
@@ -94,6 +102,7 @@ function validateCreatePharmacyOrder(data) {
     pharmacyId: positiveId(data.pharmacyId, 'pharmacyId'),
     prescriptionId: data.prescriptionId == null ? null : positiveId(data.prescriptionId, 'prescriptionId'),
     destinationType,
+    hospitalFulfillmentMethod: null,
     hospitalId: null,
     addressLine: cleanText(data.addressLine, 'addressLine', 500, true),
     city: cleanText(data.city, 'city', 100, true),
@@ -139,7 +148,7 @@ function validateCreatePharmacy(data) {
   };
 }
 
-function validateStatusTransition(current, next, destinationType) {
+function validateStatusTransition(current, next, destinationType, hospitalFulfillmentMethod = null) {
   if (!Object.prototype.hasOwnProperty.call(STATUS_TRANSITIONS, current) ||
       !Object.prototype.hasOwnProperty.call(STATUS_TRANSITIONS, next)) {
     const error = new Error('invalid pharmacy order status');
@@ -151,13 +160,18 @@ function validateStatusTransition(current, next, destinationType) {
     error.statusCode = 409;
     throw error;
   }
-  if (next === 'ready_at_hospital' && destinationType !== 'hospital') {
-    const error = new Error('ready_at_hospital is only valid for hospital delivery');
+  if (next === 'ready_at_hospital' && (destinationType !== 'hospital' || hospitalFulfillmentMethod !== 'ward_room_delivery')) {
+    const error = new Error('ready_at_hospital is only valid for hospital ward/room delivery');
+    error.statusCode = 422;
+    throw error;
+  }
+  if (next === 'ready_for_pickup' && (destinationType !== 'hospital' || hospitalFulfillmentMethod !== 'counter_pickup')) {
+    const error = new Error('ready_for_pickup is only valid for hospital counter pickup');
     error.statusCode = 422;
     throw error;
   }
   if (next === 'out_for_delivery' && destinationType !== 'home') {
-    const error = new Error('out_for_delivery is only valid for home delivery; use ready_at_hospital for hospital delivery');
+    const error = new Error('out_for_delivery is only valid for home delivery');
     error.statusCode = 422;
     throw error;
   }
