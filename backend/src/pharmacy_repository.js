@@ -273,7 +273,171 @@ async function updatePharmacyOrderStatus(id, nextStatus) {
   }
 }
 
+
+async function listPharmacyAdminStores() {
+  const db = await getDb();
+  if (!db) return null;
+  const { rows } = await db.query(`
+    SELECT s.id, s.name, s.store_type AS "storeType", s.hospital_id AS "hospitalId",
+           s.address, s.city, s.state, s.phone,
+           s.supports_hospital_delivery AS "supportsHospitalDelivery",
+           s.supports_home_delivery AS "supportsHomeDelivery",
+           s.is_active AS "isActive", s.approved_at AS "approvedAt",
+           COUNT(DISTINCT p.id)::int AS "productCount"
+      FROM pharmacy_stores s
+      LEFT JOIN pharmacy_products p ON p.store_id=s.id
+     GROUP BY s.id
+     ORDER BY s.created_at DESC
+     LIMIT 200`);
+  return rows;
+}
+
+async function createPharmacyStore(data) {
+  if (!data || typeof data !== 'object' || Array.isArray(data)) throw validationError('A store object is required');
+  const required = ['name', 'storeType', 'address', 'city', 'state'];
+  for (const key of required) {
+    if (typeof data[key] !== 'string' || !data[key].trim()) throw validationError(`${key} is required`);
+  }
+  for (const [key, max] of [['name',160],['address',240],['city',100],['state',100]]) {
+    if (data[key].trim().length > max) throw validationError(`${key} must be ${max} characters or fewer`);
+  }
+  if (!['hospital', 'partner'].includes(data.storeType)) throw validationError('storeType must be hospital or partner');
+  if (data.supportsHospitalDelivery !== true && data.supportsHomeDelivery !== true) {
+    throw validationError('At least one delivery capability must be enabled');
+  }
+  let hospitalId = null;
+  if (data.storeType === 'hospital') {
+    if (!isPositiveInteger(data.hospitalId)) throw validationError('hospitalId is required for a hospital pharmacy');
+    hospitalId = Number(data.hospitalId);
+  } else if (data.hospitalId != null && data.hospitalId !== '') {
+    throw validationError('Partner medical stores cannot be linked as a hospital pharmacy');
+  }
+  const phone = data.phone == null ? null : String(data.phone).trim();
+  if (phone && phone.length > 40) throw validationError('phone must be 40 characters or fewer');
+  const db = await getDb();
+  if (!db) return null;
+  if (hospitalId) {
+    const hospital = await db.query('SELECT id FROM hospitals WHERE id = $1 AND active = TRUE', [hospitalId]);
+    if (!hospital.rowCount) throw validationError('Active hospital not found', 404);
+  }
+  const { rows } = await db.query(`
+    INSERT INTO pharmacy_stores
+      (name, store_type, hospital_id, address, city, state, phone,
+       supports_hospital_delivery, supports_home_delivery, is_active, approved_at)
+    VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,FALSE,NULL)
+    RETURNING id, name, store_type AS "storeType", hospital_id AS "hospitalId",
+              address, city, state, phone,
+              supports_hospital_delivery AS "supportsHospitalDelivery",
+              supports_home_delivery AS "supportsHomeDelivery",
+              is_active AS "isActive", approved_at AS "approvedAt"`,
+    [data.name.trim(), data.storeType, hospitalId, data.address.trim(), data.city.trim(), data.state.trim(),
+     phone || null, data.supportsHospitalDelivery === true, data.supportsHomeDelivery === true]);
+  return rows[0];
+}
+
+async function updatePharmacyStoreApproval(id, data) {
+  if (!isPositiveInteger(id)) throw validationError('storeId must be a positive integer');
+  if (!data || typeof data !== 'object' || Array.isArray(data)) throw validationError('An approval object is required');
+  if (data.approved !== undefined && typeof data.approved !== 'boolean') throw validationError('approved must be true or false');
+  if (data.active !== undefined && typeof data.active !== 'boolean') throw validationError('active must be true or false');
+  const db = await getDb();
+  if (!db) return null;
+  const current = await db.query('SELECT is_active, approved_at FROM pharmacy_stores WHERE id = $1 FOR UPDATE', [Number(id)]);
+  if (!current.rowCount) throw validationError('Pharmacy store not found', 404);
+  const approved = data.approved === undefined ? Boolean(current.rows[0].approved_at) : data.approved;
+  const active = data.active === undefined ? Boolean(current.rows[0].is_active) : data.active;
+  if (active && !approved) throw validationError('A store must be approved before activation');
+  const { rows } = await db.query(`
+    UPDATE pharmacy_stores
+       SET is_active = $1,
+           approved_at = CASE WHEN $2 THEN COALESCE(approved_at, NOW()) ELSE NULL END,
+           updated_at = NOW()
+     WHERE id = $3
+     RETURNING id, name, store_type AS "storeType", is_active AS "isActive", approved_at AS "approvedAt"`,
+    [active, approved, Number(id)]);
+  return rows[0];
+}
+
+async function listPharmacyAdminProducts(storeId) {
+  if (!isPositiveInteger(storeId)) throw validationError('storeId must be a positive integer');
+  const db = await getDb();
+  if (!db) return null;
+  const store = await db.query('SELECT id FROM pharmacy_stores WHERE id = $1', [Number(storeId)]);
+  if (!store.rowCount) throw validationError('Pharmacy store not found', 404);
+  const { rows } = await db.query(`
+    SELECT id, store_id AS "storeId", sku, name, brand, strength, pack_size AS "packSize",
+           price, stock_quantity AS "stockQuantity", requires_prescription AS "requiresPrescription",
+           is_active AS "isActive"
+      FROM pharmacy_products WHERE store_id = $1 ORDER BY created_at DESC LIMIT 300`, [Number(storeId)]);
+  return rows;
+}
+
+async function createPharmacyProduct(storeId, data) {
+  if (!isPositiveInteger(storeId)) throw validationError('storeId must be a positive integer');
+  if (!data || typeof data !== 'object' || Array.isArray(data)) throw validationError('A product object is required');
+  if (typeof data.name !== 'string' || !data.name.trim() || data.name.trim().length > 180) throw validationError('name is required and must be 180 characters or fewer');
+  const price = Number(data.price);
+  const stock = data.stockQuantity == null || data.stockQuantity === '' ? 0 : Number(data.stockQuantity);
+  if (!Number.isFinite(price) || price < 0) throw validationError('price must be a non-negative number');
+  if (!Number.isSafeInteger(stock) || stock < 0 || stock > 10000000) throw validationError('stockQuantity must be a non-negative whole number');
+  for (const key of ['brand','strength','packSize','sku']) {
+    if (data[key] != null && (typeof data[key] !== 'string' || data[key].length > 120)) throw validationError(`${key} must be text of 120 characters or fewer`);
+  }
+  if (data.requiresPrescription !== undefined && typeof data.requiresPrescription !== 'boolean') throw validationError('requiresPrescription must be true or false');
+  if (data.active !== undefined && typeof data.active !== 'boolean') throw validationError('active must be true or false');
+  const db = await getDb();
+  if (!db) return null;
+  const store = await db.query('SELECT id FROM pharmacy_stores WHERE id = $1', [Number(storeId)]);
+  if (!store.rowCount) throw validationError('Pharmacy store not found', 404);
+  const { rows } = await db.query(`
+    INSERT INTO pharmacy_products
+      (store_id, sku, name, brand, strength, pack_size, price, stock_quantity, requires_prescription, is_active)
+    VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
+    RETURNING id, store_id AS "storeId", sku, name, brand, strength, pack_size AS "packSize",
+              price, stock_quantity AS "stockQuantity", requires_prescription AS "requiresPrescription",
+              is_active AS "isActive"`,
+    [Number(storeId), data.sku?.trim() || null, data.name.trim(), data.brand?.trim() || null,
+     data.strength?.trim() || null, data.packSize?.trim() || null, price, stock,
+     data.requiresPrescription !== false, data.active === true]);
+  return rows[0];
+}
+
+async function updatePharmacyProduct(id, data) {
+  if (!isPositiveInteger(id)) throw validationError('productId must be a positive integer');
+  if (!data || typeof data !== 'object' || Array.isArray(data)) throw validationError('A product update object is required');
+  const allowed = ['price','stockQuantity','requiresPrescription','active'];
+  if (!allowed.some(key => data[key] !== undefined)) throw validationError('Provide price, stockQuantity, requiresPrescription or active');
+  if (data.price !== undefined && (!Number.isFinite(Number(data.price)) || Number(data.price) < 0)) throw validationError('price must be non-negative');
+  if (data.stockQuantity !== undefined && (!Number.isSafeInteger(Number(data.stockQuantity)) || Number(data.stockQuantity) < 0 || Number(data.stockQuantity) > 10000000)) throw validationError('stockQuantity must be a non-negative whole number');
+  if (data.requiresPrescription !== undefined && typeof data.requiresPrescription !== 'boolean') throw validationError('requiresPrescription must be true or false');
+  if (data.active !== undefined && typeof data.active !== 'boolean') throw validationError('active must be true or false');
+  const db = await getDb();
+  if (!db) return null;
+  const { rows } = await db.query(`
+    UPDATE pharmacy_products
+       SET price = COALESCE($1, price),
+           stock_quantity = COALESCE($2, stock_quantity),
+           requires_prescription = COALESCE($3, requires_prescription),
+           is_active = COALESCE($4, is_active),
+           updated_at = NOW()
+     WHERE id = $5
+     RETURNING id, store_id AS "storeId", name, price, stock_quantity AS "stockQuantity",
+               requires_prescription AS "requiresPrescription", is_active AS "isActive"`,
+    [data.price === undefined ? null : Number(data.price),
+     data.stockQuantity === undefined ? null : Number(data.stockQuantity),
+     data.requiresPrescription === undefined ? null : data.requiresPrescription,
+     data.active === undefined ? null : data.active, Number(id)]);
+  if (!rows.length) throw validationError('Pharmacy product not found', 404);
+  return rows[0];
+}
+
 module.exports = {
+  listPharmacyAdminStores,
+  createPharmacyStore,
+  updatePharmacyStoreApproval,
+  listPharmacyAdminProducts,
+  createPharmacyProduct,
+  updatePharmacyProduct,
   listPharmacyStores,
   listPharmacyDeliveryHospitals,
   listPharmacyProducts,
