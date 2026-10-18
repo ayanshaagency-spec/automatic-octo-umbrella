@@ -40,6 +40,10 @@ test('Phase 7 pharmacy API smoke and fail-closed contract', async t => {
   assert.equal(stores.status, 503);
   assert.match((await stores.json()).error, /database/i);
 
+  const hospitals = await fetch(`${BASE_URL}/api/pharmacy/hospitals`);
+  assert.equal(hospitals.status, 503);
+  assert.match((await hospitals.json()).error, /database/i);
+
   const invalidProducts = await fetch(`${BASE_URL}/api/pharmacy/products?storeId=0`);
   assert.equal(invalidProducts.status, 422);
   assert.match((await invalidProducts.json()).error, /storeId/i);
