@@ -344,6 +344,8 @@ function togglePharmacyDestination() {
   $('pharmacyHomeDestination').hidden=hospital;
   $('pharmacyHospitalId').disabled=!hospital;
   $('pharmacyHospitalId').required=hospital;
+  const fulfillment=$('pharmacyHospitalFulfillmentMethod');
+  if(fulfillment)fulfillment.disabled=!hospital;
   ['pharmacyHomeAddress','pharmacyHomeCity','pharmacyHomeState','pharmacyHomePostalCode','pharmacyRecipientName','pharmacyRecipientPhone'].forEach(id=>{
     const el=$(id);if(!el)return;
     el.disabled=hospital;
@@ -385,6 +387,7 @@ async function submitPharmacyOrder(event) {
   };
   if($('pharmacyPrescriptionId').value)payload.prescriptionId=Number($('pharmacyPrescriptionId').value);
   if(destinationType==='hospital') {
+    payload.hospitalFulfillmentMethod=$('pharmacyHospitalFulfillmentMethod').value;
     payload.hospitalId=Number($('pharmacyHospitalId').value);
     payload.recipientName=$('patientName').value.trim()||null;
     payload.recipientPhone=phone;
@@ -428,7 +431,7 @@ async function refreshMyPharmacyOrders() {
     $('myPharmacyOrders').innerHTML=orders.map(order=>
       '<article class="mini pharmacy-card"><strong>'+escapeHtml(order.order_number)+'</strong>'+
       '<span>'+escapeHtml(order.pharmacy_name)+' • '+escapeHtml(order.pharmacy_type==='hospital'?'Hospital Pharmacy':'Partner Store')+'</span>'+
-      '<small>Delivery: '+escapeHtml(order.destination_type==='hospital'?'Hospital — '+(order.hospital_name||'selected hospital'):'Patient home — '+(order.city||''))+'</small>'+
+      '<small>Delivery: '+escapeHtml(order.destination_type==='hospital'?'Hospital — '+(order.hospital_name||'selected hospital')+' • '+(order.hospital_fulfillment_method==='counter_pickup'?'Counter pickup':'Ward / room delivery'):'Patient home — '+(order.city||''))+'</small>'+
       '<small>Status: '+escapeHtml(order.order_status)+' • Subtotal ₹'+Number(order.subtotal).toFixed(2)+'</small>'+
       '<small>'+escapeHtml((order.items||[]).map(i=>i.medicine_name+' × '+i.quantity).join(', '))+'</small>'+
       (order.order_status==='requested'?'<button type="button" class="secondary" onclick="cancelMyPharmacyOrder('+Number(order.id)+')">Cancel request</button>':'')+'</article>'
@@ -492,11 +495,12 @@ async function refreshPharmacyStaffOrders() {
       }
       if(order.order_status==='accepted')buttons.push('<button type="button" class="secondary" onclick="changePharmacyOrderStatus('+Number(order.id)+',\'packed\')">Mark packed</button>');
       if(order.order_status==='packed'&&order.destination_type==='home')buttons.push('<button type="button" class="secondary" onclick="changePharmacyOrderStatus('+Number(order.id)+',\'out_for_delivery\')">Send for delivery</button>');
-      if(order.order_status==='packed'&&order.destination_type==='hospital')buttons.push('<button type="button" class="secondary" onclick="changePharmacyOrderStatus('+Number(order.id)+',\'ready_at_hospital\')">Ready at hospital</button>');
-      if(['out_for_delivery','ready_at_hospital'].includes(order.order_status))buttons.push('<button type="button" class="primary" onclick="changePharmacyOrderStatus('+Number(order.id)+',\'delivered\')">Mark delivered</button>');
+      if(order.order_status==='packed'&&order.destination_type==='hospital'&&order.hospital_fulfillment_method==='counter_pickup')buttons.push('<button type="button" class="secondary" onclick="changePharmacyOrderStatus('+Number(order.id)+',\'ready_for_pickup\')">Ready for counter pickup</button>');
+      if(order.order_status==='packed'&&order.destination_type==='hospital'&&order.hospital_fulfillment_method==='ward_room_delivery')buttons.push('<button type="button" class="secondary" onclick="changePharmacyOrderStatus('+Number(order.id)+',\'ready_at_hospital\')">Ready for ward / room</button>');
+      if(['out_for_delivery','ready_at_hospital','ready_for_pickup'].includes(order.order_status))buttons.push('<button type="button" class="primary" onclick="changePharmacyOrderStatus('+Number(order.id)+',\'delivered\')">Mark completed</button>');
       return '<article class="mini pharmacy-card"><strong>'+escapeHtml(order.order_number)+'</strong>'+
         '<span>Patient: '+escapeHtml(order.patient_name)+' • '+escapeHtml(order.patient_phone)+'</span>'+
-        '<small>Destination: '+escapeHtml(order.destination_type==='hospital'?'Hospital — '+(order.hospital_name||''):'Home — '+(order.city||''))+'</small>'+
+        '<small>Destination: '+escapeHtml(order.destination_type==='hospital'?'Hospital — '+(order.hospital_name||'')+' • '+(order.hospital_fulfillment_method==='counter_pickup'?'Counter pickup':'Ward / room delivery'):'Home — '+(order.city||''))+'</small>'+
         '<small>Status: '+escapeHtml(order.order_status)+' • ₹'+Number(order.subtotal).toFixed(2)+'</small>'+
         '<small>Items: '+escapeHtml((order.items||[]).map(i=>i.medicine_name+' × '+i.quantity).join(', '))+'</small>'+
         '<div class="pharmacy-actions">'+buttons.join('')+'</div></article>';
