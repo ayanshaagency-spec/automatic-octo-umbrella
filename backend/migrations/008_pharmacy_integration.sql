@@ -88,6 +88,7 @@ CREATE TABLE IF NOT EXISTS pharmacy_orders (
   pharmacy_id BIGINT NOT NULL REFERENCES pharmacies(id) ON DELETE RESTRICT,
   prescription_id BIGINT REFERENCES prescriptions(id) ON DELETE RESTRICT,
   destination_type VARCHAR(16) NOT NULL CHECK (destination_type IN ('hospital', 'home')),
+  hospital_fulfillment_method VARCHAR(24),
   hospital_id BIGINT REFERENCES hospitals(id) ON DELETE RESTRICT,
   address_line TEXT,
   city VARCHAR(100),
@@ -97,18 +98,43 @@ CREATE TABLE IF NOT EXISTS pharmacy_orders (
   recipient_phone VARCHAR(40),
   delivery_instructions TEXT,
   order_status VARCHAR(32) NOT NULL DEFAULT 'requested'
-    CHECK (order_status IN ('requested', 'accepted', 'rejected', 'packed', 'out_for_delivery', 'ready_at_hospital', 'delivered', 'cancelled')),
+    CHECK (order_status IN ('requested', 'accepted', 'rejected', 'packed', 'out_for_delivery', 'ready_at_hospital', 'ready_for_pickup', 'delivered', 'cancelled')),
   subtotal NUMERIC(12,2) NOT NULL CHECK (subtotal >= 0),
   currency VARCHAR(3) NOT NULL DEFAULT 'INR',
   idempotency_key VARCHAR(160),
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-  CHECK (
-    (destination_type = 'hospital' AND hospital_id IS NOT NULL)
+  CONSTRAINT pharmacy_orders_destination_fulfillment_check CHECK (
+    (destination_type = 'hospital' AND hospital_id IS NOT NULL
+      AND hospital_fulfillment_method IN ('counter_pickup', 'ward_room_delivery'))
     OR
-    (destination_type = 'home' AND address_line IS NOT NULL AND LENGTH(TRIM(address_line)) > 0)
+    (destination_type = 'home' AND hospital_fulfillment_method IS NULL
+      AND address_line IS NOT NULL AND LENGTH(TRIM(address_line)) > 0)
   )
 );
+
+ALTER TABLE pharmacy_orders ADD COLUMN IF NOT EXISTS hospital_fulfillment_method VARCHAR(24);
+UPDATE pharmacy_orders SET hospital_fulfillment_method = 'counter_pickup'
+ WHERE destination_type = 'hospital' AND hospital_fulfillment_method IS NULL;
+DO $pharmacy_fulfillment$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint
+     WHERE conname = 'pharmacy_orders_destination_fulfillment_check'
+       AND conrelid = 'pharmacy_orders'::regclass
+  ) THEN
+    ALTER TABLE pharmacy_orders ADD CONSTRAINT pharmacy_orders_destination_fulfillment_check CHECK (
+      (destination_type = 'hospital' AND hospital_id IS NOT NULL
+        AND hospital_fulfillment_method IN ('counter_pickup', 'ward_room_delivery'))
+      OR
+      (destination_type = 'home' AND hospital_fulfillment_method IS NULL
+        AND address_line IS NOT NULL AND LENGTH(TRIM(address_line)) > 0)
+    ) NOT VALID;
+  END IF;
+END
+$pharmacy_fulfillment$;
+ALTER TABLE pharmacy_orders VALIDATE CONSTRAINT pharmacy_orders_destination_fulfillment_check;
+
 CREATE UNIQUE INDEX IF NOT EXISTS idx_pharmacy_orders_idempotency
   ON pharmacy_orders (patient_id, idempotency_key)
   WHERE idempotency_key IS NOT NULL;
