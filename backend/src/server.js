@@ -235,6 +235,29 @@ const server=http.createServer(async(req,res)=>{
     catch(e) { if(e.statusCode)return send(res,e.statusCode,{error:e.message}); return send(res,503,{error:'Unable to update payment status'}); }
   });
 
+
+  if(url.pathname==='/api/pharmacy/admin/stores'&&req.method==='GET'){
+    try {
+      const rows=await listPharmacyAdminStores();
+      if(rows===null)return send(res,503,{error:'DATABASE_URL not configured'});
+      return send(res,200,rows);
+    } catch(e) {
+      if(e.statusCode)return send(res,e.statusCode,{error:e.message});
+      return send(res,503,{error:'Unable to load pharmacy admin directory'});
+    }
+  }
+  if(url.pathname==='/api/pharmacy/admin/stores'&&req.method==='POST')return parseBody(req,async(err,data)=>{
+    if(err)return send(res,400,{error:'Invalid JSON'});
+    try {
+      const saved=await createPharmacyStore(data);
+      if(saved)return send(res,201,saved);
+      return send(res,503,{error:'DATABASE_URL not configured'});
+    } catch(e) {
+      if(e.statusCode)return send(res,e.statusCode,{error:e.message});
+      return send(res,503,{error:'Unable to register pharmacy store'});
+    }
+  });
+
   if(url.pathname==='/api/pharmacy/stores'&&req.method==='GET'){
     try {
       const rows=await listPharmacyStores({
