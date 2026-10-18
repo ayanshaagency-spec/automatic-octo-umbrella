@@ -153,7 +153,7 @@ async function createPharmacyOrder(data) {
     const productResult = await db.query(`
       SELECT id, name, price, stock_quantity, requires_prescription
         FROM pharmacy_products
-       WHERE store_id = $1 AND is_active = TRUE AND id = ANY($2::int[])
+       WHERE store_id = $1 AND is_active = TRUE AND id = ANY($2::bigint[])
        ORDER BY id
        FOR UPDATE`, [storeId, ids]);
     if (productResult.rowCount !== ids.length) {
