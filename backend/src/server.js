@@ -16,6 +16,7 @@ const { validateCoordinates, emergencyResponse } = require('./phase6_emergency')
 const { listNearbyHospitals } = require('./phase6_hospital_repository');
 const { isConfigured: isWhatsAppConfigured, sendTemplateMessage, sendAppointmentConfirmation } = require('./whatsapp_service');
 const { getCorsHeaders } = require('./cors');
+const { listPharmacyStores, listPharmacyProducts, listPharmacyOrders, createPharmacyOrder, updatePharmacyOrderStatus } = require('./pharmacy_repository');
 const send=(res,code,data)=>{const headers={...(res.__corsHeaders||{}),'Content-Type':'application/json','Access-Control-Allow-Methods':'GET,POST,PATCH,OPTIONS','Access-Control-Allow-Headers':'Content-Type,Authorization,X-Payment-Signature'};res.writeHead(code,headers);res.end(JSON.stringify(data));};
 const parseBody=(req,done)=>{let body='';req.on('data',c=>body+=c);req.on('end',()=>{try{done(null,JSON.parse(body||'{}'));}catch(e){done(e);}});};
 const parseRawBody=(req,done)=>{let body='';req.setEncoding('utf8');req.on('data',c=>body+=c);req.on('end',()=>done(null,body));req.on('error',done);};
@@ -56,7 +57,7 @@ const server=http.createServer(async(req,res)=>{
   const isProduction = process.env.NODE_ENV === 'production';
   const bearer = (req.headers.authorization || '').match(/^Bearer\s+(.+)$/i);
   const claims = bearer ? verifyAccessToken(bearer[1]) : null;
-  const patientRoutes = ['/api/appointments','/api/prescriptions','/api/health-records','/api/lab-orders','/api/payments'];
+  const patientRoutes = ['/api/appointments','/api/prescriptions','/api/health-records','/api/lab-orders','/api/payments','/api/pharmacy/orders'];
   if(isProduction && (patientRoutes.some(path => url.pathname === path || url.pathname.startsWith(path + '/')))) {
     if(url.pathname === '/api/payments/webhook') { /* verified by payment webhook signature below */ }
     else {
@@ -68,7 +69,7 @@ const server=http.createServer(async(req,res)=>{
       if(/\/status$/.test(url.pathname) && req.method === 'PATCH') return send(res,403,{error:'Staff authorization required'});
     }
   }
-  if(isProduction && (url.pathname === '/api/dashboard/summary' || url.pathname === '/api/whatsapp/template')) {
+  if(isProduction && (url.pathname === '/api/dashboard/summary' || url.pathname === '/api/whatsapp/template' || /^\\/api\\/pharmacy\\/orders\\/\\d+\\/status$/.test(url.pathname))) {
     const adminClaims = bearer ? verifyAdminToken(bearer[1]) : null;
     if(!adminClaims) return send(res,401,{error:'Admin authentication required'});
     req.admin = adminClaims;
@@ -232,6 +233,70 @@ const server=http.createServer(async(req,res)=>{
     try { const saved=await updatePaymentStatus(Number(paymentStatusMatch[1]),data.status,data.providerPaymentId); if(saved)return send(res,200,saved); return send(res,503,{error:'DATABASE_URL not configured'}); }
     catch(e) { if(e.statusCode)return send(res,e.statusCode,{error:e.message}); return send(res,503,{error:'Unable to update payment status'}); }
   });
+
+  if(url.pathname==='/api/pharmacy/stores'&&req.method==='GET'){
+    try {
+      const rows=await listPharmacyStores({
+        storeType:url.searchParams.get('storeType')||null,
+        deliveryMethod:url.searchParams.get('deliveryMethod')||null,
+        city:url.searchParams.get('city')||null
+      });
+      if(rows===null)return send(res,503,{error:'DATABASE_URL not configured'});
+      return send(res,200,rows);
+    } catch(e) {
+      if(e.statusCode)return send(res,e.statusCode,{error:e.message});
+      return send(res,503,{error:'Unable to load pharmacy stores'});
+    }
+  }
+  if(url.pathname==='/api/pharmacy/products'&&req.method==='GET'){
+    try {
+      const rows=await listPharmacyProducts(url.searchParams.get('storeId'));
+      if(rows===null)return send(res,503,{error:'DATABASE_URL not configured'});
+      return send(res,200,rows);
+    } catch(e) {
+      if(e.statusCode)return send(res,e.statusCode,{error:e.message});
+      return send(res,503,{error:'Unable to load pharmacy products'});
+    }
+  }
+  if(url.pathname==='/api/pharmacy/orders'&&req.method==='GET'){
+    const phone=url.searchParams.get('phone');
+    if(!phone)return send(res,422,{error:'phone is required'});
+    if(isProduction && phone.trim() !== req.auth?.phone)return send(res,403,{error:'Access denied'});
+    try {
+      const rows=await listPharmacyOrders(phone);
+      if(rows===null)return send(res,503,{error:'DATABASE_URL not configured'});
+      return send(res,200,rows);
+    } catch(e) {
+      if(e.statusCode)return send(res,e.statusCode,{error:e.message});
+      return send(res,503,{error:'Unable to load pharmacy orders'});
+    }
+  }
+  if(url.pathname==='/api/pharmacy/orders'&&req.method==='POST')return parseBody(req,async(err,data)=>{
+    if(err)return send(res,400,{error:'Invalid JSON'});
+    if(isProduction && String(data.phone||'').trim() !== req.auth?.phone)return send(res,403,{error:'Access denied'});
+    try {
+      const saved=await createPharmacyOrder(data);
+      if(saved)return send(res,201,saved);
+      return send(res,503,{error:'DATABASE_URL not configured'});
+    } catch(e) {
+      if(e.statusCode)return send(res,e.statusCode,{error:e.message});
+      return send(res,503,{error:'Unable to create pharmacy order'});
+    }
+  });
+  const pharmacyStatusMatch=url.pathname.match(/^\\/api\\/pharmacy\\/orders\\/(\\d+)\\/status$/);
+  if(pharmacyStatusMatch&&req.method==='PATCH')return parseBody(req,async(err,data)=>{
+    if(err)return send(res,400,{error:'Invalid JSON'});
+    if(isProduction && !req.admin)return send(res,401,{error:'Admin authentication required'});
+    try {
+      const saved=await updatePharmacyOrderStatus(Number(pharmacyStatusMatch[1]),data.status);
+      if(saved)return send(res,200,saved);
+      return send(res,503,{error:'DATABASE_URL not configured'});
+    } catch(e) {
+      if(e.statusCode)return send(res,e.statusCode,{error:e.message});
+      return send(res,503,{error:'Unable to update pharmacy order status'});
+    }
+  });
+
   send(res,404,{error:'Not found'});
 });
 server.listen(PORT,()=>console.log(`Ayansha API running on ${PORT}`));
