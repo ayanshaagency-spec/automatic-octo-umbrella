@@ -14,8 +14,8 @@ const { isAuthorizedPaymentStatusUpdate } = require('./payment_status_authorizat
 const { validateCoordinates, emergencyResponse } = require('./phase6_emergency');
 const { listNearbyHospitals } = require('./phase6_hospital_repository');
 const { isConfigured: isWhatsAppConfigured, sendTemplateMessage, sendAppointmentConfirmation } = require('./whatsapp_service');
-const allowedOrigin = process.env.ALLOWED_ORIGIN || (process.env.NODE_ENV === 'production' ? '' : '*');
-const send=(res,code,data)=>{const headers={'Content-Type':'application/json','Access-Control-Allow-Methods':'GET,POST,PATCH,OPTIONS','Access-Control-Allow-Headers':'Content-Type,Authorization,X-Payment-Signature'};if(allowedOrigin)headers['Access-Control-Allow-Origin']=allowedOrigin;res.writeHead(code,headers);res.end(JSON.stringify(data));};
+const { getCorsHeaders } = require('./cors');
+const send=(res,code,data)=>{const headers={...(res.__corsHeaders||{}),'Content-Type':'application/json','Access-Control-Allow-Methods':'GET,POST,PATCH,OPTIONS','Access-Control-Allow-Headers':'Content-Type,Authorization,X-Payment-Signature'};res.writeHead(code,headers);res.end(JSON.stringify(data));};
 const parseBody=(req,done)=>{let body='';req.on('data',c=>body+=c);req.on('end',()=>{try{done(null,JSON.parse(body||'{}'));}catch(e){done(e);}});};
 const parseRawBody=(req,done)=>{let body='';req.setEncoding('utf8');req.on('data',c=>body+=c);req.on('end',()=>done(null,body));req.on('error',done);};
 const getDashboardSummary=async()=>{
@@ -49,6 +49,7 @@ const getDashboardSummary=async()=>{
   return {counts:counts.rows[0],appointments:today.rows[0],payments:revenue.rows[0],recentAppointments:recent.rows};
 };
 const server=http.createServer(async(req,res)=>{
+  res.__corsHeaders = getCorsHeaders(req.headers.origin, process.env);
   if(req.method==='OPTIONS') return send(res,204,{});
   const url = new URL(req.url, `http://${req.headers.host || 'localhost'}`);
   const isProduction = process.env.NODE_ENV === 'production';
