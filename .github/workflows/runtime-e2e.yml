@@ -73,7 +73,7 @@ jobs:
           const fs = require('node:fs');
           const { spawn } = require('node:child_process');
           const { Client } = require('pg');
-          const { hashStaffPassword } = require('./src/pharmacy_auth');
+          const { hashStaffPassword, verifyStaffPassword } = require('./src/pharmacy_auth');
 
           const databaseUrl = process.env.DATABASE_URL;
           const port = Number(process.env.PORT || 3919);
@@ -151,6 +151,8 @@ jobs:
                 "INSERT INTO pharmacy_staff(pharmacy_id,email,password_hash,staff_role) VALUES ($1,'partner-manager@example.test',$2,'manager'),($3,'hospital-manager@example.test',$4,'manager')",
                 [partnerId, hashStaffPassword(staffPassword), hospitalPharmacyId, hashStaffPassword(staffPassword)]
               );
+              const seededStaff = await db.query("SELECT email, password_hash FROM pharmacy_staff ORDER BY id");
+              assert(seededStaff.rowCount === 2 && seededStaff.rows.every(row => verifyStaffPassword(staffPassword, row.password_hash)), 'Seeded pharmacy staff password hashes did not verify');
               await db.end();
               db = null;
 
@@ -192,7 +194,7 @@ jobs:
               const partnerStaff = await api('/api/pharmacy/staff/login', {
                 method: 'POST', body: JSON.stringify({ email: 'partner-manager@example.test', password: staffPassword })
               });
-              assert(partnerStaff.status === 200 && partnerStaff.data.token, 'Partner store staff login failed');
+              assert(partnerStaff.status === 200 && partnerStaff.data.token, 'Partner store staff login failed: HTTP ' + partnerStaff.status + ' ' + JSON.stringify(partnerStaff.data));
               const second = await makeOrder(partnerId, 'home', Number(partnerInventory.rows[0].id), 3, 'ci-home-delivery', homePayload);
               assert(second.status === 201, 'Second home order was not created');
               const authPartner = { authorization: 'Bearer ' + partnerStaff.data.token };
