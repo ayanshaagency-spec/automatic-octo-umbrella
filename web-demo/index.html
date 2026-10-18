@@ -69,6 +69,12 @@
               <h3>Delivery destination</h3>
               <label>Deliver to<select id="pharmacyDestinationType" required><option value="hospital">Hospital / ward / OPD</option><option value="home">Patient’s home</option></select></label>
               <div id="pharmacyHospitalDestination" class="destination-fields">
+                <label>Hospital fulfillment
+                  <select id="pharmacyHospitalFulfillmentMethod" required>
+                    <option value="counter_pickup">Counter pickup — collect from the hospital pharmacy counter</option>
+                    <option value="ward_room_delivery">Ward / room delivery — deliver to the patient inside the hospital</option>
+                  </select>
+                </label>
                 <label>Hospital<select id="pharmacyHospitalId" required><option value="">Find and choose a hospital</option></select></label>
                 <div class="form-row"><input id="pharmacyLat" type="number" step="any" value="28.6139" placeholder="Latitude" aria-label="Hospital search latitude"><input id="pharmacyLng" type="number" step="any" value="77.2090" placeholder="Longitude" aria-label="Hospital search longitude"><button id="findPharmacyHospitalsButton" type="button" class="secondary">Find hospitals</button></div>
                 <label>Ward / OPD / delivery instructions<input id="pharmacyHospitalInstructions" maxlength="500" placeholder="Ward, OPD or pickup desk (optional)"></label>
