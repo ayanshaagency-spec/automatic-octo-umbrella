@@ -16,7 +16,7 @@ const { validateCoordinates, emergencyResponse } = require('./phase6_emergency')
 const { listNearbyHospitals } = require('./phase6_hospital_repository');
 const { isConfigured: isWhatsAppConfigured, sendTemplateMessage, sendAppointmentConfirmation } = require('./whatsapp_service');
 const { getCorsHeaders } = require('./cors');
-const { listPharmacyStores, listPharmacyDeliveryHospitals, listPharmacyProducts, listPharmacyOrders, createPharmacyOrder, updatePharmacyOrderStatus, listPharmacyAdminStores, createPharmacyStore, updatePharmacyStoreApproval, listPharmacyAdminProducts, createPharmacyProduct, updatePharmacyProduct } = require('./pharmacy_repository');
+const { listPharmacyStores, listPharmacyDeliveryHospitals, listPharmacyProducts, listPharmacyOrders, createPharmacyOrder, updatePharmacyOrderStatus, listPharmacyAdminOrders, listPharmacyAdminStores, createPharmacyStore, updatePharmacyStoreApproval, listPharmacyAdminProducts, createPharmacyProduct, updatePharmacyProduct } = require('./pharmacy_repository');
 const send=(res,code,data)=>{const headers={...(res.__corsHeaders||{}),'Content-Type':'application/json','Access-Control-Allow-Methods':'GET,POST,PATCH,OPTIONS','Access-Control-Allow-Headers':'Content-Type,Authorization,X-Payment-Signature'};res.writeHead(code,headers);res.end(JSON.stringify(data));};
 const parseBody=(req,done)=>{let body='';req.on('data',c=>body+=c);req.on('end',()=>{try{done(null,JSON.parse(body||'{}'));}catch(e){done(e);}});};
 const parseRawBody=(req,done)=>{let body='';req.setEncoding('utf8');req.on('data',c=>body+=c);req.on('end',()=>done(null,body));req.on('error',done);};
@@ -234,6 +234,18 @@ const server=http.createServer(async(req,res)=>{
     try { const saved=await updatePaymentStatus(Number(paymentStatusMatch[1]),data.status,data.providerPaymentId); if(saved)return send(res,200,saved); return send(res,503,{error:'DATABASE_URL not configured'}); }
     catch(e) { if(e.statusCode)return send(res,e.statusCode,{error:e.message}); return send(res,503,{error:'Unable to update payment status'}); }
   });
+
+  if(url.pathname==='/api/pharmacy/admin/orders'&&req.method==='GET'){
+    try {
+      const rows=await listPharmacyAdminOrders({status:url.searchParams.get('status')||null,storeId:url.searchParams.get('storeId')||null});
+      if(rows===null)return send(res,503,{error:'DATABASE_URL not configured'});
+      return send(res,200,rows);
+    } catch(e) {
+      if(e.statusCode)return send(res,e.statusCode,{error:e.message});
+      return send(res,503,{error:'Unable to load pharmacy order queue'});
+    }
+  }
+
   if(url.pathname==='/api/pharmacy/admin/stores'&&req.method==='GET'){
     try { const rows=await listPharmacyAdminStores(); if(rows===null)return send(res,503,{error:'DATABASE_URL not configured'}); return send(res,200,rows); }
     catch(e) { if(e.statusCode)return send(res,e.statusCode,{error:e.message}); return send(res,503,{error:'Unable to load pharmacy admin directory'}); }
