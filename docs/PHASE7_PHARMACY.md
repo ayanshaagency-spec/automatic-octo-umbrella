@@ -13,6 +13,10 @@ This phase adds a pharmacy directory and order workflow to the existing Ayansha 
 
 ## API endpoints
 
+- `GET /api/pharmacy/admin/stores` and `POST /api/pharmacy/admin/stores` to register real stores (new registrations are inactive).
+- `PATCH /api/pharmacy/admin/stores/:id/approval` to approve/activate or deactivate a store.
+- `GET/POST /api/pharmacy/admin/stores/:id/products` to review or add catalogue entries; `PATCH /api/pharmacy/admin/products/:id` to change stock, price, prescription flag or product activation.
+- `GET /api/pharmacy/admin/orders?status=...` to review the queue; allowed order-state changes use `PATCH /api/pharmacy/orders/:id/status`.
 - `GET /api/pharmacy/stores?storeType=hospital|partner&deliveryMethod=hospital|home&city=...`
 - `GET /api/pharmacy/hospitals?city=...`
 - `GET /api/pharmacy/products?storeId=...`
@@ -38,7 +42,7 @@ For a hospital delivery order, send `deliveryHospitalId`. For home delivery, sen
 2. After explicit approval, apply it to the intended database using the command in the migration header. This migration is idempotent and does not seed data, but is still a database change and must be reviewed.
 3. Register hospital pharmacies and external partner stores, verify their licenses and service details, and keep them inactive until approved.
 4. Enter catalogues, prices, stock counts, prescription flags and delivery capabilities. Confirm expiry/batch/recall tracking requirements before handling real prescriptions.
-5. Configure a patient authentication/OTP provider and a separate store-staff access model before enabling patient order creation or external partners' self-service operations in production. The current production SMS OTP adapter is not configured.
+5. Configure a patient authentication/OTP provider before enabling production patient ordering. The current production SMS OTP adapter is not configured. Store onboarding, approval, inventory editing and the order queue are admin-only; partner self-service sign-in is not included in this MVP.
 6. Link pharmacy payments/webhooks and real dispatch/WhatsApp notifications in a separate approved integration.
 7. Run CI and staging end-to-end checks before approving any release.
 
