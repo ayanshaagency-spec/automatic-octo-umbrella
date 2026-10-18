@@ -60,6 +60,43 @@ test('Phase 7 pharmacy API smoke and fail-closed contract', async t => {
   assert.equal(invalidOrder.status, 422);
   assert.match((await invalidOrder.json()).error, /deliveryMethod|items/i);
 
+
+  const adminStoreList = await fetch(`${BASE_URL}/api/pharmacy/admin/stores`);
+  assert.equal(adminStoreList.status, 503);
+  assert.match((await adminStoreList.json()).error, /database/i);
+
+  const invalidStore = await fetch(`${BASE_URL}/api/pharmacy/admin/stores`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({})
+  });
+  assert.equal(invalidStore.status, 422);
+  assert.match((await invalidStore.json()).error, /name/);
+
+  const invalidApproval = await fetch(`${BASE_URL}/api/pharmacy/admin/stores/0/approval`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ approved: true, active: true })
+  });
+  assert.equal(invalidApproval.status, 422);
+  assert.match((await invalidApproval.json()).error, /storeId/);
+
+  const invalidProduct = await fetch(`${BASE_URL}/api/pharmacy/admin/stores/1/products`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({})
+  });
+  assert.equal(invalidProduct.status, 422);
+  assert.match((await invalidProduct.json()).error, /name/);
+
+  const invalidProductUpdate = await fetch(`${BASE_URL}/api/pharmacy/admin/products/0`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ active: true })
+  });
+  assert.equal(invalidProductUpdate.status, 422);
+  assert.match((await invalidProductUpdate.json()).error, /productId/);
+
   const validOrderWithoutDb = await fetch(`${BASE_URL}/api/pharmacy/orders`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
