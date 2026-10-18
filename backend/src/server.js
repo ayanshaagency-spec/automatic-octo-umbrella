@@ -16,7 +16,7 @@ const { validateCoordinates, emergencyResponse } = require('./phase6_emergency')
 const { listNearbyHospitals } = require('./phase6_hospital_repository');
 const { isConfigured: isWhatsAppConfigured, sendTemplateMessage, sendAppointmentConfirmation } = require('./whatsapp_service');
 const { getCorsHeaders } = require('./cors');
-const { listPharmacyStores, listPharmacyProducts, listPharmacyOrders, createPharmacyOrder, updatePharmacyOrderStatus } = require('./pharmacy_repository');
+const { listPharmacyStores, listPharmacyDeliveryHospitals, listPharmacyProducts, listPharmacyOrders, createPharmacyOrder, updatePharmacyOrderStatus } = require('./pharmacy_repository');
 const send=(res,code,data)=>{const headers={...(res.__corsHeaders||{}),'Content-Type':'application/json','Access-Control-Allow-Methods':'GET,POST,PATCH,OPTIONS','Access-Control-Allow-Headers':'Content-Type,Authorization,X-Payment-Signature'};res.writeHead(code,headers);res.end(JSON.stringify(data));};
 const parseBody=(req,done)=>{let body='';req.on('data',c=>body+=c);req.on('end',()=>{try{done(null,JSON.parse(body||'{}'));}catch(e){done(e);}});};
 const parseRawBody=(req,done)=>{let body='';req.setEncoding('utf8');req.on('data',c=>body+=c);req.on('end',()=>done(null,body));req.on('error',done);};
@@ -249,6 +249,18 @@ const server=http.createServer(async(req,res)=>{
       return send(res,503,{error:'Unable to load pharmacy stores'});
     }
   }
+
+  if(url.pathname==='/api/pharmacy/hospitals'&&req.method==='GET'){
+    try {
+      const rows=await listPharmacyDeliveryHospitals(url.searchParams.get('city'));
+      if(rows===null)return send(res,503,{error:'DATABASE_URL not configured'});
+      return send(res,200,rows);
+    } catch(e) {
+      if(e.statusCode)return send(res,e.statusCode,{error:e.message});
+      return send(res,503,{error:'Unable to load delivery hospitals'});
+    }
+  }
+
   if(url.pathname==='/api/pharmacy/products'&&req.method==='GET'){
     try {
       const rows=await listPharmacyProducts(url.searchParams.get('storeId'));
