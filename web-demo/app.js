@@ -23,10 +23,26 @@ async function api(path,options={}){
 
 async function loadDoctorsForForm(){
   const select=$('doctorId');
+  const status=$('doctorDirectoryStatus');
+  const submit=$('appointmentSubmitButton');
+  if(select) select.disabled=true;
+  if(submit) submit.disabled=true;
+  if(status) status.textContent='Loading doctor directory…';
   try{
     const doctors=await api('/doctors');
-    select.innerHTML='<option value="">Select doctor</option>'+(doctors||[]).map(d=>'<option value="'+escapeHtml(d.id)+'">'+escapeHtml(d.name)+' • '+escapeHtml(d.specialty||'')+'</option>').join('');
-  }catch(e){ select.innerHTML='<option value="">Doctors unavailable</option>'; }
+    if(!Array.isArray(doctors)||doctors.length===0){
+      select.innerHTML='<option value="">No doctors available</option>';
+      if(status) status.textContent='No doctors are currently configured in the live directory. Appointment booking is unavailable until verified doctor records are added.';
+      return;
+    }
+    select.innerHTML='<option value="">Select doctor</option>'+(doctors).map(d=>'<option value="'+escapeHtml(d.id)+'">'+escapeHtml(d.name)+' • '+escapeHtml(d.specialty||'')+'</option>').join('');
+    select.disabled=false;
+    if(submit) submit.disabled=false;
+    if(status) status.textContent='Doctor directory loaded. '+doctors.length+' doctor(s) available.';
+  }catch(e){
+    select.innerHTML='<option value="">Doctors unavailable</option>';
+    if(status) status.textContent='The doctor directory could not be loaded. Check the API connection and try again.';
+  }
 }
 
 async function checkDatabase(){
