@@ -113,6 +113,12 @@ CREATE TABLE IF NOT EXISTS pharmacy_orders (
   )
 );
 
+ALTER TABLE pharmacy_orders DROP CONSTRAINT IF EXISTS pharmacy_orders_order_status_check;
+ALTER TABLE pharmacy_orders ADD CONSTRAINT pharmacy_orders_order_status_check CHECK (
+  order_status IN ('requested', 'accepted', 'rejected', 'packed', 'out_for_delivery', 'ready_at_hospital', 'ready_for_pickup', 'delivered', 'cancelled')
+) NOT VALID;
+ALTER TABLE pharmacy_orders VALIDATE CONSTRAINT pharmacy_orders_order_status_check;
+
 ALTER TABLE pharmacy_orders ADD COLUMN IF NOT EXISTS hospital_fulfillment_method VARCHAR(24);
 UPDATE pharmacy_orders SET hospital_fulfillment_method = 'counter_pickup'
  WHERE destination_type = 'hospital' AND hospital_fulfillment_method IS NULL;
