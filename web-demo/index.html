@@ -149,6 +149,13 @@
             <div id="pharmacyAdminProductResult" class="result" role="status" aria-live="polite">Select a store to manage catalogue.</div>
             <div id="pharmacyAdminProductList" class="result">Products and stock will appear here.</div>
           </div>
+          <div class="pharmacy-admin-orders">
+            <div class="panel-head compact"><div><h3>Pharmacy order queue</h3><p class="section-copy">Review destinations and update order progress for connected stores.</p></div><button id="pharmacyAdminRefreshOrders" class="secondary" type="button">Refresh orders</button></div>
+            <div class="pharmacy-filters order-filters">
+              <select id="pharmacyAdminOrderStatus" aria-label="Filter pharmacy orders"><option value="">All order statuses</option><option value="placed">Placed</option><option value="accepted">Accepted</option><option value="preparing">Preparing</option><option value="ready">Ready</option><option value="out_for_delivery">Out for delivery</option><option value="delivered">Delivered</option><option value="cancelled">Cancelled</option></select>
+            </div>
+            <div id="pharmacyAdminOrderList" class="result" role="status" aria-live="polite">Sign in as admin to view pharmacy orders.</div>
+          </div>
         </div>
 
         <div class="grid three"><article class="stat-card"><span>Patients</span><strong id="patientCount">—</strong><small>Live database count</small></article><article class="stat-card"><span>Doctors</span><strong id="doctorCount">—</strong><small>Live database count</small></article><article class="stat-card"><span>Payments</span><strong id="paidRevenue">—</strong><small id="paymentSummary">Live paid revenue</small></article></div>
