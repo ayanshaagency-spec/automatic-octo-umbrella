@@ -18,8 +18,8 @@ const { isConfigured: isWhatsAppConfigured, sendTemplateMessage, sendAppointment
 const { getCorsHeaders } = require('./cors');
 const { verifyPharmacyStaffToken } = require('./pharmacy_auth');
 const { listPharmacies, listPharmacyInventory, createPharmacy, updatePharmacyVerification, createPharmacyStaff, authenticatePharmacyStaff, createMedicineCatalogItem, saveInventory, createPharmacyOrder, getPatientPharmacyOrder, listPharmacyStaffOrders, setPharmacyOrderStatus, cancelPatientPharmacyOrder } = require('./pharmacy_repository');
-const getAdminClaims = req => { const match = (req.headers.authorization || '').match(/^Bearer\\s+(.+)$/i); return match ? verifyAdminToken(match[1]) : null; };
-const getPharmacyStaffClaims = req => { const match = (req.headers.authorization || '').match(/^Bearer\\s+(.+)$/i); return match ? verifyPharmacyStaffToken(match[1]) : null; };
+const getAdminClaims = req => { const match = (req.headers.authorization || '').match(/^Bearer\s+(.+)$/i); return match ? verifyAdminToken(match[1]) : null; };
+const getPharmacyStaffClaims = req => { const match = (req.headers.authorization || '').match(/^Bearer\s+(.+)$/i); return match ? verifyPharmacyStaffToken(match[1]) : null; };
 const send=(res,code,data)=>{const headers={...(res.__corsHeaders||{}),'Content-Type':'application/json','Access-Control-Allow-Methods':'GET,POST,PATCH,OPTIONS','Access-Control-Allow-Headers':'Content-Type,Authorization,X-Payment-Signature'};res.writeHead(code,headers);res.end(JSON.stringify(data));};
 const parseBody=(req,done)=>{let body='';req.on('data',c=>body+=c);req.on('end',()=>{try{done(null,JSON.parse(body||'{}'));}catch(e){done(e);}});};
 const parseRawBody=(req,done)=>{let body='';req.setEncoding('utf8');req.on('data',c=>body+=c);req.on('end',()=>done(null,body));req.on('error',done);};
@@ -124,7 +124,7 @@ const server=http.createServer(async(req,res)=>{
       return send(res,200,{pharmacies:rows});
     } catch(e) { if(e.statusCode)return send(res,e.statusCode,{error:e.message}); return send(res,503,{error:'Unable to load pharmacy directory'}); }
   }
-  const pharmacyInventoryMatch=url.pathname.match(/^\\/api\\/pharmacies\\/(\\d+)\\/inventory$/);
+  const pharmacyInventoryMatch=url.pathname.match(/^\/api\/pharmacies\/(\d+)\/inventory$/);
   if(pharmacyInventoryMatch&&req.method==='GET'){
     try {
       const rows=await listPharmacyInventory(Number(pharmacyInventoryMatch[1]));
@@ -141,7 +141,7 @@ const server=http.createServer(async(req,res)=>{
       return send(res,503,{error:'DATABASE_URL not configured'});
     } catch(e) { if(e.statusCode)return send(res,e.statusCode,{error:e.message}); return send(res,503,{error:'Unable to create pharmacy'}); }
   });
-  const pharmacyVerifyMatch=url.pathname.match(/^\\/api\\/admin\\/pharmacies\\/(\\d+)\\/verification$/);
+  const pharmacyVerifyMatch=url.pathname.match(/^\/api\/admin\/pharmacies\/(\d+)\/verification$/);
   if(pharmacyVerifyMatch&&req.method==='PATCH')return parseBody(req,async(err,data)=>{
     if(err)return send(res,400,{error:'Invalid JSON'});
     if(!getAdminClaims(req))return send(res,401,{error:'Admin authentication required'});
@@ -160,7 +160,7 @@ const server=http.createServer(async(req,res)=>{
       return send(res,503,{error:'DATABASE_URL not configured'});
     } catch(e) { if(e.statusCode)return send(res,e.statusCode,{error:e.message}); return send(res,503,{error:'Unable to create medicine catalog item'}); }
   });
-  const pharmacyStaffCreateMatch=url.pathname.match(/^\\/api\\/admin\\/pharmacies\\/(\\d+)\\/staff$/);
+  const pharmacyStaffCreateMatch=url.pathname.match(/^\/api\/admin\/pharmacies\/(\d+)\/staff$/);
   if(pharmacyStaffCreateMatch&&req.method==='POST')return parseBody(req,async(err,data)=>{
     if(err)return send(res,400,{error:'Invalid JSON'});
     if(!getAdminClaims(req))return send(res,401,{error:'Admin authentication required'});
@@ -200,7 +200,7 @@ const server=http.createServer(async(req,res)=>{
       return send(res,200,{orders:rows});
     } catch(e) { if(e.statusCode)return send(res,e.statusCode,{error:e.message}); return send(res,503,{error:'Unable to load store orders'}); }
   }
-  const pharmacyStaffOrderStatusMatch=url.pathname.match(/^\\/api\\/pharmacy\\/staff\\/orders\\/(\\d+)\\/status$/);
+  const pharmacyStaffOrderStatusMatch=url.pathname.match(/^\/api\/pharmacy\/staff\/orders\/(\d+)\/status$/);
   if(pharmacyStaffOrderStatusMatch&&req.method==='PATCH')return parseBody(req,async(err,data)=>{
     if(err)return send(res,400,{error:'Invalid JSON'});
     const staff=getPharmacyStaffClaims(req);
@@ -232,7 +232,7 @@ const server=http.createServer(async(req,res)=>{
       return send(res,503,{error:'DATABASE_URL not configured'});
     } catch(e) { if(e.statusCode)return send(res,e.statusCode,{error:e.message}); return send(res,503,{error:'Unable to place pharmacy order'}); }
   });
-  const pharmacyPatientCancelMatch=url.pathname.match(/^\\/api\\/pharmacy\\/orders\\/(\\d+)\\/cancel$/);
+  const pharmacyPatientCancelMatch=url.pathname.match(/^\/api\/pharmacy\/orders\/(\d+)\/cancel$/);
   if(pharmacyPatientCancelMatch&&req.method==='POST')return parseBody(req,async(err,data)=>{
     if(err)return send(res,400,{error:'Invalid JSON'});
     const phone=isProduction?req.auth?.phone:data.phone;
