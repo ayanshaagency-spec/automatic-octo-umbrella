@@ -9,7 +9,8 @@ This feature adds an internal Pharmacy workspace to the existing Ayansha Health 
 
 A patient order selects one verified store and one destination:
 
-- **Hospital delivery/pickup** — delivered to a selected hospital with ward/OPD/pickup instructions.
+- **Hospital counter pickup** — the order is marked ready for collection at the hospital pharmacy counter.
+- **Hospital ward/room delivery** — the order is fulfilled to a selected hospital; ward, room, OPD or delivery instructions are recorded.
 - **Home delivery** — delivered to a full address and named recipient.
 
 The module is additive. It does not replace or reset existing patient, prescription, hospital, appointment, lab, or payment tables.
@@ -39,7 +40,7 @@ All these endpoints use the existing admin bearer-token mechanism. Store activat
 Staff tokens are signed using the existing `JWT_SECRET`, expire after six hours, and carry a single pharmacy ID. An order cannot be changed using another store's token. Passwords are scrypt-hashed and are never returned by the API.
 
 Order lifecycle:
-`requested → accepted → packed → out_for_delivery → delivered` for home delivery, or `requested → accepted → packed → ready_at_hospital → delivered` for hospital delivery. Rejected/cancelled requests release reserved stock. Delivered orders consume reserved stock.
+`requested → accepted → packed → out_for_delivery → delivered` for home delivery, `requested → accepted → packed → ready_for_pickup → delivered` for hospital counter pickup, or `requested → accepted → packed → ready_at_hospital → delivered` for ward/room delivery. The order persists `hospital_fulfillment_method` as `counter_pickup` or `ward_room_delivery` for hospital orders; home-delivery orders leave it null. Rejected/cancelled requests release reserved stock. Delivered orders consume reserved stock.
 
 Prescription-required medicines need a prescription belonging to the patient, a matching catalogue name, and pharmacist-role acceptance. This name match is a safety gate, not a substitute for pharmacist review of product, strength, dose, quantity, interactions, or applicable law.
 
@@ -76,7 +77,7 @@ The runtime workflow uses an isolated PostgreSQL service and synthetic records t
 - order stock reservation and idempotent retry;
 - patient cancellation releasing reserved stock;
 - store-scoped staff authentication and cross-store access denial;
-- home delivery and hospital-delivery status transitions;
+- home delivery, hospital ward/room delivery and hospital counter-pickup status transitions;
 - final stock quantities after delivery.
 
 ## Release gate
