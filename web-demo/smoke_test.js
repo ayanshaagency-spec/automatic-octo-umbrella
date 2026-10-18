@@ -20,4 +20,7 @@ if(!js.includes('LIVE DATABASE CONNECTED')) throw new Error('Live dashboard succ
 if(!js.includes('LIVE DATABASE UNAVAILABLE')) throw new Error('Live dashboard failure state missing');
 if(!js.includes('No doctors are currently configured in the live directory')) throw new Error('Doctor directory empty state missing');
 if(!js.includes('select.disabled=true')) throw new Error('Appointment booking is not blocked when doctor data is unavailable');
+if(!css.includes('.pharmacy-panel{')) throw new Error('Pharmacy module styling missing');
+if(!js.includes('Prescription required')) throw new Error('Pharmacy prescription safety label missing');
+if(!js.includes('cash_on_delivery')) throw new Error('Pharmacy checkout payment state missing');
 console.log('Client demo smoke test passed: structure, role flows, live dashboard, API hooks and doctor-directory empty state present.');
