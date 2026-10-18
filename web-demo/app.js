@@ -1,4 +1,5 @@
-let API_BASE=(localStorage.getItem('ayansha_api_base')||'/api').replace(/\/$/,'');
+const DEFAULT_API_BASE='https://health-care-backend-production-4210.up.railway.app/api';
+let API_BASE=(localStorage.getItem('ayansha_api_base')||DEFAULT_API_BASE).replace(/\/$/,'');
 const $=id=>document.getElementById(id);
 
 function showToast(message){
