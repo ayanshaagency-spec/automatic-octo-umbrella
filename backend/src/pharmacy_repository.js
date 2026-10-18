@@ -274,6 +274,49 @@ async function updatePharmacyOrderStatus(id, nextStatus) {
 }
 
 
+
+async function listPharmacyAdminOrders(filters = {}) {
+  const allowed = ['placed', 'accepted', 'preparing', 'ready', 'out_for_delivery', 'delivered', 'cancelled'];
+  if (filters.status && !allowed.includes(filters.status)) throw validationError('Invalid pharmacy order status');
+  if (filters.storeId && !isPositiveInteger(filters.storeId)) throw validationError('storeId must be a positive integer');
+  const db = await getDb();
+  if (!db) return null;
+  const where = [];
+  const values = [];
+  if (filters.status) {
+    values.push(filters.status);
+    where.push(`o.status = ${values.length}`);
+  }
+  if (filters.storeId) {
+    values.push(Number(filters.storeId));
+    where.push(`o.store_id = ${values.length}`);
+  }
+  const { rows } = await db.query(`
+    SELECT o.id, o.status, o.delivery_method AS "deliveryMethod",
+           o.delivery_hospital_id AS "deliveryHospitalId", h.name AS "deliveryHospitalName",
+           o.delivery_address_line1 AS "addressLine1", o.delivery_address_line2 AS "addressLine2",
+           o.delivery_city AS "deliveryCity", o.delivery_state AS "deliveryState",
+           o.delivery_pincode AS "deliveryPincode", o.payment_method AS "paymentMethod",
+           o.payment_status AS "paymentStatus", o.total_amount AS "totalAmount",
+           o.created_at AS "createdAt", o.updated_at AS "updatedAt",
+           p.id AS "patientId", p.name AS "patientName", p.phone AS "patientPhone",
+           s.id AS "storeId", s.name AS "storeName", s.store_type AS "storeType",
+           COALESCE(json_agg(json_build_object(
+             'productId', oi.product_id, 'productName', oi.product_name,
+             'quantity', oi.quantity, 'unitPrice', oi.unit_price, 'lineTotal', oi.line_total
+           ) ORDER BY oi.id) FILTER (WHERE oi.id IS NOT NULL), '[]') AS items
+      FROM pharmacy_orders o
+      JOIN patients p ON p.id = o.patient_id
+      JOIN pharmacy_stores s ON s.id = o.store_id
+      LEFT JOIN hospitals h ON h.id = o.delivery_hospital_id
+      LEFT JOIN pharmacy_order_items oi ON oi.order_id = o.id
+      ${where.length ? 'WHERE ' + where.join(' AND ') : ''}
+     GROUP BY o.id, p.id, s.id, h.name
+     ORDER BY o.created_at DESC
+     LIMIT 200`, values);
+  return rows;
+}
+
 async function listPharmacyAdminStores() {
   const db = await getDb();
   if (!db) return null;
@@ -439,6 +482,7 @@ async function updatePharmacyProduct(id, data) {
 }
 
 module.exports = {
+  listPharmacyAdminOrders,
   listPharmacyAdminStores,
   createPharmacyStore,
   updatePharmacyStoreApproval,
