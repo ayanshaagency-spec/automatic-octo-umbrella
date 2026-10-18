@@ -286,7 +286,7 @@ const server=http.createServer(async(req,res)=>{
   }
   if(url.pathname==='/api/pharmacy/orders'&&req.method==='POST')return parseBody(req,async(err,data)=>{
     if(err)return send(res,400,{error:'Invalid JSON'});
-    if(isProduction && String(data.phone||'').trim() !== req.auth?.phone)return send(res,403,{error:'Access denied'});
+    if(isProduction && String(data?.phone||'').trim() !== req.auth?.phone)return send(res,403,{error:'Access denied'});
     try {
       const saved=await createPharmacyOrder(data);
       if(saved)return send(res,201,saved);
