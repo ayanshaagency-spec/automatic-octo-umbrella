@@ -16,7 +16,7 @@ const { validateCoordinates, emergencyResponse } = require('./phase6_emergency')
 const { listNearbyHospitals } = require('./phase6_hospital_repository');
 const { isConfigured: isWhatsAppConfigured, sendTemplateMessage, sendAppointmentConfirmation } = require('./whatsapp_service');
 const { getCorsHeaders } = require('./cors');
-const { listPharmacyStores, listPharmacyDeliveryHospitals, listPharmacyProducts, listPharmacyOrders, createPharmacyOrder, updatePharmacyOrderStatus } = require('./pharmacy_repository');
+const { listPharmacyStores, listPharmacyDeliveryHospitals, listPharmacyProducts, listPharmacyOrders, createPharmacyOrder, updatePharmacyOrderStatus, listPharmacyAdminStores, createPharmacyStore, updatePharmacyStoreApproval, listPharmacyAdminProducts, createPharmacyProduct, updatePharmacyProduct } = require('./pharmacy_repository');
 const send=(res,code,data)=>{const headers={...(res.__corsHeaders||{}),'Content-Type':'application/json','Access-Control-Allow-Methods':'GET,POST,PATCH,OPTIONS','Access-Control-Allow-Headers':'Content-Type,Authorization,X-Payment-Signature'};res.writeHead(code,headers);res.end(JSON.stringify(data));};
 const parseBody=(req,done)=>{let body='';req.on('data',c=>body+=c);req.on('end',()=>{try{done(null,JSON.parse(body||'{}'));}catch(e){done(e);}});};
 const parseRawBody=(req,done)=>{let body='';req.setEncoding('utf8');req.on('data',c=>body+=c);req.on('end',()=>done(null,body));req.on('error',done);};
@@ -70,7 +70,7 @@ const server=http.createServer(async(req,res)=>{
       if(/\/status$/.test(url.pathname) && req.method === 'PATCH') return send(res,403,{error:'Staff authorization required'});
     }
   }
-  if(isProduction && (url.pathname === '/api/dashboard/summary' || url.pathname === '/api/whatsapp/template' || /^\/api\/pharmacy\/orders\/\d+\/status$/.test(url.pathname))) {
+  if(isProduction && (url.pathname === '/api/dashboard/summary' || url.pathname === '/api/whatsapp/template' || /^\/api\/pharmacy\/orders\/\d+\/status$/.test(url.pathname) || url.pathname.startsWith('/api/pharmacy/admin/'))) {
     const adminClaims = bearer ? verifyAdminToken(bearer[1]) : null;
     if(!adminClaims) return send(res,401,{error:'Admin authentication required'});
     req.admin = adminClaims;
