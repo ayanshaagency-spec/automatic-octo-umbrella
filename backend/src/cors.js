@@ -3,7 +3,7 @@
 function parseAllowedOrigins(env) {
   const raw = env.CORS_ALLOWED_ORIGINS || env.ALLOWED_ORIGIN || '';
   return String(raw)
-    .split(/[\\s,]+/)
+    .split(/[\s,]+/)
     .map((origin) => origin.trim())
     .filter(Boolean);
 }
