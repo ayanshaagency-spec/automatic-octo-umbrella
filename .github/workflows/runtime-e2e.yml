@@ -238,9 +238,9 @@ jobs:
                 const partnerStock=await verifyDb.query('SELECT quantity_available,quantity_reserved FROM pharmacy_inventory WHERE id=$1',[partnerInventory.rows[0].id]);
                 const hospitalStock=await verifyDb.query('SELECT quantity_available,quantity_reserved FROM pharmacy_inventory WHERE id=$1',[hospitalInventory.rows[0].id]);
                 assert(Number(partnerStock.rows[0].quantity_available)===7 && Number(partnerStock.rows[0].quantity_reserved)===0,'Home delivery did not consume reserved partner stock correctly');
-                assert(Number(hospitalStock.rows[0].quantity_available)===9 && Number(hospitalStock.rows[0].quantity_reserved)===0,'Hospital delivery did not consume reserved hospital stock correctly');
+                assert(Number(hospitalStock.rows[0].quantity_available)===8 && Number(hospitalStock.rows[0].quantity_reserved)===0,'Hospital ward delivery and counter pickup did not consume reserved stock correctly');
               } finally { await verifyDb.end(); }
-              console.log('Pharmacy E2E passed: migrations, active-store directory, stock reservation, idempotency, patient cancellation, scoped staff auth, home delivery and hospital delivery.');
+              console.log('Pharmacy E2E passed: migrations, active-store directory, stock reservation, idempotency, cancellation, scoped staff auth, home delivery, hospital ward/room delivery and counter pickup.');
             } finally {
               if (server && server.exitCode === null) {
                 await new Promise(resolve => { server.once('exit', resolve); server.kill(); });
