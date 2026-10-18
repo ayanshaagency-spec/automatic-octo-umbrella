@@ -117,15 +117,16 @@ async function createPharmacyOrder(data) {
   const invalid = validatePharmacyOrderInput(data);
   if (invalid) throw validationError(invalid);
 
-  const db = await getDb();
-  if (!db) return null;
+  const pool = await getDb();
+  if (!pool) return null;
+  const db = await pool.connect();
   const phone = data.phone.trim();
   const storeId = Number(data.storeId);
   const prescriptionId = data.prescriptionId ? Number(data.prescriptionId) : null;
   const quantities = data.items.map(item => ({ productId: Number(item.productId), quantity: Number(item.quantity) }));
 
-  await db.query('BEGIN');
   try {
+    await db.query('BEGIN');
     const patient = await db.query('SELECT id FROM patients WHERE phone = $1', [phone]);
     if (!patient.rowCount) throw validationError('Patient not found', 404);
     const patientId = patient.rows[0].id;
@@ -237,17 +238,20 @@ async function createPharmacyOrder(data) {
     await db.query('COMMIT');
     return { ...order, items: lines, storeName: storeResult.rows[0].name || null };
   } catch (error) {
-    await db.query('ROLLBACK');
+    await db.query('ROLLBACK').catch(() => {});
     throw error;
+  } finally {
+    db.release();
   }
 }
 
 async function updatePharmacyOrderStatus(id, nextStatus) {
   if (!isPositiveInteger(id)) throw validationError('orderId must be a positive integer');
-  const db = await getDb();
-  if (!db) return null;
-  await db.query('BEGIN');
+  const pool = await getDb();
+  if (!pool) return null;
+  const db = await pool.connect();
   try {
+    await db.query('BEGIN');
     const current = await db.query('SELECT id, status FROM pharmacy_orders WHERE id = $1 FOR UPDATE', [Number(id)]);
     if (!current.rowCount) throw validationError('Pharmacy order not found', 404);
     const invalid = validateOrderStatusTransition(current.rows[0].status, nextStatus);
@@ -268,8 +272,10 @@ async function updatePharmacyOrderStatus(id, nextStatus) {
     await db.query('COMMIT');
     return order.rows[0];
   } catch (error) {
-    await db.query('ROLLBACK');
+    await db.query('ROLLBACK').catch(() => {});
     throw error;
+  } finally {
+    db.release();
   }
 }
 
@@ -383,10 +389,11 @@ async function updatePharmacyStoreApproval(id, data) {
   if (!data || typeof data !== 'object' || Array.isArray(data)) throw validationError('An approval object is required');
   if (data.approved !== undefined && typeof data.approved !== 'boolean') throw validationError('approved must be true or false');
   if (data.active !== undefined && typeof data.active !== 'boolean') throw validationError('active must be true or false');
-  const db = await getDb();
-  if (!db) return null;
-  await db.query('BEGIN');
+  const pool = await getDb();
+  if (!pool) return null;
+  const db = await pool.connect();
   try {
+    await db.query('BEGIN');
     const current = await db.query('SELECT is_active, approved_at FROM pharmacy_stores WHERE id = $1 FOR UPDATE', [Number(id)]);
     if (!current.rowCount) throw validationError('Pharmacy store not found', 404);
     const approved = data.approved === undefined ? Boolean(current.rows[0].approved_at) : data.approved;
@@ -403,8 +410,10 @@ async function updatePharmacyStoreApproval(id, data) {
     await db.query('COMMIT');
     return rows[0];
   } catch (error) {
-    await db.query('ROLLBACK');
+    await db.query('ROLLBACK').catch(() => {});
     throw error;
+  } finally {
+    db.release();
   }
 }
 
