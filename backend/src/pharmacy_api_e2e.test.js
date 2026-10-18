@@ -115,3 +115,68 @@ test('Phase 7 pharmacy API smoke and fail-closed contract', async t => {
   assert.equal(validOrderWithoutDb.status, 503);
   assert.match((await validOrderWithoutDb.json()).error, /database/i);
 });
+
+
+test('production pharmacy routes enforce distinct patient and admin tokens', async t => {
+  const prodPort = 3920;
+  const prodBase = `http://127.0.0.1:${prodPort}`;
+  const child = spawn(process.execPath, ['src/server.js'], {
+    cwd: __dirname + '/..',
+    env: {
+      ...process.env,
+      PORT: String(prodPort),
+      NODE_ENV: 'production',
+      DATABASE_URL: '',
+      ADMIN_EMAIL: 'phase7-ci-admin@example.test',
+      ADMIN_PASSWORD: 'ci-only-admin-password',
+      JWT_SECRET: 'phase7-ci-secret-that-is-long-enough-for-hs256'
+    },
+    stdio: ['ignore', 'pipe', 'pipe']
+  });
+  t.after(() => child.kill());
+  let output = '';
+  child.stdout.on('data', chunk => { output += chunk.toString(); });
+  child.stderr.on('data', chunk => { output += chunk.toString(); });
+
+  let ready = false;
+  for (let attempt = 0; attempt < 40; attempt += 1) {
+    if (child.exitCode !== null) throw new Error(`Production-mode API exited early: ${output}`);
+    try {
+      const response = await fetch(`${prodBase}/health`);
+      if (response.ok) { ready = true; break; }
+    } catch (_) {}
+    await new Promise(resolve => setTimeout(resolve, 100));
+  }
+  assert.equal(ready, true, 'Production-mode API should start with isolated test-only credentials');
+
+  const adminDenied = await fetch(`${prodBase}/api/pharmacy/admin/stores`);
+  assert.equal(adminDenied.status, 401);
+  assert.match((await adminDenied.json()).error, /Admin authentication required/);
+
+  const patientDenied = await fetch(`${prodBase}/api/pharmacy/orders?phone=9876543210`);
+  assert.equal(patientDenied.status, 401);
+  assert.match((await patientDenied.json()).error, /Authentication required/);
+
+  const adminLogin = await fetch(`${prodBase}/api/admin/login`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email: 'phase7-ci-admin@example.test', password: 'ci-only-admin-password' })
+  });
+  assert.equal(adminLogin.status, 200);
+  const { token } = await adminLogin.json();
+  assert.ok(token);
+
+  const adminStores = await fetch(`${prodBase}/api/pharmacy/admin/stores`, {
+    headers: { Authorization: `Bearer ${token}` }
+  });
+  assert.equal(adminStores.status, 503);
+  assert.match((await adminStores.json()).error, /database/i);
+
+  const adminStatus = await fetch(`${prodBase}/api/pharmacy/orders/1/status`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+    body: JSON.stringify({ status: 'accepted' })
+  });
+  assert.equal(adminStatus.status, 503);
+  assert.match((await adminStatus.json()).error, /database/i);
+});
