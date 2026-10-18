@@ -10,6 +10,9 @@ function validationError(message, statusCode = 422) {
 }
 
 async function listPharmacyStores(filters = {}) {
+  if (filters.storeType && !['hospital', 'partner'].includes(filters.storeType)) throw validationError('storeType must be hospital or partner');
+  if (filters.deliveryMethod && !['hospital', 'home'].includes(filters.deliveryMethod)) throw validationError('deliveryMethod must be hospital or home');
+  if (filters.city != null && String(filters.city).trim().length > 100) throw validationError('city must be 100 characters or fewer');
   const db = await getDb();
   if (!db) return null;
   const conditions = ['s.is_active = TRUE', 's.approved_at IS NOT NULL'];
