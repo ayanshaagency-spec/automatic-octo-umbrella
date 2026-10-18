@@ -58,7 +58,8 @@ const server=http.createServer(async(req,res)=>{
   const bearer = (req.headers.authorization || '').match(/^Bearer\s+(.+)$/i);
   const claims = bearer ? verifyAccessToken(bearer[1]) : null;
   const patientRoutes = ['/api/appointments','/api/prescriptions','/api/health-records','/api/lab-orders','/api/payments','/api/pharmacy/orders'];
-  if(isProduction && (patientRoutes.some(path => url.pathname === path || url.pathname.startsWith(path + '/')))) {
+  const pharmacyStaffStatusRoute = req.method === 'PATCH' && /^\/api\/pharmacy\/orders\/\d+\/status$/.test(url.pathname);
+  if(isProduction && !pharmacyStaffStatusRoute && (patientRoutes.some(path => url.pathname === path || url.pathname.startsWith(path + '/')))) {
     if(url.pathname === '/api/payments/webhook') { /* verified by payment webhook signature below */ }
     else {
       if(!claims) return send(res,401,{error:'Authentication required'});
@@ -69,7 +70,7 @@ const server=http.createServer(async(req,res)=>{
       if(/\/status$/.test(url.pathname) && req.method === 'PATCH') return send(res,403,{error:'Staff authorization required'});
     }
   }
-  if(isProduction && (url.pathname === '/api/dashboard/summary' || url.pathname === '/api/whatsapp/template' || /^\\/api\\/pharmacy\\/orders\\/\\d+\\/status$/.test(url.pathname))) {
+  if(isProduction && (url.pathname === '/api/dashboard/summary' || url.pathname === '/api/whatsapp/template' || /^\/api\/pharmacy\/orders\/\d+\/status$/.test(url.pathname))) {
     const adminClaims = bearer ? verifyAdminToken(bearer[1]) : null;
     if(!adminClaims) return send(res,401,{error:'Admin authentication required'});
     req.admin = adminClaims;
@@ -283,7 +284,7 @@ const server=http.createServer(async(req,res)=>{
       return send(res,503,{error:'Unable to create pharmacy order'});
     }
   });
-  const pharmacyStatusMatch=url.pathname.match(/^\\/api\\/pharmacy\\/orders\\/(\\d+)\\/status$/);
+  const pharmacyStatusMatch=url.pathname.match(/^\/api\/pharmacy\/orders\/(\d+)\/status$/);
   if(pharmacyStatusMatch&&req.method==='PATCH')return parseBody(req,async(err,data)=>{
     if(err)return send(res,400,{error:'Invalid JSON'});
     if(isProduction && !req.admin)return send(res,401,{error:'Admin authentication required'});
