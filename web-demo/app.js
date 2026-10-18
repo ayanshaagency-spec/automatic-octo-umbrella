@@ -286,7 +286,7 @@ async function pharmacyStoreChanged(){
 }
 function togglePharmacyDeliveryFields(){
   const hospital=$('pharmacyDeliveryMethod')?.value==='hospital';
-  if($('pharmacyHospitalSelect'))$('pharmacyHospitalSelect').closest('div').hidden=!hospital;
+  if($('pharmacyHospitalFields'))$('pharmacyHospitalFields').hidden=!hospital;
   if($('pharmacyHomeFields'))$('pharmacyHomeFields').hidden=hospital;
   const selected=$('pharmacyStoreSelect')?.selectedOptions?.[0];
   if(hospital&&selected?.dataset.storeType==='hospital'&&selected.dataset.hospitalId){
