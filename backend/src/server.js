@@ -16,6 +16,10 @@ const { validateCoordinates, emergencyResponse } = require('./phase6_emergency')
 const { listNearbyHospitals } = require('./phase6_hospital_repository');
 const { isConfigured: isWhatsAppConfigured, sendTemplateMessage, sendAppointmentConfirmation } = require('./whatsapp_service');
 const { getCorsHeaders } = require('./cors');
+const { verifyPharmacyStaffToken } = require('./pharmacy_auth');
+const { listPharmacies, listPharmacyInventory, createPharmacy, updatePharmacyVerification, createPharmacyStaff, authenticatePharmacyStaff, createMedicineCatalogItem, saveInventory, createPharmacyOrder, getPatientPharmacyOrder, listPharmacyStaffOrders, setPharmacyOrderStatus, cancelPatientPharmacyOrder } = require('./pharmacy_repository');
+const getAdminClaims = req => { const match = (req.headers.authorization || '').match(/^Bearer\\s+(.+)$/i); return match ? verifyAdminToken(match[1]) : null; };
+const getPharmacyStaffClaims = req => { const match = (req.headers.authorization || '').match(/^Bearer\\s+(.+)$/i); return match ? verifyPharmacyStaffToken(match[1]) : null; };
 const send=(res,code,data)=>{const headers={...(res.__corsHeaders||{}),'Content-Type':'application/json','Access-Control-Allow-Methods':'GET,POST,PATCH,OPTIONS','Access-Control-Allow-Headers':'Content-Type,Authorization,X-Payment-Signature'};res.writeHead(code,headers);res.end(JSON.stringify(data));};
 const parseBody=(req,done)=>{let body='';req.on('data',c=>body+=c);req.on('end',()=>{try{done(null,JSON.parse(body||'{}'));}catch(e){done(e);}});};
 const parseRawBody=(req,done)=>{let body='';req.setEncoding('utf8');req.on('data',c=>body+=c);req.on('end',()=>done(null,body));req.on('error',done);};
@@ -56,7 +60,7 @@ const server=http.createServer(async(req,res)=>{
   const isProduction = process.env.NODE_ENV === 'production';
   const bearer = (req.headers.authorization || '').match(/^Bearer\s+(.+)$/i);
   const claims = bearer ? verifyAccessToken(bearer[1]) : null;
-  const patientRoutes = ['/api/appointments','/api/prescriptions','/api/health-records','/api/lab-orders','/api/payments'];
+  const patientRoutes = ['/api/appointments','/api/prescriptions','/api/health-records','/api/lab-orders','/api/payments','/api/pharmacy/orders'];
   if(isProduction && (patientRoutes.some(path => url.pathname === path || url.pathname.startsWith(path + '/')))) {
     if(url.pathname === '/api/payments/webhook') { /* verified by payment webhook signature below */ }
     else {
@@ -112,6 +116,134 @@ const server=http.createServer(async(req,res)=>{
       return send(res,503,{error:'Unable to load nearby hospitals'});
     }
   }
+
+  if(url.pathname==='/api/pharmacies'&&req.method==='GET'){
+    try {
+      const rows=await listPharmacies({storeType:url.searchParams.get('storeType')||null,city:url.searchParams.get('city')||null,latitude:url.searchParams.get('latitude'),longitude:url.searchParams.get('longitude')});
+      if(rows===null)return send(res,503,{error:'DATABASE_URL not configured'});
+      return send(res,200,{pharmacies:rows});
+    } catch(e) { if(e.statusCode)return send(res,e.statusCode,{error:e.message}); return send(res,503,{error:'Unable to load pharmacy directory'}); }
+  }
+  const pharmacyInventoryMatch=url.pathname.match(/^\\/api\\/pharmacies\\/(\\d+)\\/inventory$/);
+  if(pharmacyInventoryMatch&&req.method==='GET'){
+    try {
+      const rows=await listPharmacyInventory(Number(pharmacyInventoryMatch[1]));
+      if(rows===null)return send(res,503,{error:'DATABASE_URL not configured'});
+      return send(res,200,{inventory:rows});
+    } catch(e) { if(e.statusCode)return send(res,e.statusCode,{error:e.message}); return send(res,503,{error:'Unable to load pharmacy inventory'}); }
+  }
+  if(url.pathname==='/api/admin/pharmacies'&&req.method==='POST')return parseBody(req,async(err,data)=>{
+    if(err)return send(res,400,{error:'Invalid JSON'});
+    if(!getAdminClaims(req))return send(res,401,{error:'Admin authentication required'});
+    try {
+      const saved=await createPharmacy(data);
+      if(saved)return send(res,201,saved);
+      return send(res,503,{error:'DATABASE_URL not configured'});
+    } catch(e) { if(e.statusCode)return send(res,e.statusCode,{error:e.message}); return send(res,503,{error:'Unable to create pharmacy'}); }
+  });
+  const pharmacyVerifyMatch=url.pathname.match(/^\\/api\\/admin\\/pharmacies\\/(\\d+)\\/verification$/);
+  if(pharmacyVerifyMatch&&req.method==='PATCH')return parseBody(req,async(err,data)=>{
+    if(err)return send(res,400,{error:'Invalid JSON'});
+    if(!getAdminClaims(req))return send(res,401,{error:'Admin authentication required'});
+    try {
+      const saved=await updatePharmacyVerification(Number(pharmacyVerifyMatch[1]),data.isVerified,data.active);
+      if(saved)return send(res,200,saved);
+      return send(res,503,{error:'DATABASE_URL not configured'});
+    } catch(e) { if(e.statusCode)return send(res,e.statusCode,{error:e.message}); return send(res,503,{error:'Unable to update pharmacy verification'}); }
+  });
+  if(url.pathname==='/api/admin/medicine-catalog'&&req.method==='POST')return parseBody(req,async(err,data)=>{
+    if(err)return send(res,400,{error:'Invalid JSON'});
+    if(!getAdminClaims(req))return send(res,401,{error:'Admin authentication required'});
+    try {
+      const saved=await createMedicineCatalogItem(data);
+      if(saved)return send(res,201,saved);
+      return send(res,503,{error:'DATABASE_URL not configured'});
+    } catch(e) { if(e.statusCode)return send(res,e.statusCode,{error:e.message}); return send(res,503,{error:'Unable to create medicine catalog item'}); }
+  });
+  const pharmacyStaffCreateMatch=url.pathname.match(/^\\/api\\/admin\\/pharmacies\\/(\\d+)\\/staff$/);
+  if(pharmacyStaffCreateMatch&&req.method==='POST')return parseBody(req,async(err,data)=>{
+    if(err)return send(res,400,{error:'Invalid JSON'});
+    if(!getAdminClaims(req))return send(res,401,{error:'Admin authentication required'});
+    try {
+      const saved=await createPharmacyStaff(Number(pharmacyStaffCreateMatch[1]),data.email,data.password,data.staffRole||'staff');
+      if(saved)return send(res,201,saved);
+      return send(res,503,{error:'DATABASE_URL not configured'});
+    } catch(e) { if(e.statusCode)return send(res,e.statusCode,{error:e.message}); return send(res,503,{error:'Unable to create pharmacy staff account'}); }
+  });
+  if(url.pathname==='/api/pharmacy/staff/login'&&req.method==='POST')return parseBody(req,async(err,data)=>{
+    if(err)return send(res,400,{error:'Invalid JSON'});
+    if(typeof data.email!=='string'||typeof data.password!=='string'||!data.email.trim()||!data.password)return send(res,422,{error:'email and password are required'});
+    try {
+      const staff=await authenticatePharmacyStaff(data.email,data.password);
+      if(!staff)return send(res,401,{error:'Invalid credentials or pharmacy is not verified and active'});
+      const token=require('./pharmacy_auth').issuePharmacyStaffToken(staff);
+      return send(res,200,{token,expiresIn:21600,user:{id:staff.id,email:staff.email,role:staff.staff_role,pharmacyId:staff.pharmacy_id,pharmacyName:staff.pharmacy_name}});
+    } catch(e) { if(e.statusCode)return send(res,e.statusCode,{error:e.message}); return send(res,503,{error:'Pharmacy staff login is unavailable'}); }
+  });
+  if(url.pathname==='/api/pharmacy/staff/inventory'&&req.method==='POST')return parseBody(req,async(err,data)=>{
+    if(err)return send(res,400,{error:'Invalid JSON'});
+    const staff=getPharmacyStaffClaims(req);
+    if(!staff)return send(res,401,{error:'Pharmacy staff authentication required'});
+    if(staff.staffRole!=='manager')return send(res,403,{error:'Only a store manager can update inventory'});
+    try {
+      const saved=await saveInventory(staff.pharmacyId,data);
+      if(saved)return send(res,201,saved);
+      return send(res,503,{error:'DATABASE_URL not configured'});
+    } catch(e) { if(e.statusCode)return send(res,e.statusCode,{error:e.message}); return send(res,503,{error:'Unable to save pharmacy inventory'}); }
+  });
+  if(url.pathname==='/api/pharmacy/staff/orders'&&req.method==='GET'){
+    const staff=getPharmacyStaffClaims(req);
+    if(!staff)return send(res,401,{error:'Pharmacy staff authentication required'});
+    try {
+      const rows=await listPharmacyStaffOrders(staff.pharmacyId);
+      if(rows===null)return send(res,503,{error:'DATABASE_URL not configured'});
+      return send(res,200,{orders:rows});
+    } catch(e) { if(e.statusCode)return send(res,e.statusCode,{error:e.message}); return send(res,503,{error:'Unable to load store orders'}); }
+  }
+  const pharmacyStaffOrderStatusMatch=url.pathname.match(/^\\/api\\/pharmacy\\/staff\\/orders\\/(\\d+)\\/status$/);
+  if(pharmacyStaffOrderStatusMatch&&req.method==='PATCH')return parseBody(req,async(err,data)=>{
+    if(err)return send(res,400,{error:'Invalid JSON'});
+    const staff=getPharmacyStaffClaims(req);
+    if(!staff)return send(res,401,{error:'Pharmacy staff authentication required'});
+    try {
+      const saved=await setPharmacyOrderStatus(Number(pharmacyStaffOrderStatusMatch[1]),staff.pharmacyId,data.status,staff.staffId,staff.staffRole,data.note);
+      if(saved)return send(res,200,saved);
+      return send(res,503,{error:'DATABASE_URL not configured'});
+    } catch(e) { if(e.statusCode)return send(res,e.statusCode,{error:e.message}); return send(res,503,{error:'Unable to update order status'}); }
+  });
+  if(url.pathname==='/api/pharmacy/orders'&&req.method==='GET'){
+    const phone=isProduction?req.auth?.phone:url.searchParams.get('phone');
+    if(!phone)return send(res,422,{error:'patient identity is required'});
+    try {
+      const orderId=url.searchParams.get('id');
+      const rows=await getPatientPharmacyOrder(phone,orderId?Number(orderId):null);
+      if(rows===null)return send(res,503,{error:'DATABASE_URL not configured'});
+      if(orderId&&!rows)return send(res,404,{error:'Pharmacy order not found'});
+      return send(res,200,orderId?rows:{orders:rows});
+    } catch(e) { if(e.statusCode)return send(res,e.statusCode,{error:e.message}); return send(res,503,{error:'Unable to load patient pharmacy orders'}); }
+  }
+  if(url.pathname==='/api/pharmacy/orders'&&req.method==='POST')return parseBody(req,async(err,data)=>{
+    if(err)return send(res,400,{error:'Invalid JSON'});
+    const phone=isProduction?req.auth?.phone:data.phone;
+    if(!phone)return send(res,422,{error:'patient identity is required'});
+    try {
+      const saved=await createPharmacyOrder(phone,data);
+      if(saved)return send(res,201,saved);
+      return send(res,503,{error:'DATABASE_URL not configured'});
+    } catch(e) { if(e.statusCode)return send(res,e.statusCode,{error:e.message}); return send(res,503,{error:'Unable to place pharmacy order'}); }
+  });
+  const pharmacyPatientCancelMatch=url.pathname.match(/^\\/api\\/pharmacy\\/orders\\/(\\d+)\\/cancel$/);
+  if(pharmacyPatientCancelMatch&&req.method==='POST')return parseBody(req,async(err,data)=>{
+    if(err)return send(res,400,{error:'Invalid JSON'});
+    const phone=isProduction?req.auth?.phone:data.phone;
+    if(!phone)return send(res,422,{error:'patient identity is required'});
+    try {
+      const saved=await cancelPatientPharmacyOrder(Number(pharmacyPatientCancelMatch[1]),phone);
+      if(saved)return send(res,200,saved);
+      return send(res,503,{error:'DATABASE_URL not configured'});
+    } catch(e) { if(e.statusCode)return send(res,e.statusCode,{error:e.message}); return send(res,503,{error:'Unable to cancel pharmacy order'}); }
+  });
+
   if(url.pathname==='/api/appointments'&&req.method==='GET'){
     try { const rows=await listAppointments(url.searchParams.get('phone')); if(rows)return send(res,200,rows); }
     catch(e) { return send(res,503,{error:'Unable to load appointments'}); }
