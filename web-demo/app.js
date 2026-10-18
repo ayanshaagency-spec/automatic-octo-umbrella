@@ -16,9 +16,9 @@ async function api(path,options={}){
   const requestUrl=path==='/health'?(rootBase+'/health'||'/health'):(API_BASE+path);
   const headers={'Content-Type':'application/json',...(options.headers||{})};
   const adminToken=sessionStorage.getItem('ayansha_admin_token');
-  if(adminToken&&(path==='/dashboard/summary'||path==='/whatsapp/template'||path.startsWith('/pharmacy/admin/')))headers.Authorization='Bearer '+adminToken;
+  if(adminToken&&(path==='/dashboard/summary'||path==='/whatsapp/template'||path.startsWith('/pharmacy/admin/')||/^\/pharmacy\/orders\/\d+\/status$/.test(path)))headers.Authorization='Bearer '+adminToken;
   const patientToken=sessionStorage.getItem('ayansha_patient_token');
-  if(patientToken&&path.startsWith('/pharmacy/orders'))headers.Authorization='Bearer '+patientToken;
+  if(patientToken&&path.startsWith('/pharmacy/orders')&&!/^\/pharmacy\/orders\/\d+\/status$/.test(path))headers.Authorization='Bearer '+patientToken;
   const res=await fetch(requestUrl,{...options,headers});
   const text=await res.text();
   let data={};
@@ -105,14 +105,6 @@ async function submitAdminLogin(event){
     sessionStorage.setItem('ayansha_admin_token',data.token);
     $('adminPassword').value='';
     updateAdminSessionUi();
-
-$('pharmacyStoreForm')?.addEventListener('submit',submitAdminPharmacyStore);
-$('pharmacyProductForm')?.addEventListener('submit',submitAdminPharmacyProduct);
-$('pharmacyAdminRefreshStores')?.addEventListener('click',loadAdminPharmacyStores);
-$('pharmacyAdminCatalogStore')?.addEventListener('change',loadAdminPharmacyCatalogue);
-$('pharmacyNewStoreType')?.addEventListener('change',toggleAdminStoreHospital);
-$('pharmacyAdminStoreList')?.addEventListener('click',handleAdminPharmacyStoreAction);
-$('pharmacyAdminProductList')?.addEventListener('click',handleAdminPharmacyProductAction);
     result.textContent='Signed in. Loading protected dashboard data…';
     showToast('Admin signed in');
     await loadDashboardSummary();
@@ -502,6 +494,46 @@ async function handleAdminPharmacyProductAction(event){
   }catch(e){$('pharmacyAdminProductResult').textContent='Product update failed: '+e.message;}
 }
 
+
+async function loadAdminPharmacyOrders(){
+  const box=$('pharmacyAdminOrderList'),status=$('pharmacyAdminOrderStatus')?.value||'';
+  if(!box)return;
+  if(!sessionStorage.getItem('ayansha_admin_token')){box.textContent='Admin sign-in required to view patient pharmacy orders.';return;}
+  box.textContent='Loading pharmacy order queue…';
+  try{
+    const rows=await api('/pharmacy/admin/orders'+(status?'?status='+encodeURIComponent(status):''));
+    if(!Array.isArray(rows)||!rows.length){box.textContent='No pharmacy orders match this filter.';return;}
+    const transitions={placed:['accepted','cancelled'],accepted:['preparing','cancelled'],preparing:['ready'],ready:['out_for_delivery','delivered'],out_for_delivery:['delivered'],delivered:[],cancelled:[]};
+    box.innerHTML=rows.map(o=>{
+      const destination=o.deliveryMethod==='home'
+        ?[o.addressLine1,o.addressLine2,o.deliveryCity,o.deliveryState,o.deliveryPincode].filter(Boolean).join(', ')
+        :'Hospital: '+(o.deliveryHospitalName||o.deliveryHospitalId||'not specified');
+      const items=(Array.isArray(o.items)?o.items:[]).map(i=>escapeHtml(i.productName)+' × '+Number(i.quantity)).join(' • ');
+      const next=transitions[o.status]||[];
+      const optionHtml=next.map(value=>'<option value="'+value+'">'+value.replace(/_/g,' ')+'</option>').join('');
+      const control=next.length
+        ?'<div class="pharmacy-admin-order-controls"><label class="pharmacy-label">Next status<select data-pharmacy-next-status="'+escapeHtml(o.id)+'">'+optionHtml+'</select></label><button class="primary" type="button" data-pharmacy-update-order="'+escapeHtml(o.id)+'">Update status</button></div>'
+        :'<div class="pharmacy-admin-order-controls"><small>This order is in a final status.</small></div>';
+      return '<article class="pharmacy-admin-order"><strong>Order #'+escapeHtml(o.id)+' • '+escapeHtml(o.status.replace(/_/g,' '))+' • ₹'+Number(o.totalAmount||0).toLocaleString('en-IN',{maximumFractionDigits:2})+'</strong><br><small>'+escapeHtml(o.storeName)+' • '+escapeHtml(o.storeType==='hospital'?'Hospital pharmacy':'Partner medical store')+'<br>Patient: '+escapeHtml(o.patientName||'Patient')+' ('+escapeHtml(o.patientPhone||'')+')<br>Delivery: '+escapeHtml(destination)+'<br>Payment: '+escapeHtml(o.paymentMethod)+' / '+escapeHtml(o.paymentStatus)+' • '+escapeHtml(o.createdAt||'')+'</small><div class="pharmacy-order-items">'+items+'</div>'+control+'</article>';
+    }).join('');
+  }catch(e){box.textContent='Pharmacy order queue unavailable: '+e.message+'. Admin sign-in and the approved Phase 7 database migration are required.';}
+}
+async function updateAdminPharmacyOrder(event){
+  const button=event.target.closest('[data-pharmacy-update-order]');if(!button)return;
+  const id=button.dataset.pharmacyUpdateOrder;
+  const status=$('pharmacyAdminOrderList')?.querySelector('[data-pharmacy-next-status="'+id+'"]')?.value;
+  if(!status)return;
+  button.disabled=true;button.textContent='Saving…';
+  try{
+    await api('/pharmacy/orders/'+id+'/status',{method:'PATCH',body:JSON.stringify({status})});
+    $('pharmacyAdminStoreResult').textContent='Order #'+id+' updated to '+status.replace(/_/g,' ')+'.';
+    await loadAdminPharmacyOrders();showToast('Pharmacy order updated');
+  }catch(e){
+    $('pharmacyAdminOrderList').insertAdjacentHTML('afterbegin','<div class="result">Order status update failed: '+escapeHtml(e.message)+'</div>');
+    button.disabled=false;button.textContent='Update status';
+  }
+}
+
 async function checkWhatsApp(){const el=$('whatsappStatus');el.textContent='Checking…';try{const d=await api('/whatsapp/status');el.textContent=d.configured?'Cloud API configured':'Code connected • credentials pending';}catch(e){el.textContent='WhatsApp status unavailable';}}
 async function checkPayments(){const el=$('paymentStatus');el.textContent='Checking…';try{await api('/payments?phone=demo');el.textContent='Payment API online';}catch(e){el.textContent=e.message.includes('phone')?'Payment API online':'Payment API needs database';}}
 async function checkPrescriptions(){const el=$('prescriptionStatus');el.textContent='Checking…';try{await api('/prescriptions?phone=demo');el.textContent='Prescription API online';}catch(e){el.textContent=e.message.includes('phone')?'Prescription API online':'Prescription API needs database';}}
@@ -525,5 +557,16 @@ $('patientPhone')?.addEventListener('input',()=>{const dest=$('pharmacyPatientPh
 if($('pharmacyPatientPhone')&&$('patientPhone'))$('pharmacyPatientPhone').value=$('patientPhone').value;
 togglePharmacyDeliveryFields();
 loadPharmacyStores();
+
+$('pharmacyStoreForm')?.addEventListener('submit',submitAdminPharmacyStore);
+$('pharmacyProductForm')?.addEventListener('submit',submitAdminPharmacyProduct);
+$('pharmacyAdminRefreshStores')?.addEventListener('click',loadAdminPharmacyStores);
+$('pharmacyAdminCatalogStore')?.addEventListener('change',loadAdminPharmacyCatalogue);
+$('pharmacyNewStoreType')?.addEventListener('change',toggleAdminStoreHospital);
+$('pharmacyAdminStoreList')?.addEventListener('click',handleAdminPharmacyStoreAction);
+$('pharmacyAdminProductList')?.addEventListener('click',handleAdminPharmacyProductAction);
+$('pharmacyAdminRefreshOrders')?.addEventListener('click',loadAdminPharmacyOrders);
+$('pharmacyAdminOrderStatus')?.addEventListener('change',loadAdminPharmacyOrders);
+$('pharmacyAdminOrderList')?.addEventListener('click',updateAdminPharmacyOrder);
 
 checkApi(); checkDatabase(); loadDoctorsForForm(); loadAppointments(); loadDashboardSummary(); loadVerificationStatus();
