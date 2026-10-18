@@ -234,7 +234,7 @@ const server=http.createServer(async(req,res)=>{
     try { const saved=await updatePaymentStatus(Number(paymentStatusMatch[1]),data.status,data.providerPaymentId); if(saved)return send(res,200,saved); return send(res,503,{error:'DATABASE_URL not configured'}); }
     catch(e) { if(e.statusCode)return send(res,e.statusCode,{error:e.message}); return send(res,503,{error:'Unable to update payment status'}); }
   });
-  if(await handlePharmacyRoute(req,res,url,{send:(code,data)=>send(res,code,data),parseBody,isProduction,auth:req.auth,admin:req.admin})) return;
+  if(await handlePharmacyRoute(req,res,url,{send:(code,data)=>{send(res,code,data);return true;},parseBody,isProduction,auth:req.auth,admin:req.admin})) return;
   send(res,404,{error:'Not found'});
 });
 server.listen(PORT,()=>console.log(`Ayansha API running on ${PORT}`));
