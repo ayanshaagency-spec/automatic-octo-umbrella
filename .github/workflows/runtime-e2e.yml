@@ -63,6 +63,193 @@ jobs:
           curl -fsS http://127.0.0.1:3918/api/emergency | grep '"emergency":true'
           kill $(cat /tmp/ayansha-api.pid) || true
 
+      - name: Verify additive Pharmacy schema and order lifecycle on isolated PostgreSQL
+        working-directory: backend
+        env:
+          PORT: 3919
+          DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/ayansha_healthcare
+          JWT_SECRET: ci-only-pharmacy-jwt-secret-long-enough-123456
+        run: |
+          node <<'NODE'
+          const fs = require('node:fs');
+          const { spawn } = require('node:child_process');
+          const { Client } = require('pg');
+          const { hashStaffPassword, verifyStaffPassword } = require('./src/pharmacy_auth');
+
+          const databaseUrl = process.env.DATABASE_URL;
+          const port = Number(process.env.PORT || 3919);
+          const base = 'http://127.0.0.1:' + port;
+          let server;
+          let db;
+
+          async function waitForServer(child) {
+            for (let i = 0; i < 60; i += 1) {
+              if (child.exitCode !== null) throw new Error('Pharmacy API exited before health check');
+              try { const res = await fetch(base + '/health'); if (res.ok) return; } catch (_) {}
+              await new Promise(resolve => setTimeout(resolve, 200));
+            }
+            throw new Error('Pharmacy API did not become healthy in time');
+          }
+
+          async function api(path, options = {}) {
+            const response = await fetch(base + path, {
+              ...options,
+              headers: { 'content-type': 'application/json', ...(options.headers || {}) }
+            });
+            const text = await response.text();
+            let data = {};
+            try { data = JSON.parse(text); } catch (_) { data = { raw: text }; }
+            return { status: response.status, data };
+          }
+
+          function assert(condition, message) {
+            if (!condition) throw new Error(message);
+          }
+
+          (async () => {
+            try {
+              db = new Client({ connectionString: databaseUrl });
+              await db.connect();
+              // Minimal pre-existing entities are created only in the ephemeral CI database.
+              await db.query('CREATE TABLE IF NOT EXISTS patients (id BIGSERIAL PRIMARY KEY, name VARCHAR(180) NOT NULL, phone VARCHAR(40) NOT NULL UNIQUE)');
+              await db.query('CREATE TABLE IF NOT EXISTS prescriptions (id BIGSERIAL PRIMARY KEY, patient_id BIGINT NOT NULL REFERENCES patients(id))');
+              await db.query('CREATE TABLE IF NOT EXISTS prescription_items (id BIGSERIAL PRIMARY KEY, prescription_id BIGINT NOT NULL REFERENCES prescriptions(id), medicine_name VARCHAR(240) NOT NULL, dosage VARCHAR(120), frequency VARCHAR(120), duration VARCHAR(120), instructions TEXT)');
+              for (const migration of ['007_phase6_emergency_hospitals.sql', '008_pharmacy_integration.sql']) {
+                await db.query(fs.readFileSync('migrations/' + migration, 'utf8'));
+              }
+              const requiredTables = ['hospitals','pharmacies','pharmacy_staff','medicine_catalog','pharmacy_inventory','pharmacy_orders','pharmacy_order_items','pharmacy_order_events'];
+              const tableCheck = await db.query("SELECT table_name FROM information_schema.tables WHERE table_schema='public' AND table_name = ANY($1::text[])", [requiredTables]);
+              assert(tableCheck.rowCount === requiredTables.length, 'Pharmacy migration did not create all expected tables');
+
+              const hospitalResult = await db.query(
+                "INSERT INTO hospitals (name,address,city,state,latitude,longitude,active) VALUES ('CI Demo Hospital','1 Test Road','Faridabad','Haryana',28.6139,77.2090,TRUE) RETURNING id"
+              );
+              const hospitalId = Number(hospitalResult.rows[0].id);
+              await db.query("INSERT INTO patients(name,phone) VALUES ('Pharmacy CI Patient','9999990001')");
+              const partnerResult = await db.query(
+                "INSERT INTO pharmacies(name,store_type,license_number,address,city,state,is_verified,active) VALUES ('CI Partner Medical','partner_store','CI-PARTNER-LIC-01','2 Test Market Road','Faridabad','Haryana',TRUE,TRUE) RETURNING id"
+              );
+              const partnerId = Number(partnerResult.rows[0].id);
+              const hospitalPharmacyResult = await db.query(
+                "INSERT INTO pharmacies(name,store_type,hospital_id,license_number,address,city,state,is_verified,active) VALUES ('CI Hospital Pharmacy','hospital',$1,'CI-HOSP-LIC-01','1 Test Road','Faridabad','Haryana',TRUE,TRUE) RETURNING id",
+                [hospitalId]
+              );
+              const hospitalPharmacyId = Number(hospitalPharmacyResult.rows[0].id);
+              const medicineResult = await db.query(
+                "INSERT INTO medicine_catalog(medicine_name,generic_name,strength,dosage_form,prescription_required) VALUES ('CI Non-prescription Demo Product','Demo generic','1 unit','test pack',FALSE) RETURNING id"
+              );
+              const medicineId = Number(medicineResult.rows[0].id);
+              const partnerInventory = await db.query(
+                "INSERT INTO pharmacy_inventory(pharmacy_id,medicine_id,batch_number,expiry_date,mrp,selling_price,quantity_available) VALUES ($1,$2,'CI-PARTNER-BATCH',CURRENT_DATE + 365,10,8,10) RETURNING id",
+                [partnerId, medicineId]
+              );
+              const hospitalInventory = await db.query(
+                "INSERT INTO pharmacy_inventory(pharmacy_id,medicine_id,batch_number,expiry_date,mrp,selling_price,quantity_available) VALUES ($1,$2,'CI-HOSP-BATCH',CURRENT_DATE + 365,10,9,10) RETURNING id",
+                [hospitalPharmacyId, medicineId]
+              );
+              const staffPassword = 'CI-Only-Pharmacy-Password-9381';
+              await db.query(
+                "INSERT INTO pharmacy_staff(pharmacy_id,email,password_hash,staff_role) VALUES ($1,'partner-manager@example.test',$2,'manager'),($3,'hospital-manager@example.test',$4,'manager')",
+                [partnerId, hashStaffPassword(staffPassword), hospitalPharmacyId, hashStaffPassword(staffPassword)]
+              );
+              const seededStaff = await db.query("SELECT email, password_hash FROM pharmacy_staff ORDER BY id");
+              assert(seededStaff.rowCount === 2 && seededStaff.rows.every(row => verifyStaffPassword(staffPassword, row.password_hash)), 'Seeded pharmacy staff password hashes did not verify');
+              await db.end();
+              db = null;
+
+              server = spawn(process.execPath, ['src/server.js'], {
+                cwd: process.cwd(),
+                env: { ...process.env, NODE_ENV: 'test', PORT: String(port), DATABASE_URL: databaseUrl },
+                stdio: 'ignore'
+              });
+              await waitForServer(server);
+
+              const directory = await api('/api/pharmacies');
+              assert(directory.status === 200 && directory.data.pharmacies.length === 2, 'Verified pharmacy directory API did not return seeded stores');
+              const inventory = await api('/api/pharmacies/' + partnerId + '/inventory');
+              assert(inventory.status === 200 && inventory.data.inventory.length === 1, 'Pharmacy inventory endpoint did not return unexpired stock');
+
+              const makeOrder = async (pharmacyId, destinationType, inventoryId, quantity, key, extra = {}) => api('/api/pharmacy/orders', {
+                method: 'POST',
+                body: JSON.stringify({
+                  phone: '9999990001', pharmacyId, destinationType,
+                  items: [{ inventoryId, quantity }], idempotencyKey: key, ...extra
+                })
+              });
+              const homePayload = { addressLine: '12 CI Test Street', city: 'Faridabad', state: 'Haryana', recipientName: 'CI Patient', recipientPhone: '9999990001' };
+              const first = await makeOrder(partnerId, 'home', Number(partnerInventory.rows[0].id), 2, 'ci-home-idempotency', homePayload);
+              assert(first.status === 201 && first.data.order_status === 'requested', 'Home-delivery order was not created');
+              const repeat = await makeOrder(partnerId, 'home', Number(partnerInventory.rows[0].id), 2, 'ci-home-idempotency', homePayload);
+              assert(repeat.status === 201 && repeat.data.id === first.data.id, 'Idempotent retry created a duplicate order');
+              const reservedAfterRetry = await (async () => {
+                const c = new Client({ connectionString: databaseUrl }); await c.connect();
+                try { return (await c.query('SELECT quantity_reserved FROM pharmacy_inventory WHERE id=$1',[partnerInventory.rows[0].id])).rows[0].quantity_reserved; }
+                finally { await c.end(); }
+              })();
+              assert(Number(reservedAfterRetry) === 2, 'Idempotent retry reserved stock more than once');
+
+              const cancelled = await api('/api/pharmacy/orders/' + first.data.id + '/cancel', {
+                method: 'POST', body: JSON.stringify({ phone: '9999990001' })
+              });
+              assert(cancelled.status === 200 && cancelled.data.order_status === 'cancelled', 'Patient cancellation did not release a pending order');
+              const partnerStaff = await api('/api/pharmacy/staff/login', {
+                method: 'POST', body: JSON.stringify({ email: 'partner-manager@example.test', password: staffPassword })
+              });
+              assert(partnerStaff.status === 200 && partnerStaff.data.token, 'Partner store staff login failed: HTTP ' + partnerStaff.status + ' ' + JSON.stringify(partnerStaff.data));
+              const second = await makeOrder(partnerId, 'home', Number(partnerInventory.rows[0].id), 3, 'ci-home-delivery', homePayload);
+              assert(second.status === 201, 'Second home order was not created');
+              const authPartner = { authorization: 'Bearer ' + partnerStaff.data.token };
+              for (const status of ['accepted','packed','out_for_delivery','delivered']) {
+                const result = await api('/api/pharmacy/staff/orders/' + second.data.id + '/status', {
+                  method:'PATCH',headers:authPartner,body:JSON.stringify({status})
+                });
+                assert(result.status === 200 && result.data.order_status === status, 'Home delivery status transition failed: ' + status + ' / ' + JSON.stringify(result.data));
+              }
+              const crossStore = await api('/api/pharmacy/staff/login', {
+                method:'POST',body:JSON.stringify({email:'hospital-manager@example.test',password:staffPassword})
+              });
+              assert(crossStore.status === 200, 'Hospital staff login failed');
+              const crossStoreAttempt = await api('/api/pharmacy/staff/orders/' + second.data.id + '/status', {
+                method:'PATCH',headers:{authorization:'Bearer '+crossStore.data.token},body:JSON.stringify({status:'cancelled'})
+              });
+              assert(crossStoreAttempt.status === 404, 'Another pharmacy staff session accessed a foreign store order');
+
+              const hospitalPayload = { hospitalId, hospitalFulfillmentMethod:'ward_room_delivery', recipientName:'CI Patient', recipientPhone:'9999990001', deliveryInstructions:'CI ward desk' };
+              const hospitalOrder = await makeOrder(hospitalPharmacyId,'hospital',Number(hospitalInventory.rows[0].id),1,'ci-hospital-delivery',hospitalPayload);
+              assert(hospitalOrder.status===201 && hospitalOrder.data.destination_type==='hospital' && hospitalOrder.data.hospital_fulfillment_method==='ward_room_delivery', 'Hospital ward/room delivery order was not created');
+              const authHospital = { authorization:'Bearer '+crossStore.data.token };
+              for (const status of ['accepted','packed','out_for_delivery','delivered']) {
+                const result=await api('/api/pharmacy/staff/orders/'+hospitalOrder.data.id+'/status',{
+                  method:'PATCH',headers:authHospital,body:JSON.stringify({status})
+                });
+                assert(result.status===200 && result.data.order_status===status,'Hospital ward/room dispatch status transition failed: '+status+' / '+JSON.stringify(result.data));
+              }
+              const counterPickup = await makeOrder(hospitalPharmacyId,'hospital',Number(hospitalInventory.rows[0].id),1,'ci-hospital-counter-pickup',{...hospitalPayload,hospitalFulfillmentMethod:'counter_pickup',deliveryInstructions:'CI counter pickup'});
+              assert(counterPickup.status===201 && counterPickup.data.hospital_fulfillment_method==='counter_pickup', 'Hospital counter-pickup order was not created');
+              for (const status of ['accepted','packed','ready_for_pickup','delivered']) {
+                const result=await api('/api/pharmacy/staff/orders/'+counterPickup.data.id+'/status',{
+                  method:'PATCH',headers:authHospital,body:JSON.stringify({status})
+                });
+                assert(result.status===200 && result.data.order_status===status,'Counter-pickup status transition failed: '+status+' / '+JSON.stringify(result.data));
+              }
+
+              const verifyDb = new Client({connectionString:databaseUrl}); await verifyDb.connect();
+              try {
+                const partnerStock=await verifyDb.query('SELECT quantity_available,quantity_reserved FROM pharmacy_inventory WHERE id=$1',[partnerInventory.rows[0].id]);
+                const hospitalStock=await verifyDb.query('SELECT quantity_available,quantity_reserved FROM pharmacy_inventory WHERE id=$1',[hospitalInventory.rows[0].id]);
+                assert(Number(partnerStock.rows[0].quantity_available)===7 && Number(partnerStock.rows[0].quantity_reserved)===0,'Home delivery did not consume reserved partner stock correctly');
+                assert(Number(hospitalStock.rows[0].quantity_available)===8 && Number(hospitalStock.rows[0].quantity_reserved)===0,'Hospital ward delivery and counter pickup did not consume reserved stock correctly');
+              } finally { await verifyDb.end(); }
+              console.log('Pharmacy E2E passed: migrations, active-store directory, stock reservation, idempotency, cancellation, scoped staff auth, home delivery, hospital ward/room delivery and counter pickup.');
+            } finally {
+              if (server && server.exitCode === null) {
+                await new Promise(resolve => { server.once('exit', resolve); server.kill(); });
+              }
+              if (db) await db.end();
+            }
+          })().catch(error => { console.error(error); process.exitCode = 1; });
+          NODE
+
       - name: Upload runtime log on failure
         if: failure()
         uses: actions/upload-artifact@v4
