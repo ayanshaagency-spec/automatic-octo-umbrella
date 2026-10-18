@@ -1,7 +1,7 @@
 'use strict';
 
 const crypto = require('crypto');
-const { getDb } = require('./db');
+const { getDb, getTransactionClient } = require('./db');
 const { hashStaffPassword, verifyStaffPassword } = require('./pharmacy_auth');
 const { validateCreatePharmacyOrder, validateCreatePharmacy, validateStatusTransition, positiveId } = require('./pharmacy_validation');
 
@@ -266,11 +266,11 @@ async function createPharmacyOrder(phone, data) {
   const orderData = validateCreatePharmacyOrder(data);
   const patientPhone = typeof phone === 'string' ? phone.trim() : '';
   if (!patientPhone) fail('Patient phone identity is required', 422);
-  const db = await getDb();
+  const db = await getTransactionClient();
   if (!db) return null;
 
-  await db.query('BEGIN');
   try {
+    await db.query('BEGIN');
     const existingPatient = await db.query('SELECT id, phone FROM patients WHERE phone = $1', [patientPhone]);
     if (!existingPatient.rowCount) fail('Patient profile not found', 404);
     const patient = existingPatient.rows[0];
@@ -399,6 +399,8 @@ async function createPharmacyOrder(phone, data) {
   } catch (error) {
     try { await db.query('ROLLBACK'); } catch (_) {}
     throw error;
+  } finally {
+    db.release();
   }
 }
 
@@ -451,10 +453,10 @@ async function listPharmacyStaffOrders(pharmacyId) {
 async function setPharmacyOrderStatus(orderId, pharmacyId, nextStatus, staffId, staffRole, note) {
   const id = positiveId(orderId, 'orderId');
   const storeId = positiveId(pharmacyId, 'pharmacyId');
-  const db = await getDb();
+  const db = await getTransactionClient();
   if (!db) return null;
-  await db.query('BEGIN');
   try {
+    await db.query('BEGIN');
     const found = await db.query(
       'SELECT * FROM pharmacy_orders WHERE id = $1 AND pharmacy_id = $2 FOR UPDATE',
       [id, storeId]
@@ -505,6 +507,8 @@ async function setPharmacyOrderStatus(orderId, pharmacyId, nextStatus, staffId, 
   } catch (error) {
     try { await db.query('ROLLBACK'); } catch (_) {}
     throw error;
+  } finally {
+    db.release();
   }
 }
 
@@ -512,10 +516,10 @@ async function cancelPatientPharmacyOrder(orderId, phone) {
   const id = positiveId(orderId, 'orderId');
   const patientPhone = String(phone || '').trim();
   if (!patientPhone) fail('Patient identity is required', 422);
-  const db = await getDb();
+  const db = await getTransactionClient();
   if (!db) return null;
-  await db.query('BEGIN');
   try {
+    await db.query('BEGIN');
     const found = await db.query(
       'SELECT * FROM pharmacy_orders WHERE id = $1 AND patient_phone = $2 FOR UPDATE',
       [id, patientPhone]
@@ -547,6 +551,8 @@ async function cancelPatientPharmacyOrder(orderId, phone) {
   } catch (error) {
     try { await db.query('ROLLBACK'); } catch (_) {}
     throw error;
+  } finally {
+    db.release();
   }
 }
 
