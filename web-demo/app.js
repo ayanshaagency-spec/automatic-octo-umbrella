@@ -289,8 +289,11 @@ function togglePharmacyDeliveryFields(){
   if($('pharmacyHospitalFields'))$('pharmacyHospitalFields').hidden=!hospital;
   if($('pharmacyHomeFields'))$('pharmacyHomeFields').hidden=hospital;
   const selected=$('pharmacyStoreSelect')?.selectedOptions?.[0];
-  if(hospital&&selected?.dataset.storeType==='hospital'&&selected.dataset.hospitalId){
-    loadPharmacyHospitals().then(()=>{$('pharmacyHospitalSelect').value=selected.dataset.hospitalId;});
+  if(hospital){
+    loadPharmacyHospitals().then(()=>{
+      const activeStore=$('pharmacyStoreSelect')?.selectedOptions?.[0];
+      if(activeStore?.dataset.storeType==='hospital'&&activeStore.dataset.hospitalId)$('pharmacyHospitalSelect').value=activeStore.dataset.hospitalId;
+    });
   }
 }
 async function submitPharmacyOrder(){
