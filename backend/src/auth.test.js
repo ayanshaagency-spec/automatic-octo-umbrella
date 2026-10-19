@@ -79,6 +79,22 @@ test('OTP provider URLs must use HTTPS and may not embed credentials', async () 
   }
 });
 
+
+test('OTP requests fail closed in staging when provider secrets are missing', async () => {
+  const previousMode = process.env.NODE_ENV;
+  process.env.NODE_ENV = 'staging';
+  delete process.env.OTP_PROVIDER_URL;
+  delete process.env.OTP_PROVIDER_TOKEN;
+  try {
+    await assert.rejects(
+      () => issueOtp('+919222222222'),
+      error => error.statusCode === 503 && /OTP provider is not configured/.test(error.message)
+    );
+  } finally {
+    process.env.NODE_ENV = previousMode;
+  }
+});
+
 test('production OTP requests fail closed when provider secrets are missing', async () => {
   const previousMode = process.env.NODE_ENV;
   process.env.NODE_ENV = 'production';
