@@ -2,7 +2,7 @@
 -- Safe/idempotent schema migration. Does not seed fake pharmacies/products
 -- and does not modify existing patient, appointment, prescription, payment or hospital rows.
 -- Apply explicitly after reviewing the target database:
---   psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f backend/migrations/phase7_pharmacy.sql
+---   psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f backend/db/migrations/008_phase7_pharmacy.sql
 
 BEGIN;
 
@@ -10,7 +10,7 @@ CREATE TABLE IF NOT EXISTS pharmacy_stores (
   id BIGSERIAL PRIMARY KEY,
   name TEXT NOT NULL CHECK (length(trim(name)) BETWEEN 2 AND 160),
   store_type TEXT NOT NULL CHECK (store_type IN ('hospital', 'partner')),
-  hospital_id BIGINT REFERENCES hospitals(id) ON DELETE SET NULL,
+  hospital_id BIGINT REFERENCES hospitals(id) ON DELETE RESTRICT,
   address TEXT NOT NULL,
   city TEXT NOT NULL,
   state TEXT NOT NULL,
