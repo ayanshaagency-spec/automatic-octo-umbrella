@@ -149,12 +149,22 @@ jobs:
           node <<'NODE'
           const { Readable } = require('node:stream');
           const { scanStream } = require('./src/insurance_scanner');
+          const pause = ms => new Promise(resolve => setTimeout(resolve, ms));
           (async () => {
-            const result = await scanStream(Readable.from([Buffer.from('AYANSHA-CLAMAV-TEST-INFECTED')]), { maxBytes: 1024 });
-            if (result.status !== 'infected') {
-              throw new Error('CI-only signature was not detected: ' + result.status + ' / ' + (result.signature || 'no-signature'));
+            let lastResult = null;
+            for (let attempt = 0; attempt < 60; attempt += 1) {
+              lastResult = await scanStream(Readable.from([Buffer.from('AYANSHA-CLAMAV-TEST-INFECTED')]), { maxBytes: 1024 });
+              if (lastResult.status === 'infected' && lastResult.signature === 'Ayansha.Test.Quarantine') {
+                console.log('ClamAV loaded and detected the synthetic quarantine test marker.');
+                return;
+              }
+              if (lastResult.status !== 'clean') {
+                throw new Error('Unexpected ClamAV scan result: ' + lastResult.status + ' / ' + (lastResult.signature || 'no-signature'));
+              }
+              await pause(1000);
             }
-            console.log('ClamAV detected the synthetic quarantine test marker.');
+            throw new Error('CI-only signature was not loaded after reload: ' +
+              (lastResult?.status || 'no-result') + ' / ' + (lastResult?.signature || 'no-signature'));
           })().catch(error => { console.error(error.message); process.exit(1); });
           NODE
       - name: Verify private uploads, clean scan, synthetic quarantine and blocked downloads
