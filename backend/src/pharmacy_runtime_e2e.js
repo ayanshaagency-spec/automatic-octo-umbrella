@@ -85,8 +85,34 @@ async function main() {
     );
 
     const baseUrl = process.env.PHARMACY_E2E_BASE_URL;
+    const adminLogin = await request(baseUrl, '/api/admin/login', {
+      method: 'POST',
+      body: { email: process.env.ADMIN_EMAIL, password: process.env.ADMIN_PASSWORD }
+    });
+    assertStatus(adminLogin, 200, 'Admin sign-in');
+    const adminHeaders = { Authorization: 'Bearer ' + adminLogin.body.token };
+
+    const otpRequest = await request(baseUrl, '/api/auth/request-otp', {
+      method: 'POST',
+      body: { phone: '9990000001' }
+    });
+    assertStatus(otpRequest, 200, 'CI patient OTP request');
+    if (!otpRequest.body.devOtp) throw new Error('CI test mode must return a non-production dev OTP');
+    const patientLogin = await request(baseUrl, '/api/auth/verify-otp', {
+      method: 'POST',
+      body: { phone: '9990000001', otp: otpRequest.body.devOtp, name: 'CI Test Patient' }
+    });
+    assertStatus(patientLogin, 200, 'Patient sign-in');
+    const patientHeaders = { Authorization: 'Bearer ' + patientLogin.body.token };
+
+    const anonymousAdmin = await request(baseUrl, '/api/pharmacy/admin/stores');
+    assertStatus(anonymousAdmin, 401, 'Reject anonymous Pharmacy Admin API access');
+    const anonymousPatientOrders = await request(baseUrl, '/api/pharmacy/orders?phone=9990000001');
+    assertStatus(anonymousPatientOrders, 401, 'Reject anonymous pharmacy order history access');
+
     const hospitalStoreResult = await request(baseUrl, '/api/pharmacy/admin/stores', {
       method: 'POST',
+      headers: adminHeaders,
       body: {
         name: 'CI Hospital Pharmacy',
         storeType: 'hospital',
@@ -104,6 +130,7 @@ async function main() {
 
     const partnerStoreResult = await request(baseUrl, '/api/pharmacy/admin/stores', {
       method: 'POST',
+      headers: adminHeaders,
       body: {
         name: 'CI Partner Medical Store',
         storeType: 'partner',
@@ -121,6 +148,7 @@ async function main() {
     for (const storeId of [hospitalStoreId, partnerStoreId]) {
       const approval = await request(baseUrl, '/api/pharmacy/admin/stores/' + storeId + '/approval', {
         method: 'PATCH',
+        headers: adminHeaders,
         body: { approved: true, active: true }
       });
       assertStatus(approval, 200, 'Approve store ' + storeId);
@@ -129,6 +157,7 @@ async function main() {
     async function createProduct(storeId, name, sku, stockQuantity) {
       const result = await request(baseUrl, '/api/pharmacy/admin/stores/' + storeId + '/products', {
         method: 'POST',
+        headers: adminHeaders,
         body: {
           name,
           sku,
@@ -158,6 +187,7 @@ async function main() {
 
     const homeOrder = await request(baseUrl, '/api/pharmacy/orders', {
       method: 'POST',
+      headers: patientHeaders,
       body: {
         phone: '9990000001',
         storeId: partnerStoreId,
@@ -175,6 +205,7 @@ async function main() {
 
     const hospitalOrder = await request(baseUrl, '/api/pharmacy/orders', {
       method: 'POST',
+      headers: patientHeaders,
       body: {
         phone: '9990000001',
         storeId: hospitalStoreId,
@@ -191,6 +222,7 @@ async function main() {
 
     const crossHospitalOrder = await request(baseUrl, '/api/pharmacy/orders', {
       method: 'POST',
+      headers: patientHeaders,
       body: {
         phone: '9990000001',
         storeId: hospitalStoreId,
@@ -204,6 +236,7 @@ async function main() {
 
     const prescriptionMismatch = await request(baseUrl, '/api/pharmacy/orders', {
       method: 'POST',
+      headers: patientHeaders,
       body: {
         phone: '9990000001',
         storeId: partnerStoreId,
