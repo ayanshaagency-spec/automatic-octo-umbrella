@@ -115,7 +115,7 @@ test('Phase 7 pharmacy API smoke and fail-closed contract', async t => {
   const invalidOrder = await fetch(`${BASE_URL}/api/pharmacy/orders`, {
     method: 'POST',
     headers: { ...patientHeaders, 'Content-Type': 'application/json' },
-    body: JSON.stringify({ phone: '9876543210', storeId: 1, items: [] })
+    body: JSON.stringify({ phone: '+919876543210', storeId: 1, items: [] })
   });
   assert.equal(invalidOrder.status, 422);
   assert.match((await invalidOrder.json()).error, /deliveryMethod|items/i);
@@ -165,7 +165,7 @@ test('Phase 7 pharmacy API smoke and fail-closed contract', async t => {
     method: 'POST',
     headers: { ...patientHeaders, 'Content-Type': 'application/json' },
     body: JSON.stringify({
-      phone: '9876543210',
+      phone: '+919876543210',
       storeId: 1,
       deliveryMethod: 'home',
       deliveryAddress: { line1: '22 Main Road', city: 'Muzaffarnagar', state: 'Uttar Pradesh', pincode: '251001' },
