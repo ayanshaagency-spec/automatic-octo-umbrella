@@ -32,12 +32,16 @@ CREATE TABLE IF NOT EXISTS insurance_documents (
   expected_size_bytes INTEGER NOT NULL CHECK (expected_size_bytes > 0 AND expected_size_bytes <= 10485760),
   object_key VARCHAR(500) NOT NULL UNIQUE,
   upload_key VARCHAR(500) UNIQUE,
+  scan_status VARCHAR(20) NOT NULL DEFAULT 'pending'
+    CHECK (scan_status IN ('pending','clean','infected','error')),
   status VARCHAR(24) NOT NULL DEFAULT 'upload_pending'
-    CHECK (status IN ('upload_pending','submitted')),
+    CHECK (status IN ('upload_pending','submitted','quarantined')),
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   uploaded_at TIMESTAMPTZ,
   CONSTRAINT insurance_documents_uploaded_consistency
-    CHECK ((status = 'upload_pending' AND uploaded_at IS NULL) OR (status = 'submitted' AND uploaded_at IS NOT NULL))
+    CHECK ((status = 'upload_pending' AND uploaded_at IS NULL) OR (status IN ('submitted','quarantined') AND uploaded_at IS NOT NULL)),
+  CONSTRAINT insurance_documents_scan_state_consistency
+    CHECK ((status = 'submitted' AND scan_status = 'clean') OR (status = 'upload_pending' AND scan_status = 'pending') OR (status = 'quarantined' AND scan_status IN ('infected','error')))
 );
 
 CREATE INDEX IF NOT EXISTS idx_insurance_documents_policy_created
