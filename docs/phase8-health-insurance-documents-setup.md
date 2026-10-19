@@ -30,7 +30,7 @@ The access key needs only the operations required for upload, object head/read, 
 
 ### Bucket CORS
 
-Allow `PUT` from the exact hosted Ayansha Health Care app origin used for staging, with the `Content-Type` request header. Avoid wildcard origins for a production bucket. Test pre-signed upload and download from the real HTTPS site before allowing patient documents.
+Allow `POST` from the exact hosted Ayansha Health Care app origin used for staging. The browser sends the `Content-Type` as a signed multipart form field; the bucket must return an appropriate CORS response so the browser can read upload success/failure. Avoid wildcard origins for a production bucket. Test pre-signed upload and download from the real HTTPS site before allowing patient documents.
 
 ## Mandatory safety gate before real patient documents
 
