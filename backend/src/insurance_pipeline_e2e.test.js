@@ -33,9 +33,9 @@ async function createUpload(intent, bytes, contentType, filename) {
   return fetch(intent.uploadUrl, { method: 'POST', body: data });
 }
 
-function makeEmbeddedEicarPdf() {
-  // Uncompressed EmbeddedFile stream lets ClamAV scan the harmless EICAR test signature.
-  const eicar = Buffer.from('X5O!P%@AP[4\\PZX54(P^)7CC)7}$EICAR-STANDARD-ANTIVIRUS-TEST-FILE!$H+H*', 'ascii');
+function makeEmbeddedTestSignaturePdf() {
+  // Uncompressed EmbeddedFile stream lets ClamAV scan a harmless test-only signature.
+  const eicar = Buffer.from('AYANSHA-CLAMAV-TEST-INFECTED', 'ascii');
   const objects = [
     Buffer.from('1 0 obj\\n<< /Type /Catalog /Pages 2 0 R /Names << /EmbeddedFiles 6 0 R >> >>\\nendobj\\n'),
     Buffer.from('2 0 obj\\n<< /Type /Pages /Kids [3 0 R] /Count 1 >>\\nendobj\\n'),
@@ -172,14 +172,14 @@ test('insurance private upload + real ClamAV scan + quarantine end-to-end', { sk
   assert.equal(downloaded.status, 200);
   assert.deepEqual(Buffer.from(await downloaded.arrayBuffer()), cleanPdf);
 
-  // EICAR is a harmless industry-standard antivirus test signature, not live malware.
-  const infectedPdf = makeEmbeddedEicarPdf();
+  // The custom ClamAV signature is CI-only and has no malware payload.
+  const infectedPdf = makeEmbeddedTestSignaturePdf();
   const infectedIntent = await request('/api/insurance/policies/' + policyId + '/documents', {
     method: 'POST',
     headers: patientHeaders,
     body: {
       documentType: 'other',
-      filename: 'synthetic-eicar-test.pdf',
+      filename: 'synthetic-scan-test.pdf',
       contentType: 'application/pdf',
       sizeBytes: infectedPdf.length
     }
