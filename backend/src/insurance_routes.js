@@ -119,10 +119,11 @@ async function handleInsuranceRoute(req, res, url, context) {
       if (validated.error) { send(422, { error: validated.error }); return true; }
       const patientId = await repository.findPatientId(patient.phone);
       const objectKey = storage.makeObjectKey();
-      // Sign the private upload before returning an intent to the patient.
-      const uploadForm = await storage.createUploadForm({ objectKey, contentType: validated.value.contentType });
+      const uploadKey = storage.makeUploadKey();
+      // The signed form writes only to a temporary key; completion promotes it to a different final key.
+      const uploadForm = await storage.createUploadForm({ objectKey: uploadKey, contentType: validated.value.contentType });
       const document = await repository.createDocumentIntent(
-        patientId, Number(patientCreateDocument[1]), validated.value, objectKey
+        patientId, Number(patientCreateDocument[1]), validated.value, objectKey, uploadKey
       );
       send(201, {
         document,
@@ -149,7 +150,7 @@ async function handleInsuranceRoute(req, res, url, context) {
       if (document.status === 'submitted') { send(200, { id: document.id, status: document.status }); return true; }
       let stored;
       try {
-        stored = await storage.inspectObject({ objectKey: document.objectKey });
+        stored = await storage.inspectObject({ objectKey: document.uploadKey });
       } catch (_) {
         send(422, { error: 'Uploaded document was not found. Please upload the file again.' });
         return true;
@@ -159,7 +160,16 @@ async function handleInsuranceRoute(req, res, url, context) {
         send(422, { error: 'Uploaded file size or type did not match the upload request' });
         return true;
       }
-      const saved = await repository.markDocumentSubmitted(patientId, documentId);
+      await storage.promoteUpload({ uploadKey: document.uploadKey, objectKey: document.objectKey });
+      let saved;
+      try {
+        saved = await repository.markDocumentSubmitted(patientId, documentId);
+      } catch (error) {
+        await storage.deleteUpload({ uploadKey: document.objectKey }).catch(() => {});
+        throw error;
+      }
+      // The upload form can remain valid briefly, so remove the temporary key after promotion.
+      await storage.deleteUpload({ uploadKey: document.uploadKey }).catch(() => {});
       send(200, { id: saved.id, status: saved.status });
       return true;
     }
