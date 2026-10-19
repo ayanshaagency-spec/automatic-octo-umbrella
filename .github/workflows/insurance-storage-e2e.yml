@@ -86,6 +86,19 @@ jobs:
             -p 127.0.0.1:3310:3310 \
             -v "$RUNNER_TEMP/insurance-ci-test.ndb:/var/lib/clamav/ayansha-ci-test.ndb:rw" \
             clamav/clamav:stable
+      - name: Verify the mounted CI signature with clamscan
+        shell: bash
+        run: |
+          set -euo pipefail
+          set +e
+          output="$(docker exec insurance-clamav sh -c "printf '%s' 'AYANSHA-CLAMAV-TEST-INFECTED' > /tmp/insurance-marker.txt && clamscan --database=/var/lib/clamav/ayansha-ci-test.ndb /tmp/insurance-marker.txt" 2>&1)"
+          status=$?
+          set -e
+          printf '%s\\n' "$output"
+          if [[ "$status" -ne 1 ]] || ! grep -Fq 'Ayansha.Test.Quarantine FOUND' <<<"$output"; then
+            echo "Mounted CI-only ClamAV signature did not match its test marker." >&2
+            exit 1
+          fi
       - name: Wait for ClamAV signature database and scanner
         shell: bash
         run: |
