@@ -44,6 +44,8 @@ jobs:
           curl --fail --silent http://127.0.0.1:3000/admin -o /tmp/admin.html
           grep -q 'Ayansha Health Care Admin' /tmp/admin.html
           grep -q 'Health Insurance Document Reviews' /tmp/admin.html
+          sed -n '/<script>/,/<\\/script>/p' /tmp/admin.html | sed '1d;$d' > /tmp/admin-inline.js
+          node --check /tmp/admin-inline.js
           test "$(curl --silent --output /dev/null --write-out '%{http_code}' http://127.0.0.1:3000/api/db/health)" = "503"
           test "$(curl --silent --output /dev/null --write-out '%{http_code}' http://127.0.0.1:3000/.env)" = "404"
           test "$(curl --silent --output /dev/null --write-out '%{http_code}' http://127.0.0.1:3000/src/server.js)" = "404"
