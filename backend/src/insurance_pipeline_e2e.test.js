@@ -144,19 +144,20 @@ test('insurance private upload + real ClamAV scan + quarantine end-to-end', { sk
 
   // EICAR is a harmless industry-standard antivirus test signature, not live malware.
   const eicar = Buffer.from('X5O!P%@AP[4\\PZX54(P^)7CC)7}$EICAR-STANDARD-ANTIVIRUS-TEST-FILE!$H+H*', 'ascii');
-  const testJpeg = Buffer.concat([Buffer.from([0xff, 0xd8, 0xff, 0xe0, 0x00, 0x10]), eicar]);
+  // Embed the test signature in a PDF-like file so scanners don't skip it as an unsupported JPEG payload.
+  const infectedPdf = Buffer.concat([Buffer.from('%PDF-1.4\\n%'), eicar, Buffer.from('\\n%%EOF\\n')]);
   const infectedIntent = await request('/api/insurance/policies/' + policyId + '/documents', {
     method: 'POST',
     headers: patientHeaders,
     body: {
       documentType: 'other',
-      filename: 'synthetic-eicar-test.jpg',
-      contentType: 'image/jpeg',
-      sizeBytes: testJpeg.length
+      filename: 'synthetic-eicar-test.pdf',
+      contentType: 'application/pdf',
+      sizeBytes: infectedPdf.length
     }
   });
   assert.equal(infectedIntent.status, 201, JSON.stringify(infectedIntent.body));
-  const infectedUpload = await createUpload(infectedIntent.body, testJpeg, 'image/jpeg', 'synthetic-eicar-test.jpg');
+  const infectedUpload = await createUpload(infectedIntent.body, infectedPdf, 'application/pdf', 'synthetic-eicar-test.pdf');
   assert.ok(infectedUpload.ok, 'private storage should accept the scanner test fixture');
   const rejected = await request('/api/insurance/documents/' + infectedIntent.body.document.id + '/complete', {
     method: 'POST',
