@@ -120,15 +120,15 @@ async function handleInsuranceRoute(req, res, url, context) {
       const patientId = await repository.findPatientId(patient.phone);
       const objectKey = storage.makeObjectKey();
       // Sign the private upload before returning an intent to the patient.
-      const uploadUrl = await storage.createUploadUrl({ objectKey, contentType: validated.value.contentType });
+      const uploadForm = await storage.createUploadForm({ objectKey, contentType: validated.value.contentType });
       const document = await repository.createDocumentIntent(
         patientId, Number(patientCreateDocument[1]), validated.value, objectKey
       );
       send(201, {
         document,
-        uploadUrl,
-        uploadMethod: 'PUT',
-        requiredHeaders: { 'Content-Type': validated.value.contentType },
+        uploadUrl: uploadForm.url,
+        uploadMethod: 'POST',
+        uploadFields: uploadForm.fields,
         expiresInSeconds: 300,
         maxSizeBytes: MAX_DOCUMENT_BYTES
       });
