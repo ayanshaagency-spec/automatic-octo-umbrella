@@ -84,7 +84,7 @@ jobs:
           printf '%s\n' 'Ayansha.Test.Quarantine:0:*:4159414E5348412D434C414D41562D544553542D494E464543544544' > "$RUNNER_TEMP/insurance-ci-test.ndb"
           docker run -d --name insurance-clamav \
             -p 127.0.0.1:3310:3310 \
-            -v "$RUNNER_TEMP/insurance-ci-test.ndb:/tmp/insurance-ci-test.ndb:ro" \
+            -v "$RUNNER_TEMP/insurance-ci-test.ndb:/var/lib/clamav/ayansha-ci-test.ndb:rw" \
             clamav/clamav:stable
       - name: Wait for ClamAV signature database and scanner
         shell: bash
@@ -92,79 +92,30 @@ jobs:
           node <<'NODE'
           const { Readable } = require('node:stream');
           const { scanStream } = require('./src/insurance_scanner');
-          (async () => {
-            let lastError;
-            for (let attempt = 0; attempt < 180; attempt += 1) {
-              try {
-                const result = await scanStream(Readable.from([Buffer.from('Ayansha CI scanner readiness probe')]), { maxBytes: 1024 });
-                if (result.status === 'clean') {
-                  console.log('ClamAV accepted a clean readiness probe.');
-                  return;
-                }
-                throw new Error('Unexpected scanner readiness result: ' + result.status);
-              } catch (error) {
-                lastError = error;
-                await new Promise(resolve => setTimeout(resolve, 1000));
-              }
-            }
-            throw new Error('ClamAV did not become ready: ' + (lastError?.message || 'unknown error'));
-          })().catch(error => { console.error(error.message); process.exit(1); });
-          NODE
-      - name: Reload ClamAV and verify CI-only synthetic signature
-        shell: bash
-        run: |
-          set -euo pipefail
-          docker exec insurance-clamav sh -c 'cp /tmp/insurance-ci-test.ndb /var/lib/clamav/ayansha-ci-test.ndb && chown clamav:clamav /var/lib/clamav/ayansha-ci-test.ndb'
-          node <<'NODE'
-          const net = require('node:net');
-          function sendReload() {
-            return new Promise((resolve, reject) => {
-              const socket = net.createConnection({ host: '127.0.0.1', port: 3310 });
-              let response = '';
-              const timeout = setTimeout(() => {
-                socket.destroy();
-                reject(new Error('ClamAV reload command timed out after 120 seconds'));
-              }, 120000);
-              socket.on('connect', () => socket.write(Buffer.from('zRELOAD\0', 'ascii')));
-              socket.on('data', chunk => {
-                response += chunk.toString('utf8').replace(/\0/g, '').trim();
-                if (response) {
-                  clearTimeout(timeout);
-                  socket.end();
-                  resolve(response);
-                }
-              });
-              socket.on('error', error => {
-                clearTimeout(timeout);
-                reject(error);
-              });
-            });
-          }
-          (async () => {
-            const response = await sendReload();
-            if (!/RELOAD/i.test(response)) throw new Error('Unexpected ClamAV reload response: ' + response.slice(0, 120));
-            console.log('ClamAV reload accepted the updated signature database.');
-          })().catch(error => { console.error(error.message); process.exit(1); });
-          NODE
-          node <<'NODE'
-          const { Readable } = require('node:stream');
-          const { scanStream } = require('./src/insurance_scanner');
           const pause = ms => new Promise(resolve => setTimeout(resolve, ms));
           (async () => {
-            let lastResult = null;
-            for (let attempt = 0; attempt < 60; attempt += 1) {
-              lastResult = await scanStream(Readable.from([Buffer.from('AYANSHA-CLAMAV-TEST-INFECTED')]), { maxBytes: 1024 });
-              if (lastResult.status === 'infected' && lastResult.signature === 'Ayansha.Test.Quarantine') {
-                console.log('ClamAV loaded and detected the synthetic quarantine test marker.');
-                return;
-              }
-              if (lastResult.status !== 'clean') {
-                throw new Error('Unexpected ClamAV scan result: ' + lastResult.status + ' / ' + (lastResult.signature || 'no-signature'));
+            let lastState = 'scanner unavailable';
+            for (let attempt = 0; attempt < 180; attempt += 1) {
+              try {
+                const clean = await scanStream(Readable.from([Buffer.from('Ayansha CI scanner readiness probe')]), { maxBytes: 1024 });
+                if (clean.status !== 'clean') {
+                  throw new Error('Expected clean readiness probe, got ' + clean.status);
+                }
+                const marker = await scanStream(Readable.from([Buffer.from('AYANSHA-CLAMAV-TEST-INFECTED')]), { maxBytes: 1024 });
+                if (marker.status === 'infected' && marker.signature === 'Ayansha.Test.Quarantine') {
+                  console.log('ClamAV is ready and detected the synthetic quarantine marker.');
+                  return;
+                }
+                if (marker.status !== 'clean') {
+                  throw new Error('Unexpected marker scan result: ' + marker.status + ' / ' + (marker.signature || 'no-signature'));
+                }
+                lastState = 'scanner is up but CI test signature is not loaded yet';
+              } catch (error) {
+                lastState = error.message;
               }
               await pause(1000);
             }
-            throw new Error('CI-only signature was not loaded after reload: ' +
-              (lastResult?.status || 'no-result') + ' / ' + (lastResult?.signature || 'no-signature'));
+            throw new Error('ClamAV did not become ready with the test signature: ' + lastState);
           })().catch(error => { console.error(error.message); process.exit(1); });
           NODE
       - name: Verify private uploads, clean scan, synthetic quarantine and blocked downloads
