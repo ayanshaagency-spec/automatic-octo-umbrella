@@ -109,6 +109,16 @@ async function main() {
     assertStatus(anonymousAdmin, 401, 'Reject anonymous Pharmacy Admin API access');
     const anonymousPatientOrders = await request(baseUrl, '/api/pharmacy/orders?phone=9990000001');
     assertStatus(anonymousPatientOrders, 401, 'Reject anonymous pharmacy order history access');
+    const otherPatientOrders = await request(baseUrl, '/api/pharmacy/orders?phone=9990000002', {
+      headers: patientHeaders
+    });
+    assertStatus(otherPatientOrders, 403, 'Reject pharmacy order-history access for another phone');
+    const spoofedOrder = await request(baseUrl, '/api/pharmacy/orders', {
+      method: 'POST',
+      headers: patientHeaders,
+      body: { phone: '9990000002', storeId: 1, deliveryMethod: 'home', items: [] }
+    });
+    assertStatus(spoofedOrder, 403, 'Reject pharmacy order creation using another phone');
 
     const hospitalStoreResult = await request(baseUrl, '/api/pharmacy/admin/stores', {
       method: 'POST',
