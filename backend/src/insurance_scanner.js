@@ -85,7 +85,7 @@ async function scanStream(readable, options = {}) {
     const result = await responsePromise;
     if (/\bOK$/i.test(result)) return { status: 'clean', signature: null };
     if (/\bFOUND$/i.test(result)) return { status: 'infected', signature: result.replace(/^.*?:\s*/, '').replace(/\s+FOUND$/i, '').slice(0, 200) };
-    throw new Error('Insurance malware scanner returned an unexpected response');
+    throw new Error('Insurance malware scanner returned an unexpected response: ' + result.slice(0, 160));
   } finally {
     socket.removeAllListeners('data');
     socket.removeAllListeners('error');
