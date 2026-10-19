@@ -1,7 +1,7 @@
 'use strict';
 
 const crypto = require('node:crypto');
-const { S3Client, PutObjectCommand, HeadObjectCommand, GetObjectCommand } = require('@aws-sdk/client-s3');
+const { S3Client, HeadObjectCommand, GetObjectCommand } = require('@aws-sdk/client-s3');
 const { getSignedUrl } = require('@aws-sdk/s3-request-presigner');
 const { createPresignedPost } = require('@aws-sdk/s3-presigned-post');
 
