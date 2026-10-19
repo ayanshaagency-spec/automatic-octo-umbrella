@@ -106,7 +106,8 @@ async function getDocumentForAdmin(documentId) {
   const result = await db.query(`
     SELECT id, patient_id AS "patientId", document_type AS "documentType",
       original_filename AS filename, content_type AS "contentType",
-      expected_size_bytes AS "sizeBytes", object_key AS "objectKey", status
+      expected_size_bytes AS "sizeBytes", object_key AS "objectKey", status,
+      scan_status AS "scanStatus"
     FROM insurance_documents WHERE id = $1
   `, [documentId]);
   return result.rows[0] || null;
@@ -207,6 +208,15 @@ async function reviewPolicy(policyId, nextStatus, reviewNote, reviewer) {
   if (invalid) throw repositoryError(invalid, 422);
   if (['need_more_documents', 'rejected'].includes(nextStatus) && !reviewNote) {
     throw repositoryError('A review note is required for this status', 422);
+  }
+  if (nextStatus === 'verified') {
+    const acceptedDocs = await db.query(
+      "SELECT COUNT(*)::int AS count FROM insurance_documents WHERE policy_id = $1 AND status = 'submitted' AND scan_status = 'clean'",
+      [policyId]
+    );
+    if (Number(acceptedDocs.rows[0].count) < 1) {
+      throw repositoryError('At least one clean submitted document is required before verifying an insurance policy', 422);
+    }
   }
   const result = await db.query(`
     UPDATE insurance_policies
