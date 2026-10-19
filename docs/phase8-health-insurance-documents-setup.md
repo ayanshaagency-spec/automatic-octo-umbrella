@@ -33,7 +33,7 @@ The access key needs only the operations required for upload, object head/range 
 - `INSURANCE_CLAMAV_PORT` — usually `3310`.
 - `INSURANCE_CLAMAV_TIMEOUT_MS` — timeout in milliseconds; default is 30000, permitted range 1000–120000.
 
-The application streams the temporary object to ClamAV using the daemon's INSTREAM protocol. Configure a maintained ClamAV service on the same private network as the API; firewall its port so only the API/staging network can reach it. Scanner unavailability, timeout, or unexpected responses fail closed and prevent submission.
+The application streams the temporary object to ClamAV using the daemon's INSTREAM protocol. Configure a maintained ClamAV service on the same private network as the API; firewall its port so only the API/staging network can reach it. Scanner unavailability, timeout, or unexpected responses fail closed and prevent submission. ClamAV's raw TCP protocol is unencrypted, so do not expose port 3310 to the public internet; the [official ClamAV Docker guide](https://docs.clamav.net/manual/Installing/Docker.html) specifically warns about unencrypted TCP.
 
 ### Bucket CORS
 
