@@ -129,9 +129,9 @@ async function promoteUpload({ uploadKey, objectKey }) {
   }));
 }
 
-async function deleteUpload({ uploadKey }) {
+async function deleteObject({ objectKey }) {
   const { client, config } = getClient();
-  await client.send(new DeleteObjectCommand({ Bucket: config.bucket, Key: uploadKey }));
+  await client.send(new DeleteObjectCommand({ Bucket: config.bucket, Key: objectKey }));
 }
 
-module.exports = { isStorageConfigured, makeObjectKey, makeUploadKey, createUploadForm, inspectObject, createDownloadUrl, promoteUpload, deleteUpload, detectContentType };
+module.exports = { isStorageConfigured, makeObjectKey, makeUploadKey, createUploadForm, inspectObject, createDownloadUrl, promoteUpload, deleteObject, detectContentType };
