@@ -77,12 +77,14 @@ jobs:
           done
           docker logs insurance-s3mock
           exit 1
-      - name: Start private ClamAV malware scanner
+      - name: Start private ClamAV malware scanner with CI-only signature
         shell: bash
         run: |
           set -euo pipefail
+          printf '%s\n' 'Ayansha.Test.Quarantine:0:*:4159414E5348412D434C414D41562D544553542D494E464543544544' > "$RUNNER_TEMP/insurance-ci-test.ndb"
           docker run -d --name insurance-clamav \
             -p 127.0.0.1:3310:3310 \
+            -v "$RUNNER_TEMP/insurance-ci-test.ndb:/var/lib/clamav/ayansha-ci-test.ndb:ro" \
             clamav/clamav:stable
       - name: Wait for ClamAV signature database and scanner
         shell: bash
@@ -95,11 +97,14 @@ jobs:
             for (let attempt = 0; attempt < 180; attempt += 1) {
               try {
                 const result = await scanStream(Readable.from([Buffer.from('Ayansha CI scanner readiness probe')]), { maxBytes: 1024 });
-                if (result.status === 'clean') {
-                  console.log('ClamAV accepted a clean readiness probe.');
+                const testDetection = await scanStream(Readable.from([Buffer.from('AYANSHA-CLAMAV-TEST-INFECTED')]), { maxBytes: 1024 });
+                if (result.status === 'clean' && testDetection.status === 'infected' &&
+                    testDetection.signature === 'Ayansha.Test.Quarantine') {
+                  console.log('ClamAV is ready and recognized the CI-only synthetic signature.');
                   return;
                 }
-                throw new Error('Unexpected scanner readiness result');
+                throw new Error('Unexpected scanner readiness/detection result: ' +
+                  result.status + ' / ' + testDetection.status + ' / ' + (testDetection.signature || 'no-signature'));
               } catch (error) {
                 lastError = error;
                 await new Promise(resolve => setTimeout(resolve, 1000));
@@ -108,7 +113,7 @@ jobs:
             throw new Error('ClamAV did not become ready: ' + (lastError?.message || 'unknown error'));
           })().catch(error => { console.error(error.message); process.exit(1); });
           NODE
-      - name: Verify private uploads, clean scan, EICAR quarantine and blocked downloads
+      - name: Verify private uploads, clean scan, synthetic quarantine and blocked downloads
         run: node --test src/insurance_pipeline_e2e.test.js
       - name: Show disposable service logs on failure
         if: failure()
