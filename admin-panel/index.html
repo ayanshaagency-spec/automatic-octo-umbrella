@@ -1,7 +1,243 @@
-<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Ayansha Health Care Admin</title><style>body{font-family:Arial,sans-serif;background:#f5f9fa;margin:0;color:#17343d}main{max-width:1100px;margin:40px auto;padding:20px}.card{background:#fff;border:1px solid #dbe8eb;border-radius:16px;padding:20px;margin-bottom:18px;box-shadow:0 4px 18px #17343d10}input,button{padding:12px;border-radius:10px;border:1px solid #bfd1d6}input{display:block;width:100%;box-sizing:border-box;margin:8px 0 12px}button{background:#0e8f8f;color:white;border:0;cursor:pointer}.hidden{display:none}.error{color:#b42318}.row{padding:12px 0;border-bottom:1px solid #e5eeee}</style></head><body><main><h1>Ayansha Health Care — Admin</h1><section id="login" class="card"><h2>Admin Sign In</h2><p>Credentials are verified server-side. No admin secret is embedded in this page.</p><input id="email" type="email" autocomplete="username" placeholder="Admin email"><input id="password" type="password" autocomplete="current-password" placeholder="Admin password"><button id="loginBtn">Sign in</button><p id="loginError" class="error"></p></section><section id="dashboard" class="hidden"><div class="card"><button id="logout">Log out</button><h2>Appointment Operations</h2><p id="status">Loading...</p><div id="appointments"></div></div></section><script>
-const tokenKey='ayansha_admin_token',login=document.getElementById('login'),dashboard=document.getElementById('dashboard'),email=document.getElementById('email'),password=document.getElementById('password');
-const api=async(path,options={})=>{const headers={'Content-Type':'application/json',...(options.headers||{})},token=sessionStorage.getItem(tokenKey);if(token)headers.Authorization='Bearer '+token;const r=await fetch(path,{...options,headers}),d=await r.json().catch(()=>({}));if(!r.ok)throw new Error(d.error||'Request failed');return d};
-async function load(){try{const rows=await api('/api/admin/appointments');document.getElementById('status').textContent=rows.length+' appointments';const list=document.getElementById('appointments');list.replaceChildren();if(!rows.length){const empty=document.createElement('p');empty.textContent='No appointments.';list.append(empty)}else{for(const a of rows){const row=document.createElement('div');row.className='row';const strong=document.createElement('strong');strong.textContent='#'+a.id+' — '+(a.doctor_name||'Doctor');row.append(strong,document.createElement('br'),document.createTextNode(String(a.patient_name||'')+' • '+String(a.phone||'')),document.createElement('br'),document.createTextNode([a.appointment_at,a.mode,a.status].map(v=>String(v??'')).join(' • ')));list.append(row)}}login.classList.add('hidden');dashboard.classList.remove('hidden')}catch(e){sessionStorage.removeItem(tokenKey);login.classList.remove('hidden');dashboard.classList.add('hidden');document.getElementById('loginError').textContent=e.message}}
-document.getElementById('loginBtn').onclick=async()=>{document.getElementById('loginError').textContent='';try{const d=await api('/api/admin/login',{method:'POST',body:JSON.stringify({email:email.value,password:password.value})});sessionStorage.setItem(tokenKey,d.token);await load()}catch(e){document.getElementById('loginError').textContent=e.message}};
-document.getElementById('logout').onclick=()=>{sessionStorage.removeItem(tokenKey);load()};if(sessionStorage.getItem(tokenKey))load();
-</script></main></body></html>
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Ayansha Health Care Admin</title>
+<style>
+:root{font-family:Inter,Arial,sans-serif;color:#183247;background:#f2f7fa;--navy:#12344a;--teal:#087f8c;--muted:#607586;--line:#dce8ee;--panel:#fff;--danger:#b42318;--good:#18794e}
+*{box-sizing:border-box}body{margin:0}main{max-width:1240px;margin:24px auto;padding:0 18px 50px}
+header{display:flex;justify-content:space-between;align-items:center;gap:16px;padding:12px 0 20px}h1{font-size:clamp(24px,3vw,34px);margin:0;color:var(--navy)}h2{font-size:21px;margin:0 0 12px;color:var(--navy)}h3{font-size:16px;margin:0 0 8px}
+p{line-height:1.5}.muted{color:var(--muted);font-size:13px}.eyebrow{font-size:11px;text-transform:uppercase;letter-spacing:1.5px;color:var(--teal);font-weight:800;margin:0 0 7px}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:20px;margin-bottom:16px;box-shadow:0 4px 18px #17343d08}
+input,select,button{font:inherit;font-size:14px;padding:11px 12px;border-radius:10px;border:1px solid #c7d8e0;background:#fff;min-width:0}
+button{background:var(--teal);border-color:var(--teal);color:#fff;font-weight:700;cursor:pointer}button.secondary{background:#e8f5f7;color:#096976;border-color:#c4e5e9}button.danger{background:#fff0ef;color:var(--danger);border-color:#f3cecb}button:disabled{opacity:.55;cursor:not-allowed}
+input:focus,select:focus,button:focus-visible{outline:3px solid #5fc3ce66;outline-offset:1px}
+.form-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}.field{display:flex;flex-direction:column;gap:6px}.field label{font-size:12px;font-weight:700;color:#465f70}.field input,.field select{width:100%}.check-row{display:flex;gap:18px;align-items:center;flex-wrap:wrap;margin:12px 0}.check-row label{display:flex;align-items:center;gap:7px;font-size:13px}.check-row input{width:auto}
+.actions{display:flex;gap:8px;align-items:center;flex-wrap:wrap}.top-actions{display:flex;align-items:center;gap:10px}.hidden{display:none!important}.error{color:var(--danger);font-size:13px}.success{color:var(--good);font-size:13px}.notice{border-radius:10px;background:#edf7f8;padding:11px;color:#315a67;font-size:13px}.section-head{display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:14px}.stats{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}.stat{background:#f6fafc;border:1px solid var(--line);border-radius:12px;padding:14px}.stat b{font-size:24px;display:block;color:var(--navy)}.stat span{font-size:12px;color:var(--muted)}
+.tabs{display:flex;gap:8px;flex-wrap:wrap;margin:14px 0 18px}.tabs button{background:#e7eff3;color:#425d70;border-color:#d7e4ea}.tabs button[aria-selected=true]{background:var(--navy);color:#fff;border-color:var(--navy)}
+.table-wrap{overflow-x:auto}table{width:100%;border-collapse:collapse;font-size:13px}th,td{text-align:left;padding:11px 9px;border-bottom:1px solid #e5edf1;vertical-align:top}th{color:#607586;font-size:11px;text-transform:uppercase;letter-spacing:.6px}td .muted{margin-top:3px}.pill{display:inline-block;border-radius:999px;padding:4px 8px;background:#eaf4f7;color:#315768;font-size:11px;white-space:nowrap}.pill.pending{background:#fff4dc;color:#885d05}.pill.active{background:#e4f5eb;color:#17643c}.pill.inactive{background:#f1f3f5;color:#52616d}.empty{padding:18px;color:var(--muted);font-size:13px;background:#f8fbfc;border-radius:10px}.panel{scroll-margin-top:20px}.product-editor{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px;min-width:470px}.product-editor input,.product-editor select{width:100%}.small{padding:7px 10px;font-size:12px}.row-actions{display:flex;gap:6px;flex-wrap:wrap}.status-select{min-width:150px}
+@media(max-width:780px){main{margin-top:12px}.form-grid,.stats{grid-template-columns:1fr 1fr}.product-editor{grid-template-columns:1fr 1fr}.section-head{align-items:flex-start;flex-direction:column}header{align-items:flex-start;flex-direction:column}}
+@media(max-width:520px){.form-grid,.stats{grid-template-columns:1fr}.card{padding:15px}td,th{padding:9px 7px}}
+</style>
+</head>
+<body>
+<main>
+<header><div><p class="eyebrow">Operations console</p><h1>Ayansha Health Care — Admin</h1><p class="muted">Appointments, pharmacy stores, catalogue, stock and order operations.</p></div><div class="top-actions"><span id="sessionLabel" class="muted">Signed out</span><button id="logout" class="secondary hidden" type="button">Log out</button></div></header>
+<section id="login" class="card">
+<p class="eyebrow">Secure access</p><h2>Admin sign in</h2><p class="muted">Credentials are verified server-side. No admin password or signing secret is stored in this page.</p>
+<div class="form-grid"><div class="field"><label for="email">Admin email</label><input id="email" type="email" autocomplete="username" placeholder="Admin email"></div><div class="field"><label for="password">Password</label><input id="password" type="password" autocomplete="current-password" placeholder="Admin password"></div><div class="field" style="justify-content:end"><button id="loginBtn" type="button">Sign in</button></div></div><p id="loginError" class="error" role="alert"></p>
+</section>
+<section id="dashboard" class="hidden">
+<div class="stats">
+<div class="stat"><span>Appointments</span><b id="appointmentCount">—</b></div>
+<div class="stat"><span>Pharmacy stores</span><b id="storeCount">—</b></div>
+<div class="stat"><span>Orders in queue</span><b id="orderCount">—</b></div>
+</div>
+<nav class="tabs" aria-label="Admin sections">
+<button type="button" data-tab="appointmentsPanel" aria-selected="true">Appointments</button>
+<button type="button" data-tab="storesPanel" aria-selected="false">Pharmacy stores</button>
+<button type="button" data-tab="cataloguePanel" aria-selected="false">Catalogue & stock</button>
+<button type="button" data-tab="ordersPanel" aria-selected="false">Pharmacy orders</button>
+</nav>
+<section id="appointmentsPanel" class="card panel">
+<div class="section-head"><div><p class="eyebrow">Care operations</p><h2>Appointments</h2></div><button type="button" class="secondary" id="reloadAppointments">Refresh</button></div>
+<p id="appointmentStatus" class="muted" aria-live="polite">Loading appointments…</p><div id="appointments"></div>
+</section>
+<section id="storesPanel" class="card panel hidden">
+<div class="section-head"><div><p class="eyebrow">Pharmacy network</p><h2>Register a pharmacy</h2></div><button type="button" class="secondary" id="reloadStores">Refresh stores</button></div>
+<p class="notice">New registrations start inactive. Verify the store and licence details offline before approving and activating it. Hospital pharmacies must be linked to an existing active hospital.</p>
+<form id="storeForm">
+<div class="form-grid">
+<div class="field"><label for="storeName">Store name *</label><input id="storeName" required maxlength="160"></div>
+<div class="field"><label for="storeType">Store type *</label><select id="storeType"><option value="partner">External partner medical store</option><option value="hospital">Hospital pharmacy</option></select></div>
+<div class="field"><label for="storeHospitalId">Linked hospital ID (hospital stores)</label><input id="storeHospitalId" type="number" min="1" placeholder="Active hospital ID"></div>
+<div class="field"><label for="storeAddress">Address *</label><input id="storeAddress" required maxlength="240"></div>
+<div class="field"><label for="storeCity">City *</label><input id="storeCity" required maxlength="100"></div>
+<div class="field"><label for="storeState">State *</label><input id="storeState" required maxlength="100"></div>
+<div class="field"><label for="storePhone">Store phone</label><input id="storePhone" maxlength="40" inputmode="tel"></div>
+</div>
+<div class="check-row"><label><input id="supportsHome" type="checkbox" checked> Supports home delivery</label><label><input id="supportsHospital" type="checkbox"> Supports hospital delivery</label></div>
+<div class="actions"><button type="submit">Register store</button><span id="storeFormMessage" aria-live="polite"></span></div>
+</form>
+<hr style="border:0;border-top:1px solid var(--line);margin:22px 0">
+<div class="section-head"><div><h2>Registered stores</h2><p class="muted">Use approve/activate only after due diligence.</p></div></div><div id="storesList"></div>
+</section>
+<section id="cataloguePanel" class="card panel hidden">
+<div class="section-head"><div><p class="eyebrow">Inventory management</p><h2>Catalogue & stock</h2></div><button type="button" class="secondary" id="reloadProducts">Refresh</button></div>
+<div class="field" style="max-width:520px;margin-bottom:18px"><label for="catalogueStore">Select pharmacy</label><select id="catalogueStore"><option value="">Load a registered store first</option></select></div>
+<form id="productForm">
+<h3>Add catalogue item</h3>
+<div class="form-grid">
+<div class="field"><label for="productName">Medicine / product name *</label><input id="productName" required maxlength="180"></div>
+<div class="field"><label for="productSku">SKU / item code</label><input id="productSku" maxlength="120"></div>
+<div class="field"><label for="productBrand">Brand</label><input id="productBrand" maxlength="120"></div>
+<div class="field"><label for="productStrength">Strength</label><input id="productStrength" maxlength="120" placeholder="e.g. 250mg"></div>
+<div class="field"><label for="productPack">Pack size</label><input id="productPack" maxlength="120"></div>
+<div class="field"><label for="productPrice">Price (₹) *</label><input id="productPrice" required type="number" min="0" step="0.01"></div>
+<div class="field"><label for="productStock">Opening stock *</label><input id="productStock" required type="number" min="0" max="10000000" step="1" value="0"></div>
+<div class="field"><label for="productPrescription">Prescription requirement</label><select id="productPrescription"><option value="true">Prescription required</option><option value="false">No prescription requirement</option></select></div>
+</div>
+<div class="check-row"><label><input id="productActive" type="checkbox"> Activate product after verification</label></div>
+<div class="actions"><button type="submit">Add product</button><span id="productFormMessage" aria-live="polite"></span></div>
+</form>
+<hr style="border:0;border-top:1px solid var(--line);margin:22px 0"><div id="productsList"><div class="empty">Select a pharmacy to review its catalogue.</div></div>
+</section>
+<section id="ordersPanel" class="card panel hidden">
+<div class="section-head"><div><p class="eyebrow">Fulfilment queue</p><h2>Pharmacy orders</h2></div><button type="button" class="secondary" id="reloadOrders">Refresh orders</button></div>
+<div class="field" style="max-width:300px;margin-bottom:14px"><label for="orderStatusFilter">Filter by status</label><select id="orderStatusFilter"><option value="">All statuses</option><option>placed</option><option>accepted</option><option>preparing</option><option>ready</option><option>out_for_delivery</option><option>delivered</option><option>cancelled</option></select></div>
+<p class="notice">Pharmacy payments are cash on delivery in this MVP. Review prescription details in the authorised clinical workflow before dispensing.</p>
+<div id="ordersList"></div>
+</section>
+<p class="muted">Security note: use production only after verifying the configured admin account, patient OTP provider and migration plan. This page does not add pharmacy or product data automatically.</p>
+</section>
+<script>
+'use strict';
+const tokenKey='ayansha_admin_token';
+const $=id=>document.getElementById(id);
+const esc=value=>String(value??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const api=async(path,options={})=>{
+ const headers={'Content-Type':'application/json',...(options.headers||{})},token=sessionStorage.getItem(tokenKey);
+ if(token)headers.Authorization='Bearer '+token;
+ const response=await fetch(path,{...options,headers});
+ const data=await response.json().catch(()=>({}));
+ if(!response.ok)throw new Error(data.error||'Request failed');
+ return data;
+};
+const showMessage=(id,message,ok=false)=>{const node=$(id);node.textContent=message;node.className=ok?'success':'error';};
+const statusPill=value=>'<span class="pill '+(['approved','active','delivered'].includes(String(value))?'active':(['pending','placed','preparing'].includes(String(value))?'pending':'inactive'))+'">'+esc(value)+'</span>';
+let registeredStores=[];
+let currentProducts=[];
+let currentTab='appointmentsPanel';
+function setTab(id){
+ currentTab=id;
+ document.querySelectorAll('[data-tab]').forEach(button=>button.setAttribute('aria-selected',String(button.dataset.tab===id)));
+ document.querySelectorAll('.panel').forEach(panel=>panel.classList.toggle('hidden',panel.id!==id));
+ if(id==='storesPanel')loadStores();
+ if(id==='cataloguePanel'){populateStorePicker();if($('catalogueStore').value)loadProducts();}
+ if(id==='ordersPanel')loadOrders();
+}
+document.querySelectorAll('[data-tab]').forEach(button=>button.addEventListener('click',()=>setTab(button.dataset.tab)));
+async function loadAppointments(){
+ $('appointmentStatus').textContent='Loading appointments…';
+ try{
+  const rows=await api('/api/admin/appointments');$('appointmentCount').textContent=rows.length;
+  const target=$('appointments');
+  if(!rows.length){target.innerHTML='<div class="empty">No appointments found.</div>';$('appointmentStatus').textContent='Appointment data loaded.';return}
+  target.innerHTML='<div class="table-wrap"><table><thead><tr><th>Appointment</th><th>Patient</th><th>Doctor</th><th>Date / mode</th><th>Status</th></tr></thead><tbody>'+rows.map(a=>'<tr><td>#'+esc(a.id)+'</td><td>'+esc(a.patient_name||'Patient')+'<div class="muted">'+esc(a.phone||'')+'</div></td><td>'+esc(a.doctor_name||'Doctor')+'<div class="muted">'+esc(a.specialty||'')+'</div></td><td>'+esc(a.appointment_at||'')+'<div class="muted">'+esc(a.mode||'')+'</div></td><td>'+statusPill(a.status||'unknown')+'</td></tr>').join('')+'</tbody></table></div>';
+  $('appointmentStatus').textContent=rows.length+' appointments loaded.';
+ }catch(e){$('appointmentStatus').textContent='Appointments could not be loaded: '+e.message;$('appointmentCount').textContent='—';$('appointments').innerHTML='<div class="empty">Refresh or check the database health and admin access.</div>'}
+}
+async function loadStores(){
+ const target=$('storesList');target.innerHTML='<div class="empty">Loading pharmacies…</div>';
+ try{
+  const data=await api('/api/pharmacy/admin/stores');registeredStores=Array.isArray(data)?data:[];
+  $('storeCount').textContent=registeredStores.length;
+  target.innerHTML=registeredStores.length?'<div class="table-wrap"><table><thead><tr><th>Store</th><th>Type / location</th><th>Delivery</th><th>Products</th><th>Approval</th><th>Actions</th></tr></thead><tbody>'+registeredStores.map(s=>{
+   const approved=Boolean(s.approvedAt),active=Boolean(s.isActive);
+   return '<tr><td><strong>'+esc(s.name)+'</strong><div class="muted">#'+esc(s.id)+' · '+esc(s.phone||'No phone')+'</div></td><td>'+esc(s.storeType==='hospital'?'Hospital pharmacy':'Partner medical store')+'<div class="muted">'+esc(s.address)+'<br>'+esc(s.city)+', '+esc(s.state)+'</div></td><td>'+[s.supportsHomeDelivery?'Home':'',s.supportsHospitalDelivery?'Hospital':''].filter(Boolean).map(esc).join(' · ')+'</td><td>'+esc(s.productCount??0)+'</td><td>'+statusPill(approved?'approved':'pending')+' '+statusPill(active?'active':'inactive')+'</td><td><div class="row-actions">'+(!approved?'<button class="small" data-store-action="approve" data-id="'+Number(s.id)+'">Approve</button>':'')+(!active&&approved?'<button class="small" data-store-action="activate" data-id="'+Number(s.id)+'">Activate</button>':'')+(active?'<button class="small danger" data-store-action="deactivate" data-id="'+Number(s.id)+'">Deactivate</button>':'')+'<button class="small secondary" data-store-action="catalogue" data-id="'+Number(s.id)+'">Catalogue</button></div></td></tr>';
+  }).join('')+'</tbody></table></div>':'<div class="empty">No pharmacies registered yet. Register the first verified store above.</div>';
+  populateStorePicker();
+ }catch(e){$('storeCount').textContent='—';target.innerHTML='<div class="empty">Could not load pharmacies: '+esc(e.message)+'</div>'}
+}
+function populateStorePicker(){
+ const selected=$('catalogueStore').value;
+ $('catalogueStore').innerHTML='<option value="">Select a pharmacy</option>'+registeredStores.map(s=>'<option value="'+Number(s.id)+'">'+esc(s.name)+' (#'+Number(s.id)+')'+(s.isActive?'':' — inactive')+'</option>').join('');
+ if(registeredStores.some(s=>String(s.id)===selected))$('catalogueStore').value=selected;
+}
+$('storeForm').addEventListener('submit',async event=>{
+ event.preventDefault();showMessage('storeFormMessage','Registering…');
+ const storeType=$('storeType').value;
+ const body={name:$('storeName').value.trim(),storeType,address:$('storeAddress').value.trim(),city:$('storeCity').value.trim(),state:$('storeState').value.trim(),phone:$('storePhone').value.trim()||null,supportsHomeDelivery:$('supportsHome').checked,supportsHospitalDelivery:$('supportsHospital').checked};
+ if(storeType==='hospital')body.hospitalId=Number($('storeHospitalId').value);
+ try{const store=await api('/api/pharmacy/admin/stores',{method:'POST',body:JSON.stringify(body)});showMessage('storeFormMessage','Store registered (#'+store.id+'). It remains inactive until approved.',true);$('storeForm').reset();$('storeType').value='partner';$('supportsHome').checked=true;await loadStores();}
+ catch(e){showMessage('storeFormMessage',e.message)}
+});
+$('storeType').addEventListener('change',()=>{$('storeHospitalId').disabled=$('storeType').value!=='hospital';});
+$('storeHospitalId').disabled=true;
+$('storesList').addEventListener('click',async event=>{
+ const button=event.target.closest('[data-store-action]');if(!button)return;
+ const id=Number(button.dataset.id),action=button.dataset.storeAction;
+ if(action==='catalogue'){setTab('cataloguePanel');$('catalogueStore').value=String(id);await loadProducts();return}
+ try{
+  if(action==='approve')await api('/api/pharmacy/admin/stores/'+id+'/approval',{method:'PATCH',body:JSON.stringify({approved:true,active:false})});
+  if(action==='activate')await api('/api/pharmacy/admin/stores/'+id+'/approval',{method:'PATCH',body:JSON.stringify({approved:true,active:true})});
+  if(action==='deactivate')await api('/api/pharmacy/admin/stores/'+id+'/approval',{method:'PATCH',body:JSON.stringify({active:false})});
+  await loadStores();
+ }catch(e){alert('Store update failed: '+e.message)}
+});
+$('catalogueStore').addEventListener('change',loadProducts);
+async function loadProducts(){
+ const storeId=$('catalogueStore').value,target=$('productsList');
+ if(!storeId){currentProducts=[];target.innerHTML='<div class="empty">Select a pharmacy to review its catalogue.</div>';return}
+ target.innerHTML='<div class="empty">Loading product catalogue…</div>';
+ try{
+  currentProducts=await api('/api/pharmacy/admin/stores/'+encodeURIComponent(storeId)+'/products');
+  target.innerHTML=currentProducts.length?'<div class="table-wrap"><table><thead><tr><th>Product</th><th>Price / stock</th><th>Prescription</th><th>Status</th><th>Update price & stock</th></tr></thead><tbody>'+currentProducts.map(p=>'<tr><td><strong>'+esc(p.name)+'</strong><div class="muted">'+esc(p.sku||'No SKU')+' · '+esc([p.brand,p.strength,p.packSize].filter(Boolean).join(' · '))+'</div></td><td>₹'+esc(Number(p.price).toFixed(2))+'<div class="muted">Stock: '+esc(p.stockQuantity)+'</div></td><td>'+statusPill(p.requiresPrescription?'Required':'Not required')+'</td><td>'+statusPill(p.isActive?'active':'inactive')+'</td><td><div class="product-editor"><input type="number" min="0" step="0.01" value="'+esc(p.price)+'" aria-label="Price" data-price="'+Number(p.id)+'"><input type="number" min="0" max="10000000" step="1" value="'+esc(p.stockQuantity)+'" aria-label="Stock" data-stock="'+Number(p.id)+'"><select data-prescription="'+Number(p.id)+'" aria-label="Prescription requirement"><option value="true" '+(p.requiresPrescription?'selected':'')+'>Prescription required</option><option value="false" '+(!p.requiresPrescription?'selected':'')+'>No prescription requirement</option></select><div class="row-actions"><button class="small" data-product-save="'+Number(p.id)+'">Save</button><button class="small secondary" data-product-toggle="'+Number(p.id)+'">'+(p.isActive?'Deactivate':'Activate')+'</button></div></div></td></tr>').join('')+'</tbody></table></div>':'<div class="empty">No products for this store yet. Add an item above.</div>';
+ }catch(e){target.innerHTML='<div class="empty">Catalogue unavailable: '+esc(e.message)+'</div>'}
+}
+$('productForm').addEventListener('submit',async event=>{
+ event.preventDefault();const storeId=$('catalogueStore').value;
+ if(!storeId){showMessage('productFormMessage','Select a pharmacy first.');return}
+ showMessage('productFormMessage','Adding product…');
+ const body={name:$('productName').value.trim(),sku:$('productSku').value.trim()||null,brand:$('productBrand').value.trim()||null,strength:$('productStrength').value.trim()||null,packSize:$('productPack').value.trim()||null,price:Number($('productPrice').value),stockQuantity:Number($('productStock').value),requiresPrescription:$('productPrescription').value==='true',active:$('productActive').checked};
+ try{const product=await api('/api/pharmacy/admin/stores/'+encodeURIComponent(storeId)+'/products',{method:'POST',body:JSON.stringify(body)});showMessage('productFormMessage','Product added (#'+product.id+').',true);$('productForm').reset();$('productStock').value='0';$('productPrescription').value='true';await loadProducts();await loadStores();}
+ catch(e){showMessage('productFormMessage',e.message)}
+});
+$('productsList').addEventListener('click',async event=>{
+ const save=event.target.closest('[data-product-save]'),toggle=event.target.closest('[data-product-toggle]');
+ const button=save||toggle;if(!button)return;
+ const id=Number(button.dataset.productSave||button.dataset.productToggle);
+ try{
+  let body;
+  if(save){
+   const price=$('[data-price="'+id+'"]').value,stock=$('[data-stock="'+id+'"]').value,rx=$('[data-prescription="'+id+'"]').value;
+   if(price===''||stock==='')throw new Error('Price and stock are required.');
+   body={price:Number(price),stockQuantity:Number(stock),requiresPrescription:rx==='true'};
+  }else{
+   const current=currentProducts.find(product=>Number(product.id)===id);
+   body={active:!Boolean(current?.isActive)};
+  }
+  await api('/api/pharmacy/admin/products/'+id,{method:'PATCH',body:JSON.stringify(body)});
+  await loadProducts();await loadStores();
+ }catch(e){alert('Product update failed: '+e.message)}
+});
+const transitions={placed:['accepted','cancelled'],accepted:['preparing','cancelled'],preparing:['ready'],ready:['out_for_delivery','delivered'],out_for_delivery:['delivered'],delivered:[],cancelled:[]};
+async function loadOrders(){
+ const target=$('ordersList');target.innerHTML='<div class="empty">Loading pharmacy orders…</div>';
+ const status=$('orderStatusFilter').value,query=status?'?status='+encodeURIComponent(status):'';
+ try{
+  const rows=await api('/api/pharmacy/admin/orders'+query);$('orderCount').textContent=rows.filter(o=>!['delivered','cancelled'].includes(o.status)).length;
+  target.innerHTML=rows.length?'<div class="table-wrap"><table><thead><tr><th>Order / patient</th><th>Pharmacy</th><th>Items</th><th>Delivery</th><th>Total / payment</th><th>Status / action</th></tr></thead><tbody>'+rows.map(o=>{
+   const next=transitions[o.status]||[];
+   const items=(o.items||[]).map(i=>esc(i.productName)+' × '+esc(i.quantity)).join('<br>');
+   const destination=o.deliveryMethod==='home'?[o.addressLine1,o.addressLine2,o.deliveryCity,o.deliveryState,o.deliveryPincode].filter(Boolean).map(esc).join(', '):esc(o.deliveryHospitalName||('Hospital #'+(o.deliveryHospitalId||'')));
+   return '<tr><td><strong>#'+esc(o.id)+'</strong><div class="muted">'+esc(o.patientName||'Patient')+' · '+esc(o.patientPhone||'')+'</div><div class="muted">'+esc(o.createdAt||'')+'</div></td><td>'+esc(o.storeName||'Pharmacy')+'<div class="muted">'+esc(o.storeType||'')+'</div></td><td>'+items+'</td><td>'+esc(o.deliveryMethod==='home'?'Home':'Hospital')+'<div class="muted">'+destination+'</div></td><td>₹'+esc(Number(o.totalAmount).toFixed(2))+'<div class="muted">COD · '+esc(o.paymentStatus||'pending')+'</div></td><td>'+statusPill(o.status)+'<div class="row-actions" style="margin-top:8px">'+(next.length?'<select class="status-select" data-order-next="'+Number(o.id)+'" aria-label="Next order status">'+next.map(v=>'<option value="'+esc(v)+'">'+esc(v.replaceAll('_',' '))+'</option>').join('')+'</select><button class="small" data-order-save="'+Number(o.id)+'">Update</button>':'<span class="muted">No further status changes</span>')+'</div></td></tr>';
+  }).join('')+'</tbody></table></div>':'<div class="empty">No pharmacy orders in this view.</div>';
+ }catch(e){$('orderCount').textContent='—';target.innerHTML='<div class="empty">Order queue unavailable: '+esc(e.message)+'</div>'}
+}
+$('ordersList').addEventListener('click',async event=>{
+ const button=event.target.closest('[data-order-save]');if(!button)return;
+ const id=Number(button.dataset.orderSave),status=$('[data-order-next="'+id+'"]').value;
+ if(!status)return;
+ button.disabled=true;
+ try{await api('/api/pharmacy/orders/'+id+'/status',{method:'PATCH',body:JSON.stringify({status})});await loadOrders();}
+ catch(e){button.disabled=false;alert('Order status update failed: '+e.message)}
+});
+$('orderStatusFilter').addEventListener('change',loadOrders);
+$('reloadAppointments').onclick=loadAppointments;
+$('reloadStores').onclick=loadStores;
+$('reloadProducts').onclick=loadProducts;
+$('reloadOrders').onclick=loadOrders;
+async function openDashboard(){
+ $('login').classList.add('hidden');$('dashboard').classList.remove('hidden');$('logout').classList.remove('hidden');$('sessionLabel').textContent='Admin session active';
+ await Promise.all([loadAppointments(),loadStores(),loadOrders()]);
+}
+$('loginBtn').onclick=async()=>{
+ $('loginError').textContent='';
+ try{const data=await api('/api/admin/login',{method:'POST',body:JSON.stringify({email:$('email').value,password:$('password').value})});sessionStorage.setItem(tokenKey,data.token);$('password').value='';await openDashboard();}
+ catch(error){$('loginError').textContent=error.message}
+};
+$('logout').onclick=()=>{sessionStorage.removeItem(tokenKey);$('dashboard').classList.add('hidden');$('login').classList.remove('hidden');$('logout').classList.add('hidden');$('sessionLabel').textContent='Signed out';$('loginError').textContent='';};
+if(sessionStorage.getItem(tokenKey))openDashboard();
+</script>
+</main></body></html>
