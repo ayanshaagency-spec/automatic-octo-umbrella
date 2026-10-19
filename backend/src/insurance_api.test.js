@@ -33,10 +33,10 @@ test('insurance endpoints enforce patient/admin auth and fail closed without pri
       ADMIN_EMAIL,
       ADMIN_PASSWORD,
       JWT_SECRET,
-      INSURANCE_S3_BUCKET: '',
-      INSURANCE_S3_REGION: '',
-      INSURANCE_S3_ACCESS_KEY_ID: '',
-      INSURANCE_S3_SECRET_ACCESS_KEY: '',
+      INSURANCE_S3_BUCKET: 'ci-only-private-insurance-bucket',
+      INSURANCE_S3_REGION: 'us-east-1',
+      INSURANCE_S3_ACCESS_KEY_ID: 'ci-only-test-access-key',
+      INSURANCE_S3_SECRET_ACCESS_KEY: 'ci-only-test-secret-key',
       INSURANCE_S3_ENDPOINT: ''
     },
     stdio: ['ignore', 'pipe', 'pipe']
@@ -78,7 +78,7 @@ test('insurance endpoints enforce patient/admin auth and fail closed without pri
     body: { insurerName: 'CI Insurer', policyType: 'individual', policyNumber: 'TEST1234' }
   });
   assert.equal(policyWhenStorageMissing.status, 503);
-  assert.match(policyWhenStorageMissing.body.error, /storage is not configured/i);
+  assert.match(policyWhenStorageMissing.body.error, /storage and malware scanning must be configured/i);
 
   const intentWhenStorageMissing = await request('/api/insurance/policies/1/documents', {
     method: 'POST', headers: patientHeaders,
