@@ -31,6 +31,7 @@ CREATE TABLE IF NOT EXISTS insurance_documents (
     CHECK (content_type IN ('application/pdf','image/jpeg','image/png')),
   expected_size_bytes INTEGER NOT NULL CHECK (expected_size_bytes > 0 AND expected_size_bytes <= 10485760),
   object_key VARCHAR(500) NOT NULL UNIQUE,
+  upload_key VARCHAR(500) UNIQUE,
   status VARCHAR(24) NOT NULL DEFAULT 'upload_pending'
     CHECK (status IN ('upload_pending','submitted')),
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
