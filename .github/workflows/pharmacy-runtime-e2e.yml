@@ -6,7 +6,7 @@ on:
       - feat/phase7-pharmacy-railway-aligned
   pull_request:
     branches:
-      - feat/phase7-pharmacy-railway-aligned
+      - feat/phase6-emergency-hospitals
 
 jobs:
   runtime-e2e:
