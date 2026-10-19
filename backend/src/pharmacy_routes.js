@@ -22,7 +22,7 @@ function sendError(send, error, fallback) {
 }
 
 async function handlePharmacyRoute(req, res, url, context) {
-  const { send, parseBody, isProduction, auth, admin } = context;
+  const { send, parseBody, auth, admin } = context;
   const pathname = url.pathname;
 
   if (pathname === '/api/pharmacy/admin/stores' && req.method === 'GET') {
@@ -163,7 +163,7 @@ async function handlePharmacyRoute(req, res, url, context) {
   if (pathname === '/api/pharmacy/orders' && req.method === 'GET') {
     const phone = url.searchParams.get('phone');
     if (!phone) return send(422, { error: 'phone is required' });
-    if (isProduction && phone.trim() !== auth?.phone) return send(403, { error: 'Access denied' });
+    if (phone.trim() !== auth?.phone) return send(403, { error: 'Access denied' });
     try {
       const rows = await listPharmacyOrders(phone);
       return rows === null
@@ -177,7 +177,7 @@ async function handlePharmacyRoute(req, res, url, context) {
   if (pathname === '/api/pharmacy/orders' && req.method === 'POST') {
     parseBody(req, async (parseError, data) => {
       if (parseError) return send(400, { error: 'Invalid JSON' });
-      if (isProduction && String(data?.phone || '').trim() !== auth?.phone) {
+      if (String(data?.phone || '').trim() !== auth?.phone) {
         return send(403, { error: 'Access denied' });
       }
       try {
@@ -194,7 +194,7 @@ async function handlePharmacyRoute(req, res, url, context) {
 
   const orderStatus = pathname.match(/^\/api\/pharmacy\/orders\/(\d+)\/status$/);
   if (orderStatus && req.method === 'PATCH') {
-    if (isProduction && !admin) return send(401, { error: 'Admin authentication required' });
+    if (!admin) return send(401, { error: 'Admin authentication required' });
     parseBody(req, async (parseError, data) => {
       if (parseError) return send(400, { error: 'Invalid JSON' });
       try {
