@@ -11,6 +11,13 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - name: Check Pharmacy frontend syntax
+        run: node --check web/pharmacy.js
+      - name: Check Admin page JavaScript syntax
+        shell: bash
+        run: |
+          node -e "const fs=require('fs');const s=fs.readFileSync('admin-panel/index.html','utf8');const a=s.indexOf('<script>')+8;const b=s.indexOf('</script>',a);if(a<8||b<a)process.exit(1);fs.writeFileSync('/tmp/admin-inline.js',s.slice(a,b))"
+          node --check /tmp/admin-inline.js
       - name: Build backend image
         run: docker build -t ayansha-health-care-backend:ci .
       - name: Smoke-test built container routes and admin page
@@ -32,13 +39,23 @@ jobs:
             if curl --fail --silent http://127.0.0.1:3000/health >/dev/null; then break; fi
             sleep 1
           done
-          curl --fail --silent http://127.0.0.1:3000/health | grep -q '"ok":true'
-          curl --fail --silent http://127.0.0.1:3000/ | grep -q 'Ayansha Health Care'
-          curl --fail --silent http://127.0.0.1:3000/web/app.js | grep -q 'function'
-          curl --fail --silent http://127.0.0.1:3000/admin | grep -q 'Ayansha Health Care Admin'
+          curl --fail --silent http://127.0.0.1:3000/health -o /tmp/health.json
+          grep -q '"ok":true' /tmp/health.json
+          curl --fail --silent http://127.0.0.1:3000/ -o /tmp/home.html
+          grep -q 'Ayansha Health Care' /tmp/home.html
+          grep -q 'id="pharmacy"' /tmp/home.html
+          curl --fail --silent http://127.0.0.1:3000/web/app.js -o /tmp/web-app.js
+          grep -q 'function' /tmp/web-app.js
+          curl --fail --silent http://127.0.0.1:3000/web/pharmacy.js -o /tmp/pharmacy-app.js
+          grep -q 'searchStores' /tmp/pharmacy-app.js
+          curl --fail --silent http://127.0.0.1:3000/admin -o /tmp/admin.html
+          grep -q 'Ayansha Health Care Admin' /tmp/admin.html
+          grep -q 'Register a pharmacy' /tmp/admin.html
+          grep -q 'Pharmacy orders' /tmp/admin.html
           test "$(curl --silent --output /dev/null --write-out '%{http_code}' http://127.0.0.1:3000/api/db/health)" = "503"
           test "$(curl --silent --output /dev/null --write-out '%{http_code}' http://127.0.0.1:3000/.env)" = "404"
           test "$(curl --silent --output /dev/null --write-out '%{http_code}' http://127.0.0.1:3000/src/server.js)" = "404"
           curl --fail --silent -H 'Content-Type: application/json' \
             -d '{"email":"admin@example.test","password":"ci-only-admin-password"}' \
-            http://127.0.0.1:3000/api/admin/login | grep -q '"role":"admin"'
+            http://127.0.0.1:3000/api/admin/login -o /tmp/admin-login.json
+          grep -q '"role":"admin"' /tmp/admin-login.json

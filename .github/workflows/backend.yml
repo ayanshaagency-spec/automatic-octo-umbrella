@@ -5,6 +5,7 @@ on:
     branches:
       - feat/phase5-payment-mvp
       - feat/phase6-emergency-hospitals
+      - feat/phase7-pharmacy-railway-aligned
   pull_request:
     branches:
       - feat/phase5-payment-mvp
