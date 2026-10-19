@@ -43,7 +43,7 @@ test('five failed OTP checks invalidate the active code', async () => {
   const phone = '+919666666666';
   const issued = await issueDevelopmentOtp(phone);
   for (let i = 0; i < 5; i += 1) {
-    assert.equal(verifyOtp(phone, '000000' === issued.devOtp ? '111111' : '000000'), false);
+    assert.equal(verifyOtp(phone, '000000'), false);
   }
   assert.equal(verifyOtp(phone, issued.devOtp), false);
 });
@@ -59,6 +59,38 @@ test('OTP expires after five minutes', async () => {
     assert.equal(verifyOtp(phone, issued.devOtp), false);
   } finally {
     Date.now = realNow;
+  }
+});
+
+test('OTP provider URLs must use HTTPS and may not embed credentials', async () => {
+  const phone = '+919444444444';
+  process.env.NODE_ENV = 'test';
+  process.env.OTP_PROVIDER_URL = 'http://sms-provider.example.test/send';
+  process.env.OTP_PROVIDER_TOKEN = 'test-only-token';
+  try {
+    await assert.rejects(
+      () => issueOtp(phone),
+      error => error.statusCode === 503 && /HTTPS/.test(error.message)
+    );
+    assert.equal(verifyOtp(phone, '123456'), false, 'failed provider request must not leave an active OTP');
+  } finally {
+    delete process.env.OTP_PROVIDER_URL;
+    delete process.env.OTP_PROVIDER_TOKEN;
+  }
+});
+
+test('production OTP requests fail closed when provider secrets are missing', async () => {
+  const previousMode = process.env.NODE_ENV;
+  process.env.NODE_ENV = 'production';
+  delete process.env.OTP_PROVIDER_URL;
+  delete process.env.OTP_PROVIDER_TOKEN;
+  try {
+    await assert.rejects(
+      () => issueOtp('+919333333333'),
+      error => error.statusCode === 503 && /OTP provider is not configured/.test(error.message)
+    );
+  } finally {
+    process.env.NODE_ENV = previousMode;
   }
 });
 
