@@ -97,19 +97,33 @@ jobs:
             for (let attempt = 0; attempt < 180; attempt += 1) {
               try {
                 const result = await scanStream(Readable.from([Buffer.from('Ayansha CI scanner readiness probe')]), { maxBytes: 1024 });
-                const testDetection = await scanStream(Readable.from([Buffer.from('AYANSHA-CLAMAV-TEST-INFECTED')]), { maxBytes: 1024 });
-                if (result.status === 'clean' && testDetection.status === 'infected') {
-                  console.log('ClamAV is ready and recognized the CI-only synthetic signature.');
+                if (result.status === 'clean') {
+                  console.log('ClamAV accepted a clean readiness probe.');
                   return;
                 }
-                throw new Error('Unexpected scanner readiness/detection result: ' +
-                  result.status + ' / ' + testDetection.status + ' / ' + (testDetection.signature || 'no-signature'));
+                throw new Error('Unexpected scanner readiness result: ' + result.status);
               } catch (error) {
                 lastError = error;
                 await new Promise(resolve => setTimeout(resolve, 1000));
               }
             }
             throw new Error('ClamAV did not become ready: ' + (lastError?.message || 'unknown error'));
+          })().catch(error => { console.error(error.message); process.exit(1); });
+          NODE
+      - name: Reload ClamAV and verify CI-only synthetic signature
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker exec insurance-clamav clamdscan --reload
+          node <<'NODE'
+          const { Readable } = require('node:stream');
+          const { scanStream } = require('./src/insurance_scanner');
+          (async () => {
+            const result = await scanStream(Readable.from([Buffer.from('AYANSHA-CLAMAV-TEST-INFECTED')]), { maxBytes: 1024 });
+            if (result.status !== 'infected') {
+              throw new Error('CI-only signature was not detected: ' + result.status + ' / ' + (result.signature || 'no-signature'));
+            }
+            console.log('ClamAV detected the synthetic quarantine test marker.');
           })().catch(error => { console.error(error.message); process.exit(1); });
           NODE
       - name: Verify private uploads, clean scan, synthetic quarantine and blocked downloads
