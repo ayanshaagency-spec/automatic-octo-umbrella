@@ -85,6 +85,23 @@ async function main() {
     );
 
     const baseUrl = process.env.PHARMACY_E2E_BASE_URL;
+    // Smoke-test the real patient and admin entry points served by this same backend.
+    const patientPage = await request(baseUrl, '/');
+    assertStatus(patientPage, 200, 'Patient web app entry point');
+    assert.match(patientPage.body.raw || '', /id="pharmacyPlaceOrder"/, 'Patient page should expose pharmacy checkout');
+    assert.match(patientPage.body.raw || '', /\/web\/pharmacy\.js/, 'Patient page should load pharmacy client code');
+
+    const patientPharmacyScript = await request(baseUrl, '/web/pharmacy.js');
+    assertStatus(patientPharmacyScript, 200, 'Patient pharmacy client script');
+    assert.match(patientPharmacyScript.body.raw || '', /\/api\/pharmacy\/orders/, 'Patient client should integrate order and history APIs');
+    assert.match(patientPharmacyScript.body.raw || '', /placeOrder/, 'Patient client should wire pharmacy checkout');
+
+    const adminPage = await request(baseUrl, '/admin');
+    assertStatus(adminPage, 200, 'Existing admin operations entry point');
+    assert.match(adminPage.body.raw || '', /id="ordersPanel"/, 'Admin page should expose pharmacy fulfilment queue');
+    assert.match(adminPage.body.raw || '', /id="orderStatusFilter"/, 'Admin queue should expose status filtering');
+    assert.match(adminPage.body.raw || '', /\/api\/pharmacy\/admin\/orders/, 'Admin client should integrate the authorised pharmacy queue API');
+
     const adminLogin = await request(baseUrl, '/api/admin/login', {
       method: 'POST',
       body: { email: process.env.ADMIN_EMAIL, password: process.env.ADMIN_PASSWORD }
@@ -334,7 +351,7 @@ async function main() {
     assert.equal(Number(partnerAmoxicillin.stockQuantity), 3, 'Successful checkout should reserve inventory');
     assert.equal(Number(partnerIbuprofen.stockQuantity), 5, 'Rejected prescription mismatch must not change inventory');
 
-    console.log('Pharmacy PostgreSQL E2E passed: patient OTP login, store approval, home/hospital checkout, patient history, admin queue/filter/status update, invalid transition rejection, prescription matching, COD and stock reservation.');
+    console.log('Pharmacy PostgreSQL E2E passed: patient/admin UI smoke, patient OTP login, store approval, home/hospital checkout, patient history, admin queue/filter/status update, invalid transition rejection, prescription matching, COD and stock reservation.');
   } finally {
     await pool.end();
   }
