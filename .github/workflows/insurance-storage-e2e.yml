@@ -84,7 +84,7 @@ jobs:
           printf '%s\n' 'Ayansha.Test.Quarantine:0:*:4159414E5348412D434C414D41562D544553542D494E464543544544' > "$RUNNER_TEMP/insurance-ci-test.ndb"
           docker run -d --name insurance-clamav \
             -p 127.0.0.1:3310:3310 \
-            -v "$RUNNER_TEMP/insurance-ci-test.ndb:/var/lib/clamav/ayansha-ci-test.ndb:ro" \
+            -v "$RUNNER_TEMP/insurance-ci-test.ndb:/tmp/insurance-ci-test.ndb:ro" \
             clamav/clamav:stable
       - name: Wait for ClamAV signature database and scanner
         shell: bash
@@ -114,6 +114,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          docker exec insurance-clamav sh -c 'cp /tmp/insurance-ci-test.ndb /var/lib/clamav/ayansha-ci-test.ndb && chown clamav:clamav /var/lib/clamav/ayansha-ci-test.ndb'
           docker exec insurance-clamav clamdscan --reload
           node <<'NODE'
           const { Readable } = require('node:stream');
