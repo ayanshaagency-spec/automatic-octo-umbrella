@@ -35,7 +35,7 @@ async function createUpload(intent, bytes, contentType, filename) {
 
 function makeEmbeddedEicarPdf() {
   // Uncompressed EmbeddedFile stream lets ClamAV scan the harmless EICAR test signature.
-  const eicar = Buffer.from('X5O!P%@AP[4\\\\PZX54(P^)7CC)7}$EICAR-STANDARD-ANTIVIRUS-TEST-FILE!$H+H*', 'ascii');
+  const eicar = Buffer.from('X5O!P%@AP[4\\PZX54(P^)7CC)7}$EICAR-STANDARD-ANTIVIRUS-TEST-FILE!$H+H*', 'ascii');
   const objects = [
     Buffer.from('1 0 obj\\n<< /Type /Catalog /Pages 2 0 R /Names << /EmbeddedFiles 6 0 R >> >>\\nendobj\\n'),
     Buffer.from('2 0 obj\\n<< /Type /Pages /Kids [3 0 R] /Count 1 >>\\nendobj\\n'),
