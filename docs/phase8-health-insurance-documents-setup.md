@@ -6,7 +6,7 @@ This module is isolated in the existing repository on branch `feat/phase8-health
 
 - Patient policy details are scoped to the authenticated patient account.
 - The API retains only the last four characters of the policy number; it does not save the full policy number to PostgreSQL.
-- Documents are uploaded directly to a private S3-compatible object store with a five-minute presigned upload URL. They are not stored in GitHub or public web folders.
+- Documents are uploaded using a five-minute size-limited presigned POST to a temporary private object key, then promoted to a different final private key on successful completion. The temporary URL cannot overwrite the final review document. Files are not stored in GitHub or public web folders.
 - Supported file types: PDF, JPEG and PNG; maximum 10 MiB per file and 15 documents per policy.
 - Before submission completes, the API checks object size, declared content type and a file signature for PDF/JPEG/PNG.
 - Patient downloads and staff review downloads use access checks and short-lived (60-second) signed URLs.
@@ -26,7 +26,7 @@ Configure these environment variables in the staging/production platform's secre
 - `INSURANCE_S3_ENDPOINT` — optional HTTPS endpoint for an S3-compatible provider; use an actual HTTPS endpoint outside local tests.
 - `INSURANCE_S3_FORCE_PATH_STYLE` — set to `true` only when the selected S3-compatible provider requires path-style addressing.
 
-The access key needs only the operations required for upload, object head/read, and signed downloads on this bucket/prefix. Do not grant bucket administration or public ACL permissions. The application never returns the bucket key to the browser.
+The access key needs only the operations required for upload, object head/range read, copy temporary objects to final keys, delete temporary objects, and signed downloads on the required prefixes. Do not grant bucket administration or public ACL permissions. The application never returns object keys to the browser. Add a lifecycle rule that deletes incomplete `insurance-uploads/` objects after 1 day as a cleanup fallback; never lifecycle-delete `insurance-documents/` without an approved retention plan.
 
 ### Bucket CORS
 
