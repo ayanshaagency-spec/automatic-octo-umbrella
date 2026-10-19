@@ -2,7 +2,7 @@
 -- Never put patient-uploaded file bytes or credentials in PostgreSQL/GitHub.
 CREATE TABLE IF NOT EXISTS insurance_policies (
   id SERIAL PRIMARY KEY,
-  patient_id INTEGER NOT NULL REFERENCES patients(id) ON DELETE CASCADE,
+  patient_id INTEGER NOT NULL REFERENCES patients(id) ON DELETE RESTRICT,
   insurer_name VARCHAR(160) NOT NULL,
   policy_type VARCHAR(20) NOT NULL CHECK (policy_type IN ('individual','family','group','other')),
   policy_number_last4 VARCHAR(4) NOT NULL,
@@ -22,8 +22,8 @@ CREATE INDEX IF NOT EXISTS idx_insurance_policies_status_created
 
 CREATE TABLE IF NOT EXISTS insurance_documents (
   id SERIAL PRIMARY KEY,
-  policy_id INTEGER NOT NULL REFERENCES insurance_policies(id) ON DELETE CASCADE,
-  patient_id INTEGER NOT NULL REFERENCES patients(id) ON DELETE CASCADE,
+  policy_id INTEGER NOT NULL REFERENCES insurance_policies(id) ON DELETE RESTRICT,
+  patient_id INTEGER NOT NULL REFERENCES patients(id) ON DELETE RESTRICT,
   document_type VARCHAR(32) NOT NULL
     CHECK (document_type IN ('policy_document','insurance_card','claim_bill','discharge_summary','prescription','lab_report','other')),
   original_filename VARCHAR(160) NOT NULL,
