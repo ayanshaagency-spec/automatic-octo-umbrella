@@ -18,6 +18,7 @@ const { listNearbyHospitals } = require('./phase6_hospital_repository');
 const { status: whatsappStatus, sendWhatsApp } = require('./whatsapp');
 const { getAiStatus, generateSymptomGuidance } = require('./ai');
 const { verifyAdminCredentials, createAdminToken, createDoctorToken, verifyRoleToken } = require('./roles');
+const { handlePharmacyRoute } = require('./pharmacy_routes');
 
 const configuredOrigins = (process.env.CORS_ALLOWED_ORIGINS || '').split(',').map(v => v.trim()).filter(Boolean);
 const isAllowedOrigin = origin => !origin || configuredOrigins.includes('*') || configuredOrigins.includes(origin) || (process.env.NODE_ENV !== 'production' && /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin));
@@ -108,6 +109,32 @@ const server=http.createServer(async(req,res)=>{
   if(url.pathname==='/api/payments/webhook'&&req.method==='POST')return parseRawBody(req,async(err,rawBody)=>{if(err)return send(res,400,{error:'Unable to read webhook body'},req);const signature=req.headers['x-payment-signature'];if(!getWebhookSecret())return send(res,503,{error:'Payment webhook is not configured'},req);if(!verifyWebhookSignature(rawBody,signature))return send(res,401,{error:'Invalid webhook signature'},req);try{const event=parseWebhookEvent(rawBody);const paymentId=Number(event.paymentId);const status=event.status;if(!Number.isInteger(paymentId)||paymentId<1||typeof status!=='string')return send(res,422,{error:'paymentId and status are required'},req);const saved=await updatePaymentStatus(paymentId,status,event.providerPaymentId);if(saved)return send(res,200,{ok:true,payment:saved},req);return send(res,503,{error:'DATABASE_URL not configured'},req);}catch(e){if(e.statusCode)return send(res,e.statusCode,{error:e.message},req);return send(res,503,{error:'Unable to process payment webhook'},req);}});
   const paymentStatusMatch=url.pathname.match(/^\/api\/payments\/(\d+)\/status$/);
   if(paymentStatusMatch&&req.method==='PATCH')return parseBody(req,async(err,data)=>{if(err)return send(res,400,{error:'Invalid JSON'},req);if(!isAuthorizedPaymentStatusUpdate(req.headers))return send(res,403,{error:'Payment status update is restricted'},req);try{const saved=await updatePaymentStatus(Number(paymentStatusMatch[1]),data.status,data.providerPaymentId);if(saved)return send(res,200,saved,req);return send(res,503,{error:'DATABASE_URL not configured'},req);}catch(e){if(e.statusCode)return send(res,e.statusCode,{error:e.message},req);return send(res,503,{error:'Unable to update payment status'},req);}});
+  if (url.pathname.startsWith('/api/pharmacy/')) {
+    const isProduction = process.env.NODE_ENV === 'production';
+    const isPharmacyAdminApi = url.pathname.startsWith('/api/pharmacy/admin/');
+    const isPharmacyOrderStatus = req.method === 'PATCH' && /^\/api\/pharmacy\/orders\/\d+\/status$/.test(url.pathname);
+    let adminClaims = null;
+    let patientClaims = null;
+
+    // Align Pharmacy routes with the existing production role-token model.
+    if (isProduction && (isPharmacyAdminApi || isPharmacyOrderStatus)) {
+      adminClaims = requireAdmin(req, res);
+      if (!adminClaims) return;
+    }
+    if (isProduction && url.pathname === '/api/pharmacy/orders' && ['GET', 'POST'].includes(req.method)) {
+      patientClaims = requireAuth(req, res);
+      if (!patientClaims) return;
+    }
+
+    const handled = await handlePharmacyRoute(req, res, url, {
+      send: (code, data) => send(res, code, data, req),
+      parseBody,
+      isProduction,
+      auth: patientClaims ? { phone: patientClaims.sub } : null,
+      admin: Boolean(adminClaims)
+    });
+    if (handled !== false) return;
+  }
   send(res,404,{error:'Not found'},req);
 });
 server.listen(PORT,()=>console.log(`Ayansha API running on ${PORT}`));
