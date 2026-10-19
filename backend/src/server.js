@@ -110,18 +110,17 @@ const server=http.createServer(async(req,res)=>{
   const paymentStatusMatch=url.pathname.match(/^\/api\/payments\/(\d+)\/status$/);
   if(paymentStatusMatch&&req.method==='PATCH')return parseBody(req,async(err,data)=>{if(err)return send(res,400,{error:'Invalid JSON'},req);if(!isAuthorizedPaymentStatusUpdate(req.headers))return send(res,403,{error:'Payment status update is restricted'},req);try{const saved=await updatePaymentStatus(Number(paymentStatusMatch[1]),data.status,data.providerPaymentId);if(saved)return send(res,200,saved,req);return send(res,503,{error:'DATABASE_URL not configured'},req);}catch(e){if(e.statusCode)return send(res,e.statusCode,{error:e.message},req);return send(res,503,{error:'Unable to update payment status'},req);}});
   if (url.pathname.startsWith('/api/pharmacy/')) {
-    const isProduction = process.env.NODE_ENV === 'production';
     const isPharmacyAdminApi = url.pathname.startsWith('/api/pharmacy/admin/');
-    const isPharmacyOrderStatus = req.method === 'PATCH' && /^\/api\/pharmacy\/orders\/\d+\/status$/.test(url.pathname);
+    const isPharmacyOrderStatus = req.method === 'PATCH' && /^\\/api\\/pharmacy\\/orders\\/\\d+\\/status$/.test(url.pathname);
     let adminClaims = null;
     let patientClaims = null;
 
-    // Align Pharmacy routes with the existing production role-token model.
-    if (isProduction && (isPharmacyAdminApi || isPharmacyOrderStatus)) {
+    // Match the existing API security model: protected routes require role tokens in every environment.
+    if (isPharmacyAdminApi || isPharmacyOrderStatus) {
       adminClaims = requireAdmin(req, res);
       if (!adminClaims) return;
     }
-    if (isProduction && url.pathname === '/api/pharmacy/orders' && ['GET', 'POST'].includes(req.method)) {
+    if (url.pathname === '/api/pharmacy/orders' && ['GET', 'POST'].includes(req.method)) {
       patientClaims = requireAuth(req, res);
       if (!patientClaims) return;
     }
@@ -129,7 +128,6 @@ const server=http.createServer(async(req,res)=>{
     const handled = await handlePharmacyRoute(req, res, url, {
       send: (code, data) => send(res, code, data, req),
       parseBody,
-      isProduction,
       auth: patientClaims ? { phone: patientClaims.sub } : null,
       admin: Boolean(adminClaims)
     });
