@@ -152,11 +152,10 @@
       });
 
       showMessage('insuranceDocumentMessage', 'Uploading securely…');
-      const put = await fetch(intent.uploadUrl, {
-        method: 'PUT',
-        headers: intent.requiredHeaders,
-        body: file
-      });
+      const uploadForm = new FormData();
+      Object.entries(intent.uploadFields || {}).forEach(([name, value]) => uploadForm.append(name, value));
+      uploadForm.append('file', file);
+      const put = await fetch(intent.uploadUrl, { method: 'POST', body: uploadForm });
       if (!put.ok) throw new Error('Private file upload failed. Check private storage CORS/configuration and retry.');
       await api('/api/insurance/documents/' + Number(intent.document.id) + '/complete', { method: 'POST', body: {} });
       $('insuranceDocumentFile').value = '';
