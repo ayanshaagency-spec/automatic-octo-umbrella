@@ -72,7 +72,7 @@ jobs:
             -p 127.0.0.1:9000:9000 \
             -e MINIO_ROOT_USER=insurance-ci-access \
             -e MINIO_ROOT_PASSWORD=insurance-ci-secret-test-only \
-            quay.io/minio/minio:latest server /data --console-address ":9001"
+            minio/minio:latest server /data --console-address ":9001"
           for attempt in $(seq 1 90); do
             if curl --fail --silent http://127.0.0.1:9000/minio/health/ready >/dev/null; then exit 0; fi
             sleep 1
