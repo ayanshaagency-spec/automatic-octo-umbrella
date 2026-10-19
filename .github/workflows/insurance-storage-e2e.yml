@@ -95,7 +95,7 @@ jobs:
           status=$?
           set -e
           printf '%s\\n' "$output"
-          if [[ "$status" -ne 1 ]] || ! grep -Fq 'Ayansha.Test.Quarantine FOUND' <<<"$output"; then
+          if [[ "$status" -ne 1 ]] || ! grep -Fq 'Ayansha.Test.Quarantine.UNOFFICIAL FOUND' <<<"$output"; then
             echo "Mounted CI-only ClamAV signature did not match its test marker." >&2
             exit 1
           fi
@@ -115,7 +115,7 @@ jobs:
                   throw new Error('Expected clean readiness probe, got ' + clean.status);
                 }
                 const marker = await scanStream(Readable.from([Buffer.from('AYANSHA-CLAMAV-TEST-INFECTED')]), { maxBytes: 1024 });
-                if (marker.status === 'infected' && marker.signature === 'Ayansha.Test.Quarantine') {
+                if (marker.status === 'infected' && marker.signature.startsWith('Ayansha.Test.Quarantine')) {
                   console.log('ClamAV is ready and detected the synthetic quarantine marker.');
                   return;
                 }
