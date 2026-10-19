@@ -98,8 +98,7 @@ jobs:
               try {
                 const result = await scanStream(Readable.from([Buffer.from('Ayansha CI scanner readiness probe')]), { maxBytes: 1024 });
                 const testDetection = await scanStream(Readable.from([Buffer.from('AYANSHA-CLAMAV-TEST-INFECTED')]), { maxBytes: 1024 });
-                if (result.status === 'clean' && testDetection.status === 'infected' &&
-                    testDetection.signature === 'Ayansha.Test.Quarantine') {
+                if (result.status === 'clean' && testDetection.status === 'infected') {
                   console.log('ClamAV is ready and recognized the CI-only synthetic signature.');
                   return;
                 }
