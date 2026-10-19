@@ -38,8 +38,12 @@ jobs:
           grep -q 'Ayansha Health Care' /tmp/home.html
           curl --fail --silent http://127.0.0.1:3000/web/app.js -o /tmp/app.js
           grep -q 'function' /tmp/app.js
+          curl --fail --silent http://127.0.0.1:3000/web/insurance.js -o /tmp/insurance.js
+          node --check /tmp/insurance.js
+          grep -q 'My insurance documents' /tmp/home.html
           curl --fail --silent http://127.0.0.1:3000/admin -o /tmp/admin.html
           grep -q 'Ayansha Health Care Admin' /tmp/admin.html
+          grep -q 'Health Insurance Document Reviews' /tmp/admin.html
           test "$(curl --silent --output /dev/null --write-out '%{http_code}' http://127.0.0.1:3000/api/db/health)" = "503"
           test "$(curl --silent --output /dev/null --write-out '%{http_code}' http://127.0.0.1:3000/.env)" = "404"
           test "$(curl --silent --output /dev/null --write-out '%{http_code}' http://127.0.0.1:3000/src/server.js)" = "404"
