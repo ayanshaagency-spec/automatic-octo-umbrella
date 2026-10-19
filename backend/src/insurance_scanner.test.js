@@ -18,7 +18,7 @@ function startFakeClam(responseText) {
         const command = buffer.subarray(0, zero).toString('ascii');
         buffer = buffer.subarray(zero + 1);
         commandRead = true;
-        if (command !== 'zINSTREAM') {
+        if (command !== 'INSTREAM') {
           socket.end(Buffer.from('UNKNOWN COMMAND\0'));
           return;
         }
