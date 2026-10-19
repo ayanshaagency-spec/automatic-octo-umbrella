@@ -61,6 +61,10 @@ function makeUploadKey() {
   return 'insurance-uploads/' + crypto.randomUUID();
 }
 
+function makeQuarantineKey() {
+  return 'insurance-quarantine/' + crypto.randomUUID();
+}
+
 async function createUploadForm({ objectKey, contentType }) {
   const { client, config } = getClient();
   // The POST policy enforces a server-side request-size range, avoiding an unrestricted signed PUT.
@@ -81,6 +85,15 @@ function detectContentType(bytes) {
   if (bytes.length >= 8 && bytes.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]))) return 'image/png';
   if (bytes.length >= 3 && bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff) return 'image/jpeg';
   return null;
+}
+
+async function openObjectStream({ objectKey }) {
+  const { client, config } = getClient();
+  const result = await client.send(new GetObjectCommand({ Bucket: config.bucket, Key: objectKey }));
+  if (!result.Body || typeof result.Body[Symbol.asyncIterator] !== 'function') {
+    throw new Error('Private storage did not return a readable object stream');
+  }
+  return result.Body;
 }
 
 async function inspectObject({ objectKey }) {
@@ -134,4 +147,4 @@ async function deleteObject({ objectKey }) {
   await client.send(new DeleteObjectCommand({ Bucket: config.bucket, Key: objectKey }));
 }
 
-module.exports = { isStorageConfigured, makeObjectKey, makeUploadKey, createUploadForm, inspectObject, createDownloadUrl, promoteUpload, deleteObject, detectContentType };
+module.exports = { isStorageConfigured, makeObjectKey, makeUploadKey, makeQuarantineKey, createUploadForm, openObjectStream, inspectObject, createDownloadUrl, promoteUpload, deleteObject, detectContentType };
