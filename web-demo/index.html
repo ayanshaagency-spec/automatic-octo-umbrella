@@ -54,6 +54,46 @@
         </div>
       </div>
 
+
+        <div class="panel pharmacy-panel">
+          <div class="panel-head"><div><p class="eyebrow">PHASE 7 • PHARMACY NETWORK</p><h3>Medicines from hospital & partner pharmacies</h3><p>Choose an approved pharmacy and route the order to a hospital or the patient's home. Prescription medicines require a matching doctor prescription.</p></div><span id="pharmacyStatus" class="tag">Checking directory…</span></div>
+          <div class="pharmacy-filters">
+            <select id="pharmacyStoreType" aria-label="Pharmacy type"><option value="">All approved stores</option><option value="hospital">Hospital Pharmacy</option><option value="partner">Partner Medical Store</option></select>
+            <select id="pharmacyDeliveryMethod" aria-label="Delivery method"><option value="hospital">Deliver to hospital</option><option value="home">Deliver to home</option></select>
+            <input id="pharmacyCity" placeholder="City (e.g. Muzaffarnagar)" aria-label="Pharmacy city" value="Muzaffarnagar">
+            <button id="pharmacyRefreshStores" class="primary" type="button">Find pharmacies</button>
+          </div>
+          <div id="pharmacyStoreStatus" class="result" role="status" aria-live="polite">Loading approved pharmacies…</div>
+          <div class="pharmacy-columns">
+            <div>
+              <label class="pharmacy-label" for="pharmacyStoreSelect">1. Pharmacy store</label>
+              <select id="pharmacyStoreSelect"><option value="">Load approved pharmacies first</option></select>
+              <div id="pharmacyStoreDetails" class="result">Only verified and activated store records are displayed.</div>
+              <h4>2. Available products</h4>
+              <div id="pharmacyProducts" class="result">Select a pharmacy to load its catalogue.</div>
+            </div>
+            <div>
+              <label class="pharmacy-label" for="pharmacyPatientPhone">3. Patient phone</label>
+              <input id="pharmacyPatientPhone" placeholder="Use the patient phone from appointment form" aria-label="Pharmacy patient phone">
+              <div id="pharmacyHospitalFields"><label class="pharmacy-label" for="pharmacyHospitalSelect">Delivery hospital</label>
+              <select id="pharmacyHospitalSelect"><option value="">Load active hospitals</option></select></div>
+              <div id="pharmacyHomeFields" hidden>
+                <label class="pharmacy-label" for="pharmacyAddress1">Home address</label>
+                <input id="pharmacyAddress1" placeholder="House / street / locality">
+                <input id="pharmacyAddress2" placeholder="Address line 2 (optional)">
+                <div class="pharmacy-filters address-grid"><input id="pharmacyDeliveryCity" placeholder="City"><input id="pharmacyDeliveryState" placeholder="State"><input id="pharmacyPincode" inputmode="numeric" maxlength="6" placeholder="6-digit PIN"></div>
+              </div>
+              <label class="pharmacy-label" for="pharmacyPrescriptionId">Doctor prescription ID (required for prescription medicines)</label>
+              <input id="pharmacyPrescriptionId" type="number" min="1" placeholder="Prescription ID from patient records">
+              <button id="pharmacyPlaceOrder" class="primary full pharmacy-place-order" type="button">Place pharmacy order • Cash on delivery</button>
+              <p class="section-copy">Online pharmacy payment is not enabled in this MVP. Production order submission requires patient sign-in and the approved database migration.</p>
+              <div id="pharmacyOrderResult" class="result" role="status" aria-live="polite">No pharmacy order submitted.</div>
+              <button id="pharmacyLoadOrders" class="secondary full" type="button">Load my pharmacy orders</button>
+              <div id="pharmacyOrderHistory" class="result">Order history appears here after patient authentication is available.</div>
+            </div>
+          </div>
+        </div>
+
       <div id="role-doctor" class="role-panel">
         <div class="dashboard-head"><div><span class="welcome">DOCTOR CONSOLE</span><h3>Today’s clinical workspace</h3><p>Appointments, consultation and prescriptions in one workflow.</p></div><span class="profile-badge doctor">D</span></div>
         <div class="grid three"><article class="stat-card"><span>Today’s appointments</span><strong id="todayAppointments">—</strong><small id="upcomingAppointments">Loading live data…</small></article><article class="stat-card"><span>Consultations</span><strong id="completedAppointments">—</strong><small>Completed appointments</small></article><article class="stat-card"><span>Prescriptions</span><strong id="prescriptionCount">—</strong><small>Live database count</small></article></div>
@@ -72,6 +112,52 @@
           </form>
           <div id="adminLoginResult" class="result" role="status" aria-live="polite">Sign in to load protected admin dashboard data.</div>
         </div>
+
+        <div class="panel pharmacy-admin-panel">
+          <div class="panel-head"><div><p class="eyebrow">PHASE 7 • STORE OPERATIONS</p><h3>Register and approve pharmacies</h3><p>Administrators can register hospital pharmacies and external partner medical stores. New stores stay inactive until verified and approved.</p></div><span class="tag">Admin only</span></div>
+          <form id="pharmacyStoreForm" class="db-form pharmacy-admin-form">
+            <input id="pharmacyNewStoreName" required maxlength="160" placeholder="Pharmacy / medical store name">
+            <select id="pharmacyNewStoreType" required><option value="hospital">Hospital Pharmacy</option><option value="partner">External Partner Medical Store</option></select>
+            <select id="pharmacyNewStoreHospital"><option value="">Select linked hospital</option></select>
+            <input id="pharmacyNewStorePhone" maxlength="40" placeholder="Store contact phone (optional)">
+            <input id="pharmacyNewStoreAddress" required maxlength="240" placeholder="Full store address">
+            <input id="pharmacyNewStoreCity" required maxlength="100" placeholder="City">
+            <input id="pharmacyNewStoreState" required maxlength="100" placeholder="State">
+            <label class="check-row"><input id="pharmacyNewStoreHospitalDelivery" type="checkbox" checked> Supports hospital delivery</label>
+            <label class="check-row"><input id="pharmacyNewStoreHomeDelivery" type="checkbox"> Supports home delivery</label>
+            <button class="primary" type="submit">Register inactive pharmacy</button>
+          </form>
+          <div id="pharmacyAdminStoreResult" class="result" role="status" aria-live="polite">Sign in as administrator to manage pharmacy onboarding.</div>
+          <div class="panel-head compact"><h3>Registered stores</h3><button id="pharmacyAdminRefreshStores" class="secondary" type="button">Refresh stores</button></div>
+          <div id="pharmacyAdminStoreList" class="result">Sign in to load registered stores.</div>
+          <div class="pharmacy-admin-catalogue">
+            <h3>Manage catalogue and stock</h3>
+            <label class="pharmacy-label" for="pharmacyAdminCatalogStore">Store to manage</label>
+            <select id="pharmacyAdminCatalogStore"><option value="">Load registered stores first</option></select>
+            <form id="pharmacyProductForm" class="db-form pharmacy-admin-form">
+              <input id="pharmacyNewProductName" required maxlength="180" placeholder="Medicine / product name">
+              <input id="pharmacyNewProductSku" maxlength="120" placeholder="SKU / code (optional)">
+              <input id="pharmacyNewProductBrand" maxlength="120" placeholder="Brand (optional)">
+              <input id="pharmacyNewProductStrength" maxlength="120" placeholder="Strength e.g. 500 mg">
+              <input id="pharmacyNewProductPack" maxlength="120" placeholder="Pack size e.g. 10 tablets">
+              <input id="pharmacyNewProductPrice" required type="number" min="0" step="0.01" placeholder="Price in ₹">
+              <input id="pharmacyNewProductStock" required type="number" min="0" step="1" value="0" placeholder="Stock quantity">
+              <label class="check-row"><input id="pharmacyNewProductRx" type="checkbox" checked> Prescription required by default</label>
+              <label class="check-row"><input id="pharmacyNewProductActive" type="checkbox"> Activate product after verification</label>
+              <button class="primary" type="submit">Add product to store</button>
+            </form>
+            <div id="pharmacyAdminProductResult" class="result" role="status" aria-live="polite">Select a store to manage catalogue.</div>
+            <div id="pharmacyAdminProductList" class="result">Products and stock will appear here.</div>
+          </div>
+          <div class="pharmacy-admin-orders">
+            <div class="panel-head compact"><div><h3>Pharmacy order queue</h3><p class="section-copy">Review destinations and update order progress for connected stores.</p></div><button id="pharmacyAdminRefreshOrders" class="secondary" type="button">Refresh orders</button></div>
+            <div class="pharmacy-filters order-filters">
+              <select id="pharmacyAdminOrderStatus" aria-label="Filter pharmacy orders"><option value="">All order statuses</option><option value="placed">Placed</option><option value="accepted">Accepted</option><option value="preparing">Preparing</option><option value="ready">Ready</option><option value="out_for_delivery">Out for delivery</option><option value="delivered">Delivered</option><option value="cancelled">Cancelled</option></select>
+            </div>
+            <div id="pharmacyAdminOrderList" class="result" role="status" aria-live="polite">Sign in as admin to view pharmacy orders.</div>
+          </div>
+        </div>
+
         <div class="grid three"><article class="stat-card"><span>Patients</span><strong id="patientCount">—</strong><small>Live database count</small></article><article class="stat-card"><span>Doctors</span><strong id="doctorCount">—</strong><small>Live database count</small></article><article class="stat-card"><span>Payments</span><strong id="paidRevenue">—</strong><small id="paymentSummary">Live paid revenue</small></article></div>
         <div class="panel live-dashboard-panel"><div class="panel-head"><div><p class="eyebrow">LIVE DATABASE DASHBOARD</p><h3>Recent appointments</h3><p>Only records returned by the connected database are shown here.</p></div><button class="secondary" type="button" onclick="loadDashboardSummary()">Refresh live data</button></div><div id="dashboardSummaryStatus" class="result">Loading live database summary…</div><div id="recentAppointments" class="result">Loading recent appointments…</div></div>
         <div class="panel verification-panel">

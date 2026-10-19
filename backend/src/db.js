@@ -1,13 +1,22 @@
-const { Client } = require('pg');
+'use strict';
 
-let client;
+const { Pool } = require('pg');
+
+let pool;
+
 async function getDb() {
   if (!process.env.DATABASE_URL) return null;
-  if (!client) {
-    client = new Client({ connectionString: process.env.DATABASE_URL, ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false });
-    await client.connect();
+  if (!pool) {
+    pool = new Pool({
+      connectionString: process.env.DATABASE_URL,
+      ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false
+    });
+    pool.on('error', (error) => {
+      // Do not log connection strings or credentials.
+      console.error('Unexpected database pool error:', error.message);
+    });
   }
-  return client;
+  return pool;
 }
 
 module.exports = { getDb };

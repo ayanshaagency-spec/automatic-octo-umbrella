@@ -9,7 +9,7 @@ const required=[
   ['Payment integration','/payments'],['Prescription integration','/prescriptions'],['Health records integration','/health-records'],
   ['Doctor directory empty state','doctorDirectoryStatus'],['Appointment submit control','appointmentSubmitButton'],
   ['Live dashboard API','/dashboard/summary'],['Live dashboard status','dashboardSummaryStatus'],
-  ['Recent appointments','recentAppointments'],['Dashboard refresh','loadDashboardSummary'],['Verification center','verificationStatus'],['Verification detail','verificationDetail'],['Verification loader','loadVerificationStatus']
+  ['Recent appointments','recentAppointments'],['Dashboard refresh','loadDashboardSummary'],['Verification center','verificationStatus'],['Verification detail','verificationDetail'],['Verification loader','loadVerificationStatus'],['Pharmacy panel','pharmacyStatus'],['Pharmacy store types','pharmacyStoreType'],['Pharmacy delivery choice','pharmacyDeliveryMethod'],['Pharmacy order control','pharmacyPlaceOrder'],['Pharmacy stores API','/pharmacy/stores'],['Pharmacy products API','/pharmacy/products'],['Pharmacy order history','loadPharmacyOrders']
 ];
 for(const [name,needle] of required){
   if(!html.includes(needle)&&!js.includes(needle)) throw new Error('Missing '+name+': '+needle);
@@ -20,4 +20,7 @@ if(!js.includes('LIVE DATABASE CONNECTED')) throw new Error('Live dashboard succ
 if(!js.includes('LIVE DATABASE UNAVAILABLE')) throw new Error('Live dashboard failure state missing');
 if(!js.includes('No doctors are currently configured in the live directory')) throw new Error('Doctor directory empty state missing');
 if(!js.includes('select.disabled=true')) throw new Error('Appointment booking is not blocked when doctor data is unavailable');
+if(!css.includes('.pharmacy-panel{')) throw new Error('Pharmacy module styling missing');
+if(!js.includes('Prescription required')) throw new Error('Pharmacy prescription safety label missing');
+if(!js.includes('cash_on_delivery')) throw new Error('Pharmacy checkout payment state missing');
 console.log('Client demo smoke test passed: structure, role flows, live dashboard, API hooks and doctor-directory empty state present.');

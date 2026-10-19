@@ -57,6 +57,14 @@ jobs:
           curl -fsS http://127.0.0.1:3918/health
           curl -fsS http://127.0.0.1:3918/api/db/health
 
+      - name: Verify pharmacy ordering against isolated PostgreSQL
+        working-directory: backend
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/ayansha_healthcare
+          PHARMACY_E2E_CI: '1'
+          PHARMACY_E2E_BASE_URL: http://127.0.0.1:3918
+        run: node src/pharmacy_runtime_e2e.js
+
       - name: Verify runtime database connection
         run: |
           curl -fsS http://127.0.0.1:3918/api/db/health | grep '"ok":true'

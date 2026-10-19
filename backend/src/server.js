@@ -16,6 +16,7 @@ const { validateCoordinates, emergencyResponse } = require('./phase6_emergency')
 const { listNearbyHospitals } = require('./phase6_hospital_repository');
 const { isConfigured: isWhatsAppConfigured, sendTemplateMessage, sendAppointmentConfirmation } = require('./whatsapp_service');
 const { getCorsHeaders } = require('./cors');
+const { handlePharmacyRoute } = require('./pharmacy_routes');
 const send=(res,code,data)=>{const headers={...(res.__corsHeaders||{}),'Content-Type':'application/json','Access-Control-Allow-Methods':'GET,POST,PATCH,OPTIONS','Access-Control-Allow-Headers':'Content-Type,Authorization,X-Payment-Signature'};res.writeHead(code,headers);res.end(JSON.stringify(data));};
 const parseBody=(req,done)=>{let body='';req.on('data',c=>body+=c);req.on('end',()=>{try{done(null,JSON.parse(body||'{}'));}catch(e){done(e);}});};
 const parseRawBody=(req,done)=>{let body='';req.setEncoding('utf8');req.on('data',c=>body+=c);req.on('end',()=>done(null,body));req.on('error',done);};
@@ -56,8 +57,9 @@ const server=http.createServer(async(req,res)=>{
   const isProduction = process.env.NODE_ENV === 'production';
   const bearer = (req.headers.authorization || '').match(/^Bearer\s+(.+)$/i);
   const claims = bearer ? verifyAccessToken(bearer[1]) : null;
-  const patientRoutes = ['/api/appointments','/api/prescriptions','/api/health-records','/api/lab-orders','/api/payments'];
-  if(isProduction && (patientRoutes.some(path => url.pathname === path || url.pathname.startsWith(path + '/')))) {
+  const patientRoutes = ['/api/appointments','/api/prescriptions','/api/health-records','/api/lab-orders','/api/payments','/api/pharmacy/orders'];
+  const pharmacyStaffStatusRoute = req.method === 'PATCH' && /^\/api\/pharmacy\/orders\/\d+\/status$/.test(url.pathname);
+  if(isProduction && !pharmacyStaffStatusRoute && (patientRoutes.some(path => url.pathname === path || url.pathname.startsWith(path + '/')))) {
     if(url.pathname === '/api/payments/webhook') { /* verified by payment webhook signature below */ }
     else {
       if(!claims) return send(res,401,{error:'Authentication required'});
@@ -68,7 +70,7 @@ const server=http.createServer(async(req,res)=>{
       if(/\/status$/.test(url.pathname) && req.method === 'PATCH') return send(res,403,{error:'Staff authorization required'});
     }
   }
-  if(isProduction && (url.pathname === '/api/dashboard/summary' || url.pathname === '/api/whatsapp/template')) {
+  if(isProduction && (url.pathname === '/api/dashboard/summary' || url.pathname === '/api/whatsapp/template' || /^\/api\/pharmacy\/orders\/\d+\/status$/.test(url.pathname) || url.pathname.startsWith('/api/pharmacy/admin/'))) {
     const adminClaims = bearer ? verifyAdminToken(bearer[1]) : null;
     if(!adminClaims) return send(res,401,{error:'Admin authentication required'});
     req.admin = adminClaims;
@@ -232,6 +234,7 @@ const server=http.createServer(async(req,res)=>{
     try { const saved=await updatePaymentStatus(Number(paymentStatusMatch[1]),data.status,data.providerPaymentId); if(saved)return send(res,200,saved); return send(res,503,{error:'DATABASE_URL not configured'}); }
     catch(e) { if(e.statusCode)return send(res,e.statusCode,{error:e.message}); return send(res,503,{error:'Unable to update payment status'}); }
   });
+  if(await handlePharmacyRoute(req,res,url,{send:(code,data)=>{send(res,code,data);return true;},parseBody,isProduction,auth:req.auth,admin:req.admin})) return;
   send(res,404,{error:'Not found'});
 });
 server.listen(PORT,()=>console.log(`Ayansha API running on ${PORT}`));
