@@ -9,6 +9,16 @@ const OTP_VERIFY_ATTEMPT_LIMIT = 5;
 const OTP_RATE_STORE_MAX_KEYS = 10000;
 const TOKEN_TTL_SECONDS = 24 * 60 * 60;
 
+function pruneOtpStore(now = Date.now()) {
+  for (const [phone, record] of otpStore) {
+    if (record.expiresAt <= now) otpStore.delete(phone);
+  }
+  // Bound process memory if many unique phone numbers request codes.
+  while (otpStore.size > OTP_RATE_STORE_MAX_KEYS) {
+    otpStore.delete(otpStore.keys().next().value);
+  }
+}
+
 function pruneOtpRequestStore(now = Date.now()) {
   for (const [phone, record] of otpRequestStore) {
     if (!record.timestamps.length || record.timestamps[record.timestamps.length - 1] <= now - OTP_REQUEST_WINDOW_MS) {
@@ -120,6 +130,7 @@ async function issueOtp(phone) {
   if (!/^\+?[1-9]\d{9,14}$/.test(normalizedPhone)) {
     throw new AuthError('phone must be a valid international phone number', 422);
   }
+  pruneOtpStore();
   enforceOtpRequestLimit(normalizedPhone);
   const otp = String(crypto.randomInt(100000, 1000000));
   otpStore.set(normalizedPhone, { otp, expiresAt: Date.now() + OTP_TTL_MS, attempts: 0 });
