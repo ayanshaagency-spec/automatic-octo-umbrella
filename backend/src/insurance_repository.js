@@ -185,7 +185,7 @@ async function listAdminPolicies(status = null) {
       COALESCE(json_agg(json_build_object(
         'id', d.id, 'documentType', d.document_type, 'filename', d.original_filename,
         'contentType', d.content_type, 'sizeBytes', d.expected_size_bytes,
-        'status', d.status, 'createdAt', d.created_at, 'uploadedAt', d.uploaded_at
+        'status', d.status, 'scanStatus', d.scan_status, 'createdAt', d.created_at, 'uploadedAt', d.uploaded_at
       ) ORDER BY d.created_at DESC) FILTER (WHERE d.id IS NOT NULL), '[]') AS documents
     FROM insurance_policies p
     JOIN patients pt ON pt.id = p.patient_id
