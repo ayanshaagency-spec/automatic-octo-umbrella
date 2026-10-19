@@ -38,7 +38,7 @@ For a hospital delivery order, send `deliveryHospitalId`. For home delivery, sen
 
 ## Explicit setup steps
 
-1. Review `backend/migrations/phase7_pharmacy.sql` with the database owner.
+1. Review `backend/db/migrations/008_phase7_pharmacy.sql` with the database owner.
 2. After explicit approval, apply it to the intended database using the command in the migration header. This migration is idempotent and does not seed data, but is still a database change and must be reviewed.
 3. Register hospital pharmacies and external partner stores, verify their licenses and service details, and keep them inactive until approved.
 4. Enter catalogues, prices, stock counts, prescription flags and delivery capabilities. Confirm expiry/batch/recall tracking requirements before handling real prescriptions.
