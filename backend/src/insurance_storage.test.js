@@ -23,8 +23,8 @@ test('insurance object keys are opaque and do not include patient identifiers or
 });
 
 test('temporary and final object keys use distinct private prefixes', () => {
-  assert.match(makeUploadKey(), /^insurance-uploads\\/[0-9a-f-]{36}$/i);
-  assert.match(makeObjectKey(), /^insurance-documents\\/[0-9a-f-]{36}$/i);
+  assert.match(makeUploadKey(), /^insurance-uploads\/[0-9a-f-]{36}$/i);
+  assert.match(makeObjectKey(), /^insurance-documents\/[0-9a-f-]{36}$/i);
 });
 
 test('private insurance storage fails closed when storage secrets are not configured', () => {
