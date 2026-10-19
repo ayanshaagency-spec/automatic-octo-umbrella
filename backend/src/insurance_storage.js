@@ -3,6 +3,7 @@
 const crypto = require('node:crypto');
 const { S3Client, PutObjectCommand, HeadObjectCommand, GetObjectCommand } = require('@aws-sdk/client-s3');
 const { getSignedUrl } = require('@aws-sdk/s3-request-presigner');
+const { createPresignedPost } = require('@aws-sdk/s3-presigned-post');
 
 let client;
 let clientFingerprint;
@@ -56,14 +57,19 @@ function makeObjectKey() {
   return 'insurance-documents/' + crypto.randomUUID();
 }
 
-async function createUploadUrl({ objectKey, contentType }) {
+async function createUploadForm({ objectKey, contentType }) {
   const { client, config } = getClient();
-  const command = new PutObjectCommand({
+  // The POST policy enforces a server-side request-size range, avoiding an unrestricted signed PUT.
+  return createPresignedPost(client, {
     Bucket: config.bucket,
     Key: objectKey,
-    ContentType: contentType
+    Expires: 300,
+    Fields: { 'Content-Type': contentType },
+    Conditions: [
+      ['content-length-range', 1, 10 * 1024 * 1024 + 16 * 1024],
+      ['eq', '$Content-Type', contentType]
+    ]
   });
-  return getSignedUrl(client, command, { expiresIn: 300 });
 }
 
 function detectContentType(bytes) {
@@ -108,4 +114,4 @@ async function createDownloadUrl({ objectKey, filename }) {
   return getSignedUrl(client, command, { expiresIn: 60 });
 }
 
-module.exports = { isStorageConfigured, makeObjectKey, createUploadUrl, inspectObject, createDownloadUrl, detectContentType };
+module.exports = { isStorageConfigured, makeObjectKey, createUploadForm, inspectObject, createDownloadUrl, detectContentType };
