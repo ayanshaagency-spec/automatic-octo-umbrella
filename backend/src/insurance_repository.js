@@ -64,8 +64,8 @@ async function createDocumentIntent(patientId, policyId, document, objectKey, up
     [policyId, patientId]
   );
   if (!policyResult.rowCount) throw repositoryError('Insurance policy was not found', 404);
-  if (!['draft', 'need_more_documents'].includes(policyResult.rows[0].status)) {
-    throw repositoryError('Documents can only be added while a policy is a draft or needs more documents', 409);
+  if (!['draft', 'submitted', 'need_more_documents'].includes(policyResult.rows[0].status)) {
+    throw repositoryError('Documents can only be added while a policy is a draft, submitted, or needs more documents', 409);
   }
 
   const countResult = await db.query(
