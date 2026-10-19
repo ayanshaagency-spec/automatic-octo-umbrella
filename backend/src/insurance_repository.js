@@ -57,7 +57,7 @@ async function listPatientPolicies(patientId) {
   return result.rows;
 }
 
-async function createDocumentIntent(patientId, policyId, document, objectKey) {
+async function createDocumentIntent(patientId, policyId, document, objectKey, uploadKey) {
   const db = await requireDb();
   const policyResult = await db.query(
     'SELECT id, status FROM insurance_policies WHERE id = $1 AND patient_id = $2',
@@ -78,12 +78,12 @@ async function createDocumentIntent(patientId, policyId, document, objectKey) {
 
   const result = await db.query(`
     INSERT INTO insurance_documents
-      (policy_id, patient_id, document_type, original_filename, content_type, expected_size_bytes, object_key)
-    VALUES ($1, $2, $3, $4, $5, $6, $7)
+      (policy_id, patient_id, document_type, original_filename, content_type, expected_size_bytes, object_key, upload_key)
+    VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
     RETURNING id, document_type AS "documentType", original_filename AS filename,
       content_type AS "contentType", expected_size_bytes AS "sizeBytes", status
   `, [policyId, patientId, document.documentType, document.filename,
-       document.contentType, document.sizeBytes, objectKey]);
+       document.contentType, document.sizeBytes, objectKey, uploadKey]);
   return result.rows[0];
 }
 
@@ -93,7 +93,7 @@ async function getDocumentForPatient(patientId, documentId) {
     SELECT d.id, d.policy_id AS "policyId", d.patient_id AS "patientId",
       d.document_type AS "documentType", d.original_filename AS filename,
       d.content_type AS "contentType", d.expected_size_bytes AS "sizeBytes",
-      d.object_key AS "objectKey", d.status, p.status AS "policyStatus"
+      d.object_key AS "objectKey", d.upload_key AS "uploadKey", d.status, p.status AS "policyStatus"
     FROM insurance_documents d
     JOIN insurance_policies p ON p.id = d.policy_id
     WHERE d.id = $1 AND d.patient_id = $2
@@ -119,7 +119,7 @@ async function markDocumentSubmitted(patientId, documentId) {
   if (current.status === 'submitted') return current;
 
   const result = await db.query(`
-    UPDATE insurance_documents SET status = 'submitted', uploaded_at = NOW()
+    UPDATE insurance_documents SET status = 'submitted', uploaded_at = NOW(), upload_key = NULL
     WHERE id = $1 AND patient_id = $2 AND status = 'upload_pending'
     RETURNING id, policy_id AS "policyId", patient_id AS "patientId",
       document_type AS "documentType", original_filename AS filename,
