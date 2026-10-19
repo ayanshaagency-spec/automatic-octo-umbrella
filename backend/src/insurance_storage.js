@@ -108,4 +108,4 @@ async function createDownloadUrl({ objectKey, filename }) {
   return getSignedUrl(client, command, { expiresIn: 60 });
 }
 
-module.exports = { isStorageConfigured, makeObjectKey, createUploadUrl, inspectObject, createDownloadUrl };
+module.exports = { isStorageConfigured, makeObjectKey, createUploadUrl, inspectObject, createDownloadUrl, detectContentType };
