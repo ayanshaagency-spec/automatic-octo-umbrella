@@ -11,6 +11,7 @@ const {
 } = require('./insurance_validation');
 const repository = require('./insurance_repository');
 const storage = require('./insurance_storage');
+const scanner = require('./insurance_scanner');
 
 function readBearerToken(req) {
   const header = String(req.headers.authorization || '');
@@ -92,8 +93,8 @@ async function handleInsuranceRoute(req, res, url, context) {
     if (patientCollection && req.method === 'POST') {
       const patient = getPatient(req);
       if (!patient) { send(401, { error: 'Patient authentication required' }); return true; }
-      if (!storage.isStorageConfigured()) {
-        send(503, { error: 'Private insurance document storage is not configured yet' });
+      if (!storage.isStorageConfigured() || !scanner.isScannerConfigured()) {
+        send(503, { error: 'Private document storage and malware scanning must be configured before insurance submission is enabled' });
         return true;
       }
       const parsed = await parseBody(req);
@@ -109,8 +110,8 @@ async function handleInsuranceRoute(req, res, url, context) {
     if (patientCreateDocument && req.method === 'POST') {
       const patient = getPatient(req);
       if (!patient) { send(401, { error: 'Patient authentication required' }); return true; }
-      if (!storage.isStorageConfigured()) {
-        send(503, { error: 'Private insurance document storage is not configured yet' });
+      if (!storage.isStorageConfigured() || !scanner.isScannerConfigured()) {
+        send(503, { error: 'Private document storage and malware scanning must be configured before insurance submission is enabled' });
         return true;
       }
       const parsed = await parseBody(req);
@@ -139,8 +140,8 @@ async function handleInsuranceRoute(req, res, url, context) {
     if (patientCompleteDocument && req.method === 'POST') {
       const patient = getPatient(req);
       if (!patient) { send(401, { error: 'Patient authentication required' }); return true; }
-      if (!storage.isStorageConfigured()) {
-        send(503, { error: 'Private insurance document storage is not configured yet' });
+      if (!storage.isStorageConfigured() || !scanner.isScannerConfigured()) {
+        send(503, { error: 'Private document storage and malware scanning must be configured before insurance submission is enabled' });
         return true;
       }
       const patientId = await repository.findPatientId(patient.phone);
@@ -160,6 +161,38 @@ async function handleInsuranceRoute(req, res, url, context) {
         send(422, { error: 'Uploaded file size or type did not match the upload request' });
         return true;
       }
+
+      // Scan before a file reaches the submitted/final prefix. Scanner errors fail closed and are quarantined too.
+      let scanResult;
+      try {
+        const objectStream = await storage.openObjectStream({ objectKey: document.uploadKey });
+        scanResult = await scanner.scanStream(objectStream, { maxBytes: MAX_DOCUMENT_BYTES });
+      } catch (_) {
+        const quarantineKey = storage.makeQuarantineKey();
+        try {
+          await storage.promoteUpload({ uploadKey: document.uploadKey, objectKey: quarantineKey });
+          await repository.markDocumentQuarantined(patientId, documentId, quarantineKey, 'error');
+          await storage.deleteObject({ objectKey: document.uploadKey }).catch(() => {});
+        } catch (_) {
+          // Object remains in the private temporary prefix and must never be submitted or downloaded.
+        }
+        send(503, { error: 'The security scan could not be completed. The document was not accepted; please retry with a new upload later.' });
+        return true;
+      }
+
+      if (scanResult.status !== 'clean') {
+        const quarantineKey = storage.makeQuarantineKey();
+        try {
+          await storage.promoteUpload({ uploadKey: document.uploadKey, objectKey: quarantineKey });
+          await repository.markDocumentQuarantined(patientId, documentId, quarantineKey, 'infected');
+          await storage.deleteObject({ objectKey: document.uploadKey }).catch(() => {});
+        } catch (_) {
+          // Never promote into the submitted prefix when malware is detected.
+        }
+        send(422, { error: 'This file did not pass the security scan and was not accepted. Please choose another file.' });
+        return true;
+      }
+
       await storage.promoteUpload({ uploadKey: document.uploadKey, objectKey: document.objectKey });
       let saved;
       try {
@@ -189,7 +222,7 @@ async function handleInsuranceRoute(req, res, url, context) {
       } else {
         document = await repository.getDocumentForAdmin(Number(documentDownload[1]));
       }
-      if (!document || document.status !== 'submitted') {
+      if (!document || document.status !== 'submitted' || document.scanStatus !== 'clean') {
         send(404, { error: 'Insurance document was not found' });
         return true;
       }
