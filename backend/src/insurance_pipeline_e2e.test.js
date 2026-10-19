@@ -33,6 +33,36 @@ async function createUpload(intent, bytes, contentType, filename) {
   return fetch(intent.uploadUrl, { method: 'POST', body: data });
 }
 
+function makeEmbeddedEicarPdf() {
+  // Uncompressed EmbeddedFile stream lets ClamAV scan the harmless EICAR test signature.
+  const eicar = Buffer.from('X5O!P%@AP[4\\\\PZX54(P^)7CC)7}$EICAR-STANDARD-ANTIVIRUS-TEST-FILE!$H+H*', 'ascii');
+  const objects = [
+    Buffer.from('1 0 obj\\n<< /Type /Catalog /Pages 2 0 R /Names << /EmbeddedFiles 6 0 R >> >>\\nendobj\\n'),
+    Buffer.from('2 0 obj\\n<< /Type /Pages /Kids [3 0 R] /Count 1 >>\\nendobj\\n'),
+    Buffer.from('3 0 obj\\n<< /Type /Page /Parent 2 0 R /MediaBox [0 0 200 200] /Resources << >> >>\\nendobj\\n'),
+    Buffer.from('4 0 obj\\n<< /Type /Filespec /F (eicar.txt) /EF << /F 5 0 R >> >>\\nendobj\\n'),
+    Buffer.concat([
+      Buffer.from('5 0 obj\\n<< /Type /EmbeddedFile /Length ' + eicar.length + ' >>\\nstream\\n', 'ascii'),
+      eicar,
+      Buffer.from('\\nendstream\\nendobj\\n', 'ascii')
+    ]),
+    Buffer.from('6 0 obj\\n<< /Names [(eicar.txt) 4 0 R] >>\\nendobj\\n')
+  ];
+  const parts = [Buffer.from('%PDF-1.4\\n', 'ascii')];
+  const offsets = [0];
+  for (const object of objects) {
+    offsets.push(Buffer.concat(parts).length);
+    parts.push(object);
+  }
+  const xrefOffset = Buffer.concat(parts).length;
+  parts.push(Buffer.from('xref\\n0 7\\n0000000000 65535 f \\n', 'ascii'));
+  for (const offset of offsets.slice(1)) {
+    parts.push(Buffer.from(String(offset).padStart(10, '0') + ' 00000 n \\n', 'ascii'));
+  }
+  parts.push(Buffer.from('trailer\\n<< /Size 7 /Root 1 0 R >>\\nstartxref\\n' + xrefOffset + '\\n%%EOF\\n', 'ascii'));
+  return Buffer.concat(parts);
+}
+
 test('insurance private upload + real ClamAV scan + quarantine end-to-end', { skip: !enabled }, async t => {
   assert.ok(process.env.DATABASE_URL, 'isolated PostgreSQL DATABASE_URL is required');
   assert.ok(process.env.INSURANCE_CLAMAV_HOST, 'private ClamAV endpoint is required');
@@ -143,9 +173,7 @@ test('insurance private upload + real ClamAV scan + quarantine end-to-end', { sk
   assert.deepEqual(Buffer.from(await downloaded.arrayBuffer()), cleanPdf);
 
   // EICAR is a harmless industry-standard antivirus test signature, not live malware.
-  const eicar = Buffer.from('X5O!P%@AP[4\\PZX54(P^)7CC)7}$EICAR-STANDARD-ANTIVIRUS-TEST-FILE!$H+H*', 'ascii');
-  // Embed the test signature in a PDF-like file so scanners don't skip it as an unsupported JPEG payload.
-  const infectedPdf = Buffer.concat([Buffer.from('%PDF-1.4\\n%'), eicar, Buffer.from('\\n%%EOF\\n')]);
+  const infectedPdf = makeEmbeddedEicarPdf();
   const infectedIntent = await request('/api/insurance/policies/' + policyId + '/documents', {
     method: 'POST',
     headers: patientHeaders,
