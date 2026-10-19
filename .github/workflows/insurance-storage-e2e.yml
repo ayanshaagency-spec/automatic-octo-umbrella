@@ -115,7 +115,37 @@ jobs:
         run: |
           set -euo pipefail
           docker exec insurance-clamav sh -c 'cp /tmp/insurance-ci-test.ndb /var/lib/clamav/ayansha-ci-test.ndb && chown clamav:clamav /var/lib/clamav/ayansha-ci-test.ndb'
-          docker exec insurance-clamav clamdscan --reload
+          node <<'NODE'
+          const net = require('node:net');
+          function sendReload() {
+            return new Promise((resolve, reject) => {
+              const socket = net.createConnection({ host: '127.0.0.1', port: 3310 });
+              let response = '';
+              const timeout = setTimeout(() => {
+                socket.destroy();
+                reject(new Error('ClamAV reload command timed out'));
+              }, 10000);
+              socket.on('connect', () => socket.write(Buffer.from('zRELOAD\\0', 'ascii')));
+              socket.on('data', chunk => {
+                response += chunk.toString('utf8').replace(/\\0/g, '').trim();
+                if (response) {
+                  clearTimeout(timeout);
+                  socket.end();
+                  resolve(response);
+                }
+              });
+              socket.on('error', error => {
+                clearTimeout(timeout);
+                reject(error);
+              });
+            });
+          }
+          (async () => {
+            const response = await sendReload();
+            if (!/RELOAD/i.test(response)) throw new Error('Unexpected ClamAV reload response: ' + response.slice(0, 120));
+            console.log('ClamAV reload accepted the updated signature database.');
+          })().catch(error => { console.error(error.message); process.exit(1); });
+          NODE
           node <<'NODE'
           const { Readable } = require('node:stream');
           const { scanStream } = require('./src/insurance_scanner');
