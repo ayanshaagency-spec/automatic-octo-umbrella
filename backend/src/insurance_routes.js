@@ -155,7 +155,7 @@ async function handleInsuranceRoute(req, res, url, context) {
         return true;
       }
       if (stored.sizeBytes !== Number(document.sizeBytes) || stored.sizeBytes < 1 ||
-          stored.sizeBytes > MAX_DOCUMENT_BYTES || stored.contentType !== document.contentType) {
+          stored.sizeBytes > MAX_DOCUMENT_BYTES || stored.contentType !== document.contentType || stored.detectedContentType !== document.contentType) {
         send(422, { error: 'Uploaded file size or type did not match the upload request' });
         return true;
       }
