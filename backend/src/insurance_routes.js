@@ -148,7 +148,11 @@ async function handleInsuranceRoute(req, res, url, context) {
       const documentId = Number(patientCompleteDocument[1]);
       const document = await repository.getDocumentForPatient(patientId, documentId);
       if (!document) { send(404, { error: 'Insurance document was not found' }); return true; }
-      if (document.status === 'submitted') { send(200, { id: document.id, status: document.status }); return true; }
+      if (document.status === 'submitted' && document.scanStatus === 'clean') { send(200, { id: document.id, status: document.status }); return true; }
+      if (document.status === 'quarantined' || ['infected', 'error'].includes(document.scanStatus)) {
+        send(422, { error: 'This document was quarantined. Please create a new upload with another file.' });
+        return true;
+      }
       let stored;
       try {
         stored = await storage.inspectObject({ objectKey: document.uploadKey });
