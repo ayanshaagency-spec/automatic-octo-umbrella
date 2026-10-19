@@ -64,20 +64,18 @@ jobs:
       - run: npm install
       - run: psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f db/schema.sql
       - run: npm run db:migrate
-      - name: Start disposable private S3-compatible storage
+      - name: Start disposable S3 API simulator (test-only)
         shell: bash
         run: |
           set -euo pipefail
-          docker run -d --name insurance-minio \
-            -p 127.0.0.1:9000:9000 \
-            -e MINIO_ROOT_USER=insurance-ci-access \
-            -e MINIO_ROOT_PASSWORD=insurance-ci-secret-test-only \
-            minio/minio:latest server /data --console-address ":9001"
+          docker run -d --name insurance-s3mock \
+            -p 127.0.0.1:9090:9090 \
+            adobe/s3mock:latest
           for attempt in $(seq 1 90); do
-            if curl --fail --silent http://127.0.0.1:9000/minio/health/ready >/dev/null; then exit 0; fi
+            if curl --silent --output /dev/null http://127.0.0.1:9090; then exit 0; fi
             sleep 1
           done
-          docker logs insurance-minio
+          docker logs insurance-s3mock
           exit 1
       - name: Start private ClamAV malware scanner
         shell: bash
