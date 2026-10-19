@@ -104,7 +104,9 @@ async function sendOtp(phone, otp) {
   const providerUrl = (process.env.OTP_PROVIDER_URL || '').trim();
   const accessToken = (process.env.OTP_PROVIDER_TOKEN || '').trim();
   if (!providerUrl || !accessToken) {
-    if (process.env.NODE_ENV === 'production') {
+    // Never disclose OTPs in staging, preview, or production environments.
+    // Development OTP disclosure is limited to local development and automated tests.
+    if (process.env.NODE_ENV !== 'development' && process.env.NODE_ENV !== 'test') {
       throw new AuthError('OTP provider is not configured');
     }
     return { delivery: 'development', devOtp: otp };
