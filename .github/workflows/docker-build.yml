@@ -16,7 +16,7 @@ jobs:
       - name: Check Admin page JavaScript syntax
         shell: bash
         run: |
-          sed -n '/<script>/,/<\\/script>/p' admin-panel/index.html | sed '1d;$d' > /tmp/admin-inline.js
+          node -e "const fs=require('fs');const s=fs.readFileSync('admin-panel/index.html','utf8');const a=s.indexOf('<script>')+8;const b=s.indexOf('</script>',a);if(a<8||b<a)process.exit(1);fs.writeFileSync('/tmp/admin-inline.js',s.slice(a,b))"
           node --check /tmp/admin-inline.js
       - name: Build backend image
         run: docker build -t ayansha-health-care-backend:ci .
