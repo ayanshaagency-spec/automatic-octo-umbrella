@@ -110,7 +110,17 @@ async function sendOtp(phone, otp) {
     return { delivery: 'development', devOtp: otp };
   }
 
-  const response = await fetch(providerUrl, {
+  let parsedProviderUrl;
+  try {
+    parsedProviderUrl = new URL(providerUrl);
+  } catch {
+    throw new AuthError('OTP provider URL must be a valid HTTPS URL', 503);
+  }
+  if (parsedProviderUrl.protocol !== 'https:' || parsedProviderUrl.username || parsedProviderUrl.password) {
+    throw new AuthError('OTP provider URL must use HTTPS and must not contain embedded credentials', 503);
+  }
+
+  const response = await fetch(parsedProviderUrl, {
     method: 'POST',
     headers: {
       Authorization: `Bearer ${accessToken}`,
@@ -119,7 +129,8 @@ async function sendOtp(phone, otp) {
     body: JSON.stringify({
       to: String(phone),
       message: `Your Ayansha Health Care verification code is ${otp}. It expires in 5 minutes.`
-    })
+    }),
+    signal: AbortSignal.timeout(8000)
   });
   if (!response.ok) throw new AuthError('OTP provider rejected the request', 502);
   return { delivery: 'provider_accepted' };
