@@ -40,6 +40,9 @@ async function scanStream(readable, options = {}) {
     responseResolve = resolve;
     responseReject = reject;
   });
+  // Socket errors may arrive while upload chunks are still being written. Mark this
+  // promise handled immediately so the caller can retry the write failure cleanly.
+  responsePromise.catch(() => {});
 
   const socketError = error => responseReject(error);
   socket.on('error', socketError);
@@ -64,7 +67,7 @@ async function scanStream(readable, options = {}) {
       socket.once('connect', resolve);
       socket.once('error', reject);
     });
-    await writeChunk(socket, Buffer.from('INSTREAM\0', 'ascii'));
+    await writeChunk(socket, Buffer.from('zINSTREAM\0', 'ascii'));
     let total = 0;
     for await (const value of readable) {
       const chunk = Buffer.isBuffer(value) ? value : Buffer.from(value);
