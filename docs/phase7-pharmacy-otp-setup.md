@@ -8,7 +8,8 @@ The backend already reads these environment variables:
 
 - \`OTP_PROVIDER_URL\`: absolute HTTPS URL for a provider endpoint that accepts the request contract below.
 - \`OTP_PROVIDER_TOKEN\`: provider API token, supplied only through the deployment platform's secret-variable store.
-- \`NODE_ENV=production\`: disables development OTP disclosure. With missing provider URL/token, OTP requests fail closed.
+- \`NODE_ENV=development\` (or \`test\` for automated tests): permits development OTP disclosure when provider credentials are absent. Do not use these modes for a public deployment.
+- All other environments, including \`staging\` and \`production\`, fail closed when provider URL/token are missing; they never return the OTP in the API response.
 
 The current adapter sends an HTTPS \`POST\` request with:
 
