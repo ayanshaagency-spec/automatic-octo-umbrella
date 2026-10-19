@@ -66,12 +66,33 @@ async function createUploadUrl({ objectKey, contentType }) {
   return getSignedUrl(client, command, { expiresIn: 300 });
 }
 
+function detectContentType(bytes) {
+  if (bytes.length >= 5 && bytes.toString('ascii', 0, 5) === '%PDF-') return 'application/pdf';
+  if (bytes.length >= 8 && bytes.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])) return 'image/png';
+  if (bytes.length >= 3 && bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff) return 'image/jpeg';
+  return null;
+}
+
 async function inspectObject({ objectKey }) {
   const { client, config } = getClient();
   const result = await client.send(new HeadObjectCommand({ Bucket: config.bucket, Key: objectKey }));
+  const contentType = String(result.ContentType || '').toLowerCase().trim();
+  const range = await client.send(new GetObjectCommand({
+    Bucket: config.bucket,
+    Key: objectKey,
+    Range: 'bytes=0-15'
+  }));
+  let signatureType = null;
+  try {
+    const prefix = await range.Body.transformToByteArray();
+    signatureType = detectContentType(Buffer.from(prefix));
+  } finally {
+    if (range.Body && typeof range.Body.destroy === 'function') range.Body.destroy();
+  }
   return {
     sizeBytes: Number(result.ContentLength),
-    contentType: String(result.ContentType || '').toLowerCase().trim()
+    contentType,
+    detectedContentType: signatureType
   };
 }
 
