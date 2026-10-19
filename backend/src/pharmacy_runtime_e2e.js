@@ -48,7 +48,7 @@ async function main() {
     // depending on live data or seeding any non-test pharmacies/products.
     await pool.query([
       'CREATE TABLE IF NOT EXISTS hospitals (',
-      '  id BIGSERIAL PRIMARY KEY, name TEXT NOT NULL, address TEXT NOT NULL,',
+      '  id SERIAL PRIMARY KEY, name TEXT NOT NULL, address TEXT NOT NULL,',
       '  city TEXT NOT NULL, state TEXT NOT NULL, active BOOLEAN NOT NULL DEFAULT TRUE',
       ');',
       'CREATE TABLE IF NOT EXISTS patients (',
