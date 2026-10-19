@@ -175,7 +175,8 @@
   async function downloadDocument(documentId) {
     let tab = null;
     try {
-      tab = window.open('about:blank', '_blank', 'noopener,noreferrer');
+      tab = window.open('about:blank', '_blank');
+      if (tab) tab.opener = null;
       const result = await api('/api/insurance/documents/' + documentId + '/download');
       if (tab) tab.location.href = result.downloadUrl;
       else showMessage('insuranceDocumentMessage', 'Your browser blocked the download window. Allow pop-ups and try again.');
