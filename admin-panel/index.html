@@ -190,7 +190,7 @@ $('productsList').addEventListener('click',async event=>{
  try{
   let body;
   if(save){
-   const price=$('[data-price="'+id+'"]').value,stock=$('[data-stock="'+id+'"]').value,rx=$('[data-prescription="'+id+'"]').value;
+   const price=document.querySelector('[data-price="'+id+'"]').value,stock=document.querySelector('[data-stock="'+id+'"]').value,rx=document.querySelector('[data-prescription="'+id+'"]').value;
    if(price===''||stock==='')throw new Error('Price and stock are required.');
    body={price:Number(price),stockQuantity:Number(stock),requiresPrescription:rx==='true'};
   }else{
@@ -217,7 +217,7 @@ async function loadOrders(){
 }
 $('ordersList').addEventListener('click',async event=>{
  const button=event.target.closest('[data-order-save]');if(!button)return;
- const id=Number(button.dataset.orderSave),status=$('[data-order-next="'+id+'"]').value;
+ const id=Number(button.dataset.orderSave),status=document.querySelector('[data-order-next="'+id+'"]').value;
  if(!status)return;
  button.disabled=true;
  try{await api('/api/pharmacy/orders/'+id+'/status',{method:'PATCH',body:JSON.stringify({status})});await loadOrders();}
