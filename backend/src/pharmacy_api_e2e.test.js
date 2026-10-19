@@ -93,6 +93,17 @@ test('Phase 7 pharmacy API smoke and fail-closed contract', async t => {
   });
   assert.equal(unauthenticatedOrderCreate.status, 401, 'order creation must reject anonymous access');
 
+  const otherPatientHistory = await fetch(`${BASE_URL}/api/pharmacy/orders?phone=9999999999`, {
+    headers: patientHeaders
+  });
+  assert.equal(otherPatientHistory.status, 403, 'a patient must not read another phone number’s order history');
+  const spoofedPatientOrder = await fetch(`${BASE_URL}/api/pharmacy/orders`, {
+    method: 'POST',
+    headers: { ...patientHeaders, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ phone: '9999999999', storeId: 1, deliveryMethod: 'home', items: [] })
+  });
+  assert.equal(spoofedPatientOrder.status, 403, 'a patient must not create orders under another phone number');
+
   const options = await fetch(`${BASE_URL}/api/pharmacy/orders`, { method: 'OPTIONS' });
   assert.equal(options.status, 204);
 
