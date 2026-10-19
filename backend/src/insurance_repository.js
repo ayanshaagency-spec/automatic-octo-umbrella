@@ -45,7 +45,7 @@ async function listPatientPolicies(patientId) {
       COALESCE(json_agg(json_build_object(
         'id', d.id, 'documentType', d.document_type, 'filename', d.original_filename,
         'contentType', d.content_type, 'sizeBytes', d.expected_size_bytes,
-        'status', d.status, 'createdAt', d.created_at, 'uploadedAt', d.uploaded_at
+        'status', d.status, 'scanStatus', d.scan_status, 'createdAt', d.created_at, 'uploadedAt', d.uploaded_at
       ) ORDER BY d.created_at DESC) FILTER (WHERE d.id IS NOT NULL), '[]') AS documents
     FROM insurance_policies p
     LEFT JOIN insurance_documents d ON d.policy_id = p.id
@@ -93,7 +93,7 @@ async function getDocumentForPatient(patientId, documentId) {
     SELECT d.id, d.policy_id AS "policyId", d.patient_id AS "patientId",
       d.document_type AS "documentType", d.original_filename AS filename,
       d.content_type AS "contentType", d.expected_size_bytes AS "sizeBytes",
-      d.object_key AS "objectKey", d.upload_key AS "uploadKey", d.status, p.status AS "policyStatus"
+      d.object_key AS "objectKey", d.upload_key AS "uploadKey", d.status, d.scan_status AS "scanStatus", p.status AS "policyStatus"
     FROM insurance_documents d
     JOIN insurance_policies p ON p.id = d.policy_id
     WHERE d.id = $1 AND d.patient_id = $2
@@ -119,7 +119,7 @@ async function markDocumentSubmitted(patientId, documentId) {
   if (current.status === 'submitted') return current;
 
   const result = await db.query(`
-    UPDATE insurance_documents SET status = 'submitted', uploaded_at = NOW(), upload_key = NULL
+    UPDATE insurance_documents SET status = 'submitted', uploaded_at = NOW(), upload_key = NULL, scan_status = 'clean'
     WHERE id = $1 AND patient_id = $2 AND status = 'upload_pending'
     RETURNING id, policy_id AS "policyId", patient_id AS "patientId",
       document_type AS "documentType", original_filename AS filename,
@@ -132,6 +132,35 @@ async function markDocumentSubmitted(patientId, documentId) {
     UPDATE insurance_policies SET status = 'submitted', review_note = NULL,
       reviewed_by = NULL, updated_at = NOW()
     WHERE id = $1 AND patient_id = $2 AND status IN ('draft', 'need_more_documents')
+  `, [current.policyId, patientId]);
+  return result.rows[0];
+}
+
+async function markDocumentQuarantined(patientId, documentId, quarantineKey, scanStatus) {
+  if (!['infected', 'error'].includes(scanStatus)) throw repositoryError('Invalid malware scan result', 500);
+  const db = await requireDb();
+  const current = await getDocumentForPatient(patientId, documentId);
+  if (!current) throw repositoryError('Insurance document was not found', 404);
+  if (current.status !== 'upload_pending') {
+    throw repositoryError('Insurance document state changed; refresh and try again', 409);
+  }
+
+  const result = await db.query(`
+    UPDATE insurance_documents
+       SET status = 'quarantined', scan_status = $1, object_key = $2,
+           upload_key = NULL, uploaded_at = NOW()
+     WHERE id = $3 AND patient_id = $4 AND status = 'upload_pending'
+     RETURNING id, policy_id AS "policyId", patient_id AS "patientId",
+       status, scan_status AS "scanStatus"
+  `, [scanStatus, quarantineKey, documentId, patientId]);
+  if (!result.rowCount) throw repositoryError('Insurance document state changed; refresh and try again', 409);
+
+  await db.query(`
+    UPDATE insurance_policies
+       SET status = 'need_more_documents',
+           review_note = 'A document could not be accepted by the security scan. Please upload another file.',
+           updated_at = NOW()
+     WHERE id = $1 AND patient_id = $2 AND status <> 'rejected'
   `, [current.policyId, patientId]);
   return result.rows[0];
 }
@@ -198,6 +227,7 @@ module.exports = {
   getDocumentForPatient,
   getDocumentForAdmin,
   markDocumentSubmitted,
+  markDocumentQuarantined,
   listAdminPolicies,
   reviewPolicy
 };
