@@ -225,4 +225,59 @@ test('insurance private upload + real ClamAV scan + quarantine end-to-end', { sk
   const reviewedRow = adminQueue.body.find(p => Number(p.id) === policyId);
   assert.ok(reviewedRow, 'Admin queue should show the policy requiring another document');
   assert.ok(reviewedRow.documents.some(d => d.status === 'quarantined' && d.scanStatus === 'infected'));
+  assert.ok(reviewedRow.documents.some(d => d.status === 'submitted' && d.scanStatus === 'clean'));
+
+  const adminCleanDownload = await request(
+    '/api/insurance/documents/' + intent.body.document.id + '/download',
+    { headers: adminHeaders }
+  );
+  assert.equal(adminCleanDownload.status, 200, JSON.stringify(adminCleanDownload.body));
+  const adminDownloaded = await fetch(adminCleanDownload.body.downloadUrl);
+  assert.equal(adminDownloaded.status, 200);
+  assert.deepEqual(Buffer.from(await adminDownloaded.arrayBuffer()), cleanPdf);
+
+  // A policy with no clean, submitted document cannot be verified by staff.
+  const emptyPolicy = await request('/api/insurance/policies', {
+    method: 'POST',
+    headers: patientHeaders,
+    body: {
+      insurerName: 'Synthetic No-Document Insurance',
+      policyType: 'individual',
+      policyNumber: 'E2E-EMPTY-123456'
+    }
+  });
+  assert.equal(emptyPolicy.status, 201, JSON.stringify(emptyPolicy.body));
+  const emptySubmit = await request('/api/admin/insurance/policies/' + emptyPolicy.body.id + '/status', {
+    method: 'PATCH',
+    headers: adminHeaders,
+    body: { status: 'submitted' }
+  });
+  assert.equal(emptySubmit.status, 200, JSON.stringify(emptySubmit.body));
+  const emptyReview = await request('/api/admin/insurance/policies/' + emptyPolicy.body.id + '/status', {
+    method: 'PATCH',
+    headers: adminHeaders,
+    body: { status: 'under_review' }
+  });
+  assert.equal(emptyReview.status, 200, JSON.stringify(emptyReview.body));
+  const emptyVerify = await request('/api/admin/insurance/policies/' + emptyPolicy.body.id + '/status', {
+    method: 'PATCH',
+    headers: adminHeaders,
+    body: { status: 'verified' }
+  });
+  assert.equal(emptyVerify.status, 422, JSON.stringify(emptyVerify.body));
+  assert.match(emptyVerify.body.error, /clean submitted document is required/i);
+
+  const markUnderReview = await request('/api/admin/insurance/policies/' + policyId + '/status', {
+    method: 'PATCH',
+    headers: adminHeaders,
+    body: { status: 'under_review' }
+  });
+  assert.equal(markUnderReview.status, 200, JSON.stringify(markUnderReview.body));
+  const verifyCleanPolicy = await request('/api/admin/insurance/policies/' + policyId + '/status', {
+    method: 'PATCH',
+    headers: adminHeaders,
+    body: { status: 'verified' }
+  });
+  assert.equal(verifyCleanPolicy.status, 200, JSON.stringify(verifyCleanPolicy.body));
+  assert.equal(verifyCleanPolicy.body.status, 'verified');
 });
