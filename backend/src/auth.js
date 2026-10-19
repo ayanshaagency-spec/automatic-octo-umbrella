@@ -1,8 +1,36 @@
 const crypto = require('crypto');
 
 const otpStore = new Map();
+const otpRequestStore = new Map();
 const OTP_TTL_MS = 5 * 60 * 1000;
+const OTP_REQUEST_WINDOW_MS = 15 * 60 * 1000;
+const OTP_REQUEST_LIMIT = 3;
+const OTP_VERIFY_ATTEMPT_LIMIT = 5;
+const OTP_RATE_STORE_MAX_KEYS = 10000;
 const TOKEN_TTL_SECONDS = 24 * 60 * 60;
+
+function pruneOtpRequestStore(now = Date.now()) {
+  for (const [phone, record] of otpRequestStore) {
+    if (!record.timestamps.length || record.timestamps[record.timestamps.length - 1] <= now - OTP_REQUEST_WINDOW_MS) {
+      otpRequestStore.delete(phone);
+    }
+  }
+  // Bound process memory if an attacker sends many different phone numbers.
+  while (otpRequestStore.size > OTP_RATE_STORE_MAX_KEYS) {
+    otpRequestStore.delete(otpRequestStore.keys().next().value);
+  }
+}
+
+function enforceOtpRequestLimit(phone, now = Date.now()) {
+  pruneOtpRequestStore(now);
+  const record = otpRequestStore.get(phone) || { timestamps: [] };
+  record.timestamps = record.timestamps.filter(timestamp => timestamp > now - OTP_REQUEST_WINDOW_MS);
+  if (record.timestamps.length >= OTP_REQUEST_LIMIT) {
+    throw new AuthError('Too many OTP requests. Please try again later.', 429);
+  }
+  record.timestamps.push(now);
+  otpRequestStore.set(phone, record);
+}
 
 class AuthError extends Error {
   constructor(message, statusCode = 503) {
@@ -92,8 +120,9 @@ async function issueOtp(phone) {
   if (!/^\+?[1-9]\d{9,14}$/.test(normalizedPhone)) {
     throw new AuthError('phone must be a valid international phone number', 422);
   }
+  enforceOtpRequestLimit(normalizedPhone);
   const otp = String(crypto.randomInt(100000, 1000000));
-  otpStore.set(normalizedPhone, { otp, expiresAt: Date.now() + OTP_TTL_MS });
+  otpStore.set(normalizedPhone, { otp, expiresAt: Date.now() + OTP_TTL_MS, attempts: 0 });
   try {
     const delivery = await sendOtp(normalizedPhone, otp);
     return { ...delivery, expiresInSeconds: OTP_TTL_MS / 1000 };
@@ -106,7 +135,16 @@ async function issueOtp(phone) {
 function verifyOtp(phone, otp) {
   const normalizedPhone = String(phone).trim();
   const record = otpStore.get(normalizedPhone);
-  if (!record || record.expiresAt < Date.now() || record.otp !== String(otp).trim()) return false;
+  if (!record) return false;
+  if (record.expiresAt < Date.now()) {
+    otpStore.delete(normalizedPhone);
+    return false;
+  }
+  if (record.otp !== String(otp).trim()) {
+    record.attempts = (record.attempts || 0) + 1;
+    if (record.attempts >= OTP_VERIFY_ATTEMPT_LIMIT) otpStore.delete(normalizedPhone);
+    return false;
+  }
   otpStore.delete(normalizedPhone);
   return true;
 }
