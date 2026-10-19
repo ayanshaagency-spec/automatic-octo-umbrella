@@ -123,8 +123,8 @@ jobs:
               let response = '';
               const timeout = setTimeout(() => {
                 socket.destroy();
-                reject(new Error('ClamAV reload command timed out'));
-              }, 10000);
+                reject(new Error('ClamAV reload command timed out after 120 seconds'));
+              }, 120000);
               socket.on('connect', () => socket.write(Buffer.from('zRELOAD\\0', 'ascii')));
               socket.on('data', chunk => {
                 response += chunk.toString('utf8').replace(/\\0/g, '').trim();
