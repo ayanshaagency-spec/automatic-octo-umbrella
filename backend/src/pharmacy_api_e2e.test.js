@@ -5,12 +5,58 @@ const { spawn } = require('node:child_process');
 const PORT = 3919;
 const BASE_URL = `http://127.0.0.1:${PORT}`;
 
+const ADMIN_EMAIL = 'pharmacy-ci-admin@example.test';
+const ADMIN_PASSWORD = 'ci-only-pharmacy-admin-password';
+const JWT_SECRET = 'pharmacy-ci-jwt-secret-long-enough-for-hs256';
+
 function startServer() {
   return spawn(process.execPath, ['src/server.js'], {
     cwd: __dirname + '/..',
-    env: { ...process.env, PORT: String(PORT), DATABASE_URL: '' },
+    env: {
+      ...process.env,
+      PORT: String(PORT),
+      NODE_ENV: 'test',
+      DATABASE_URL: '',
+      ADMIN_EMAIL,
+      ADMIN_PASSWORD,
+      JWT_SECRET,
+      OTP_PROVIDER_URL: '',
+      OTP_PROVIDER_TOKEN: ''
+    },
     stdio: ['ignore', 'pipe', 'pipe']
   });
+}
+
+async function getAdminHeaders(baseUrl = BASE_URL) {
+  const response = await fetch(`${baseUrl}/api/admin/login`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email: ADMIN_EMAIL, password: ADMIN_PASSWORD })
+  });
+  assert.equal(response.status, 200, 'CI-only admin login should succeed');
+  const { token } = await response.json();
+  assert.ok(token, 'admin login should return a role token');
+  return { Authorization: `Bearer ${token}` };
+}
+
+async function getPatientHeaders(baseUrl = BASE_URL, phone = '+919876543210') {
+  const requestOtp = await fetch(`${baseUrl}/api/auth/request-otp`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ phone })
+  });
+  assert.equal(requestOtp.status, 200, 'test OTP request should succeed');
+  const { devOtp } = await requestOtp.json();
+  assert.ok(devOtp, 'non-production test mode should return the test OTP');
+  const verifyOtp = await fetch(`${baseUrl}/api/auth/verify-otp`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ phone, otp: devOtp, name: 'Pharmacy API Test Patient' })
+  });
+  assert.equal(verifyOtp.status, 200, 'test OTP verification should create a patient session');
+  const { token } = await verifyOtp.json();
+  assert.ok(token, 'patient sign-in should return a session token');
+  return { Authorization: `Bearer ${token}` };
 }
 
 async function waitForHealth(child) {
@@ -33,6 +79,20 @@ test('Phase 7 pharmacy API smoke and fail-closed contract', async t => {
   t.after(() => server.kill());
   await waitForHealth(server);
 
+  const adminHeaders = await getAdminHeaders();
+  const patientHeaders = await getPatientHeaders();
+
+  const unauthenticatedAdmin = await fetch(`${BASE_URL}/api/pharmacy/admin/stores`);
+  assert.equal(unauthenticatedAdmin.status, 401, 'admin pharmacy API must reject anonymous access');
+  const unauthenticatedPatientOrders = await fetch(`${BASE_URL}/api/pharmacy/orders?phone=%2B919876543210`);
+  assert.equal(unauthenticatedPatientOrders.status, 401, 'patient order history must reject anonymous access');
+  const unauthenticatedOrderCreate = await fetch(`${BASE_URL}/api/pharmacy/orders`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ phone: '+919876543210', storeId: 1, items: [] })
+  });
+  assert.equal(unauthenticatedOrderCreate.status, 401, 'order creation must reject anonymous access');
+
   const options = await fetch(`${BASE_URL}/api/pharmacy/orders`, { method: 'OPTIONS' });
   assert.equal(options.status, 204);
 
@@ -48,30 +108,30 @@ test('Phase 7 pharmacy API smoke and fail-closed contract', async t => {
   assert.equal(invalidProducts.status, 422);
   assert.match((await invalidProducts.json()).error, /storeId/i);
 
-  const missingPhone = await fetch(`${BASE_URL}/api/pharmacy/orders`);
+  const missingPhone = await fetch(`${BASE_URL}/api/pharmacy/orders`, { headers: patientHeaders });
   assert.equal(missingPhone.status, 422);
   assert.match((await missingPhone.json()).error, /phone/i);
 
   const invalidOrder = await fetch(`${BASE_URL}/api/pharmacy/orders`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { ...patientHeaders, 'Content-Type': 'application/json' },
     body: JSON.stringify({ phone: '9876543210', storeId: 1, items: [] })
   });
   assert.equal(invalidOrder.status, 422);
   assert.match((await invalidOrder.json()).error, /deliveryMethod|items/i);
 
 
-  const adminOrders = await fetch(`${BASE_URL}/api/pharmacy/admin/orders`);
+  const adminOrders = await fetch(`${BASE_URL}/api/pharmacy/admin/orders`, { headers: adminHeaders });
   assert.equal(adminOrders.status, 503);
   assert.match((await adminOrders.json()).error, /database/i);
 
-  const adminStoreList = await fetch(`${BASE_URL}/api/pharmacy/admin/stores`);
+  const adminStoreList = await fetch(`${BASE_URL}/api/pharmacy/admin/stores`, { headers: adminHeaders });
   assert.equal(adminStoreList.status, 503);
   assert.match((await adminStoreList.json()).error, /database/i);
 
   const invalidStore = await fetch(`${BASE_URL}/api/pharmacy/admin/stores`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { ...adminHeaders, 'Content-Type': 'application/json' },
     body: JSON.stringify({})
   });
   assert.equal(invalidStore.status, 422);
@@ -79,7 +139,7 @@ test('Phase 7 pharmacy API smoke and fail-closed contract', async t => {
 
   const invalidApproval = await fetch(`${BASE_URL}/api/pharmacy/admin/stores/0/approval`, {
     method: 'PATCH',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { ...adminHeaders, 'Content-Type': 'application/json' },
     body: JSON.stringify({ approved: true, active: true })
   });
   assert.equal(invalidApproval.status, 422);
@@ -87,7 +147,7 @@ test('Phase 7 pharmacy API smoke and fail-closed contract', async t => {
 
   const invalidProduct = await fetch(`${BASE_URL}/api/pharmacy/admin/stores/1/products`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { ...adminHeaders, 'Content-Type': 'application/json' },
     body: JSON.stringify({})
   });
   assert.equal(invalidProduct.status, 422);
@@ -95,7 +155,7 @@ test('Phase 7 pharmacy API smoke and fail-closed contract', async t => {
 
   const invalidProductUpdate = await fetch(`${BASE_URL}/api/pharmacy/admin/products/0`, {
     method: 'PATCH',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { ...adminHeaders, 'Content-Type': 'application/json' },
     body: JSON.stringify({ active: true })
   });
   assert.equal(invalidProductUpdate.status, 422);
@@ -103,7 +163,7 @@ test('Phase 7 pharmacy API smoke and fail-closed contract', async t => {
 
   const validOrderWithoutDb = await fetch(`${BASE_URL}/api/pharmacy/orders`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { ...patientHeaders, 'Content-Type': 'application/json' },
     body: JSON.stringify({
       phone: '9876543210',
       storeId: 1,
