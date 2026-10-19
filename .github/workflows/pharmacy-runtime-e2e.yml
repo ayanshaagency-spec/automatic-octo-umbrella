@@ -42,7 +42,13 @@ jobs:
         working-directory: backend
         env:
           PORT: 3918
+          NODE_ENV: test
           DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/ayansha_healthcare
+          ADMIN_EMAIL: pharmacy-ci-admin@example.test
+          ADMIN_PASSWORD: ci-only-pharmacy-admin-password
+          JWT_SECRET: pharmacy-ci-jwt-secret-long-enough-for-hs256
+          OTP_PROVIDER_URL: ''
+          OTP_PROVIDER_TOKEN: ''
           PAYMENT_WEBHOOK_SECRET: runtime-webhook-secret
           PAYMENT_STATUS_ADMIN_TOKEN: runtime-admin-token
         run: |
@@ -61,6 +67,8 @@ jobs:
         working-directory: backend
         env:
           DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/ayansha_healthcare
+          ADMIN_EMAIL: pharmacy-ci-admin@example.test
+          ADMIN_PASSWORD: ci-only-pharmacy-admin-password
           PHARMACY_E2E_CI: '1'
           PHARMACY_E2E_BASE_URL: http://127.0.0.1:3918
         run: node src/pharmacy_runtime_e2e.js
