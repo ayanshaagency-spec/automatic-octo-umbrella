@@ -111,7 +111,7 @@ const server=http.createServer(async(req,res)=>{
   if(paymentStatusMatch&&req.method==='PATCH')return parseBody(req,async(err,data)=>{if(err)return send(res,400,{error:'Invalid JSON'},req);if(!isAuthorizedPaymentStatusUpdate(req.headers))return send(res,403,{error:'Payment status update is restricted'},req);try{const saved=await updatePaymentStatus(Number(paymentStatusMatch[1]),data.status,data.providerPaymentId);if(saved)return send(res,200,saved,req);return send(res,503,{error:'DATABASE_URL not configured'},req);}catch(e){if(e.statusCode)return send(res,e.statusCode,{error:e.message},req);return send(res,503,{error:'Unable to update payment status'},req);}});
   if (url.pathname.startsWith('/api/pharmacy/')) {
     const isPharmacyAdminApi = url.pathname.startsWith('/api/pharmacy/admin/');
-    const isPharmacyOrderStatus = req.method === 'PATCH' && /^\\/api\\/pharmacy\\/orders\\/\\d+\\/status$/.test(url.pathname);
+    const isPharmacyOrderStatus = req.method === 'PATCH' && /^\/api\/pharmacy\/orders\/\d+\/status$/.test(url.pathname);
     let adminClaims = null;
     let patientClaims = null;
 
