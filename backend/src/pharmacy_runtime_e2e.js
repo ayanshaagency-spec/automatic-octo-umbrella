@@ -230,6 +230,75 @@ async function main() {
     assert.equal(hospitalOrder.body.deliveryMethod, 'hospital');
     assert.equal(Number(hospitalOrder.body.deliveryHospitalId), Number(hospitalOne.id));
 
+    // Verify the end-to-end patient -> pharmacy order -> admin queue -> status update flow.
+    const patientHistoryBeforeAdminAction = await request(
+      baseUrl,
+      '/api/pharmacy/orders?phone=9990000001',
+      { headers: patientHeaders }
+    );
+    assertStatus(patientHistoryBeforeAdminAction, 200, 'Patient order history after checkout');
+    assert.ok(
+      patientHistoryBeforeAdminAction.body.some(row => Number(row.id) === Number(homeOrder.body.id)),
+      'Patient order history should contain the newly-created home-delivery order'
+    );
+    assert.ok(
+      patientHistoryBeforeAdminAction.body.some(row => Number(row.id) === Number(hospitalOrder.body.id)),
+      'Patient order history should contain the newly-created hospital-delivery order'
+    );
+
+    const initialAdminQueue = await request(baseUrl, '/api/pharmacy/admin/orders', { headers: adminHeaders });
+    assertStatus(initialAdminQueue, 200, 'Admin pharmacy order queue');
+    assert.ok(
+      initialAdminQueue.body.some(row => Number(row.id) === Number(homeOrder.body.id)),
+      'Admin queue should contain the home-delivery order'
+    );
+    assert.ok(
+      initialAdminQueue.body.some(row => Number(row.id) === Number(hospitalOrder.body.id)),
+      'Admin queue should contain the hospital-delivery order'
+    );
+
+    const acceptOrder = await request(baseUrl, '/api/pharmacy/orders/' + Number(homeOrder.body.id) + '/status', {
+      method: 'PATCH',
+      headers: adminHeaders,
+      body: { status: 'accepted' }
+    });
+    assertStatus(acceptOrder, 200, 'Admin accepts a newly-placed pharmacy order');
+    assert.equal(acceptOrder.body.status, 'accepted');
+
+    const filteredAcceptedOrders = await request(
+      baseUrl,
+      '/api/pharmacy/admin/orders?status=accepted&storeId=' + partnerStoreId,
+      { headers: adminHeaders }
+    );
+    assertStatus(filteredAcceptedOrders, 200, 'Filter admin queue by accepted status and partner store');
+    assert.ok(
+      filteredAcceptedOrders.body.some(row => Number(row.id) === Number(homeOrder.body.id)),
+      'Filtered admin queue should show the accepted partner-store order'
+    );
+    assert.ok(
+      filteredAcceptedOrders.body.every(row => row.status === 'accepted' && Number(row.storeId) === partnerStoreId),
+      'Admin queue filters should exclude orders with another status or store'
+    );
+
+    const patientHistoryAfterAdminAction = await request(
+      baseUrl,
+      '/api/pharmacy/orders?phone=9990000001',
+      { headers: patientHeaders }
+    );
+    assertStatus(patientHistoryAfterAdminAction, 200, 'Patient history reflects admin order status update');
+    const acceptedPatientOrder = patientHistoryAfterAdminAction.body.find(
+      row => Number(row.id) === Number(homeOrder.body.id)
+    );
+    assert.ok(acceptedPatientOrder, 'Accepted order remains in patient history');
+    assert.equal(acceptedPatientOrder.status, 'accepted');
+
+    const invalidStatusTransition = await request(
+      baseUrl,
+      '/api/pharmacy/orders/' + Number(homeOrder.body.id) + '/status',
+      { method: 'PATCH', headers: adminHeaders, body: { status: 'delivered' } }
+    );
+    assertStatus(invalidStatusTransition, 422, 'Reject invalid accepted-to-delivered status transition');
+
     const crossHospitalOrder = await request(baseUrl, '/api/pharmacy/orders', {
       method: 'POST',
       headers: patientHeaders,
@@ -265,7 +334,7 @@ async function main() {
     assert.equal(Number(partnerAmoxicillin.stockQuantity), 3, 'Successful checkout should reserve inventory');
     assert.equal(Number(partnerIbuprofen.stockQuantity), 5, 'Rejected prescription mismatch must not change inventory');
 
-    console.log('Pharmacy PostgreSQL E2E passed: store types, approval gate, home/hospital delivery, destination restriction, prescription matching, COD state and stock reservation.');
+    console.log('Pharmacy PostgreSQL E2E passed: patient OTP login, store approval, home/hospital checkout, patient history, admin queue/filter/status update, invalid transition rejection, prescription matching, COD and stock reservation.');
   } finally {
     await pool.end();
   }
