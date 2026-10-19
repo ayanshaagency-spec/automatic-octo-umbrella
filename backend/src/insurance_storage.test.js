@@ -2,7 +2,7 @@
 
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { detectContentType, isStorageConfigured, makeObjectKey } = require('./insurance_storage');
+const { detectContentType, isStorageConfigured, makeObjectKey, makeUploadKey } = require('./insurance_storage');
 
 test('insurance document file signature detection recognises supported formats', () => {
   assert.equal(detectContentType(Buffer.from('%PDF-1.7\n')), 'application/pdf');
@@ -20,6 +20,11 @@ test('insurance object keys are opaque and do not include patient identifiers or
   assert.match(key, /^insurance-documents\/[0-9a-f-]{36}$/i);
   assert.equal(key.includes('patient'), false);
   assert.equal(key.includes('.pdf'), false);
+});
+
+test('temporary and final object keys use distinct private prefixes', () => {
+  assert.match(makeUploadKey(), /^insurance-uploads\\/[0-9a-f-]{36}$/i);
+  assert.match(makeObjectKey(), /^insurance-documents\\/[0-9a-f-]{36}$/i);
 });
 
 test('private insurance storage fails closed when storage secrets are not configured', () => {
