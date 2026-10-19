@@ -165,11 +165,11 @@ async function handleInsuranceRoute(req, res, url, context) {
       try {
         saved = await repository.markDocumentSubmitted(patientId, documentId);
       } catch (error) {
-        await storage.deleteUpload({ uploadKey: document.objectKey }).catch(() => {});
+        await storage.deleteObject({ objectKey: document.objectKey }).catch(() => {});
         throw error;
       }
       // The upload form can remain valid briefly, so remove the temporary key after promotion.
-      await storage.deleteUpload({ uploadKey: document.uploadKey }).catch(() => {});
+      await storage.deleteObject({ objectKey: document.uploadKey }).catch(() => {});
       send(200, { id: saved.id, status: saved.status });
       return true;
     }
