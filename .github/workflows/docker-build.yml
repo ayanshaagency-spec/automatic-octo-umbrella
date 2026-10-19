@@ -11,6 +11,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - name: Check Pharmacy frontend syntax
+        run: node --check web/pharmacy.js
       - name: Build backend image
         run: docker build -t ayansha-health-care-backend:ci .
       - name: Smoke-test built container routes and admin page
@@ -36,8 +38,11 @@ jobs:
           grep -q '"ok":true' /tmp/health.json
           curl --fail --silent http://127.0.0.1:3000/ -o /tmp/home.html
           grep -q 'Ayansha Health Care' /tmp/home.html
+          grep -q 'id="pharmacy"' /tmp/home.html
           curl --fail --silent http://127.0.0.1:3000/web/app.js -o /tmp/web-app.js
           grep -q 'function' /tmp/web-app.js
+          curl --fail --silent http://127.0.0.1:3000/web/pharmacy.js -o /tmp/pharmacy-app.js
+          grep -q 'searchStores' /tmp/pharmacy-app.js
           curl --fail --silent http://127.0.0.1:3000/admin -o /tmp/admin.html
           grep -q 'Ayansha Health Care Admin' /tmp/admin.html
           test "$(curl --silent --output /dev/null --write-out '%{http_code}' http://127.0.0.1:3000/api/db/health)" = "503"
