@@ -1,7 +1,7 @@
 'use strict';
 
 const crypto = require('node:crypto');
-const { S3Client, HeadObjectCommand, GetObjectCommand } = require('@aws-sdk/client-s3');
+const { S3Client, HeadObjectCommand, GetObjectCommand, CopyObjectCommand, DeleteObjectCommand } = require('@aws-sdk/client-s3');
 const { getSignedUrl } = require('@aws-sdk/s3-request-presigner');
 const { createPresignedPost } = require('@aws-sdk/s3-presigned-post');
 
@@ -55,6 +55,10 @@ function getClient() {
 
 function makeObjectKey() {
   return 'insurance-documents/' + crypto.randomUUID();
+}
+
+function makeUploadKey() {
+  return 'insurance-uploads/' + crypto.randomUUID();
 }
 
 async function createUploadForm({ objectKey, contentType }) {
@@ -114,4 +118,20 @@ async function createDownloadUrl({ objectKey, filename }) {
   return getSignedUrl(client, command, { expiresIn: 60 });
 }
 
-module.exports = { isStorageConfigured, makeObjectKey, createUploadForm, inspectObject, createDownloadUrl, detectContentType };
+async function promoteUpload({ uploadKey, objectKey }) {
+  const { client, config } = getClient();
+  const copySource = config.bucket + '/' + uploadKey.split('/').map(encodeURIComponent).join('/');
+  await client.send(new CopyObjectCommand({
+    Bucket: config.bucket,
+    Key: objectKey,
+    CopySource: copySource,
+    MetadataDirective: 'COPY'
+  }));
+}
+
+async function deleteUpload({ uploadKey }) {
+  const { client, config } = getClient();
+  await client.send(new DeleteObjectCommand({ Bucket: config.bucket, Key: uploadKey }));
+}
+
+module.exports = { isStorageConfigured, makeObjectKey, makeUploadKey, createUploadForm, inspectObject, createDownloadUrl, promoteUpload, deleteUpload, detectContentType };
