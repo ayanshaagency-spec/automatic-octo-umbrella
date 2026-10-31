@@ -14,7 +14,7 @@ test('secure session token is signed and expires', async () => {
   const issued = await issueDevelopmentOtp('+919999999999');
   assert.equal(issued.delivery, 'development');
   assert.match(issued.devOtp, /^\d{6}$/);
-  assert.equal(verifyOtp('+919999999999', issued.devOtp), true);
+  assert.equal(await verifyOtp('+919999999999', issued.devOtp), true);
   const token = createToken('+919999999999');
   const payload = verifyToken(token);
   assert.equal(payload.sub, '+919999999999');
@@ -24,8 +24,8 @@ test('secure session token is signed and expires', async () => {
 test('OTP cannot be reused', async () => {
   process.env.JWT_SECRET = 'test-secret-that-is-long-enough-for-hmac-123456';
   const issued = await issueDevelopmentOtp('+919888888888');
-  assert.equal(verifyOtp('+919888888888', issued.devOtp), true);
-  assert.equal(verifyOtp('+919888888888', issued.devOtp), false);
+  assert.equal(await verifyOtp('+919888888888', issued.devOtp), true);
+  assert.equal(await verifyOtp('+919888888888', issued.devOtp), false);
 });
 
 test('OTP requests are limited to three per phone in a rolling 15-minute window', async () => {
@@ -43,9 +43,9 @@ test('five failed OTP checks invalidate the active code', async () => {
   const phone = '+919666666666';
   const issued = await issueDevelopmentOtp(phone);
   for (let i = 0; i < 5; i += 1) {
-    assert.equal(verifyOtp(phone, '000000'), false);
+    assert.equal(await verifyOtp(phone, '000000'), false);
   }
-  assert.equal(verifyOtp(phone, issued.devOtp), false);
+  assert.equal(await verifyOtp(phone, issued.devOtp), false);
 });
 
 test('OTP expires after five minutes', async () => {
@@ -56,7 +56,7 @@ test('OTP expires after five minutes', async () => {
     const phone = '+919555555555';
     const issued = await issueDevelopmentOtp(phone);
     now += 5 * 60 * 1000 + 1;
-    assert.equal(verifyOtp(phone, issued.devOtp), false);
+    assert.equal(await verifyOtp(phone, issued.devOtp), false);
   } finally {
     Date.now = realNow;
   }
@@ -72,7 +72,7 @@ test('OTP provider URLs must use HTTPS and may not embed credentials', async () 
       () => issueOtp(phone),
       error => error.statusCode === 503 && /HTTPS/.test(error.message)
     );
-    assert.equal(verifyOtp(phone, '123456'), false, 'failed provider request must not leave an active OTP');
+    assert.equal(await verifyOtp(phone, '123456'), false, 'failed provider request must not leave an active OTP');
   } finally {
     delete process.env.OTP_PROVIDER_URL;
     delete process.env.OTP_PROVIDER_TOKEN;
