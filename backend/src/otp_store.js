@@ -89,7 +89,7 @@ async function consumeOtpChallenge({ phoneHash, candidateOtpHash, maxAttempts })
     await client.query('SELECT pg_advisory_xact_lock(hashtextextended($1, 0))', [phoneHash]);
 
     const result = await client.query(
-      `SELECT challenge_id, otp_hash, attempts, expires_at
+      `SELECT challenge_id, otp_hash, attempts, expires_at, (expires_at <= NOW()) AS expired
          FROM patient_otp_challenges
         WHERE phone_hash = $1
         FOR UPDATE`,
@@ -101,7 +101,7 @@ async function consumeOtpChallenge({ phoneHash, candidateOtpHash, maxAttempts })
       return false;
     }
 
-    if (new Date(challenge.expires_at).getTime() <= Date.now()) {
+    if (challenge.expired) {
       await client.query('DELETE FROM patient_otp_challenges WHERE phone_hash = $1', [phoneHash]);
       await client.query('COMMIT');
       return false;
