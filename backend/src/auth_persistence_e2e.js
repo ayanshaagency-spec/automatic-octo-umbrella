@@ -93,8 +93,9 @@ async function main() {
     const lockoutPhone = '+919100000004';
     await issueOtp(lockoutPhone);
     const lockoutCode = deliveries.at(-1).message.match(/code is (\d{6})/)[1];
+    const wrongCode = lockoutCode === '000000' ? '000001' : '000000';
     for (let attempt = 0; attempt < 5; attempt += 1) {
-      assert.equal(await verifyOtp(lockoutPhone, '000000'), false);
+      assert.equal(await verifyOtp(lockoutPhone, wrongCode), false);
     }
     assert.equal(await verifyOtp(lockoutPhone, lockoutCode), false);
 
