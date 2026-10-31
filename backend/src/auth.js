@@ -171,6 +171,10 @@ async function issueOtp(phone) {
     }
   }
 
+  if (!(process.env.OTP_PROVIDER_URL || '').trim() || !(process.env.OTP_PROVIDER_TOKEN || '').trim()) {
+    throw new AuthError('OTP provider is not configured');
+  }
+
   const phoneHash = hashPhone(normalizedPhone);
   const challengeId = crypto.randomUUID();
   const otpHash = hashOtp(phoneHash, otp);
