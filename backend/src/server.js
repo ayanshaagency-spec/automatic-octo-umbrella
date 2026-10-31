@@ -64,8 +64,8 @@ const server=http.createServer(async(req,res)=>{
   if(url.pathname==='/api/auth/request-otp'&&req.method==='POST')return parseBody(req,async(err,data)=>{if(err||!data.phone)return send(res,400,{error:'phone is required'},req);try{const result=await issueOtp(data.phone);return send(res,200,{message:'OTP sent',...result},req);}catch(e){if(e instanceof AuthError)return send(res,e.statusCode,{error:e.message},req);return send(res,502,{error:'Unable to send OTP'},req);}});
   if(url.pathname==='/api/auth/verify-otp'&&req.method==='POST')return parseBody(req,async(err,data)=>{
     if(err||!data.phone||!data.otp)return send(res,400,{error:'phone and otp are required'},req);
-    if(!verifyOtp(data.phone,String(data.otp)))return send(res,401,{error:'Invalid or expired OTP'},req);
     try{
+      if(!await verifyOtp(data.phone,String(data.otp)))return send(res,401,{error:'Invalid or expired OTP'},req);
       const db=await getDb();
       if(db){
         const name=typeof data.name==='string'&&data.name.trim()?data.name.trim().slice(0,120):'Patient';
@@ -82,7 +82,18 @@ const server=http.createServer(async(req,res)=>{
     }
   });
   if(url.pathname==='/api/doctor/auth/request-otp'&&req.method==='POST')return parseBody(req,async(err,data)=>{if(err||!data.phone)return send(res,400,{error:'phone is required'},req);try{const doctor=await getDoctorByPhone(data.phone);if(doctor===null)return send(res,503,{error:'DATABASE_URL not configured'},req);if(!doctor)return send(res,404,{error:'Doctor identity is not provisioned'},req);const result=await issueOtp(data.phone);return send(res,200,{message:'OTP sent',...result,doctor:{id:doctor.id,name:doctor.name,specialty:doctor.specialty}},req);}catch(e){if(e instanceof AuthError)return send(res,e.statusCode,{error:e.message},req);return send(res,502,{error:'Unable to send doctor OTP'},req);}});
-  if(url.pathname==='/api/doctor/auth/verify-otp'&&req.method==='POST')return parseBody(req,(err,data)=>{if(err||!data.phone||!data.otp)return send(res,400,{error:'phone and otp are required'},req);if(!verifyOtp(data.phone,String(data.otp)))return send(res,401,{error:'Invalid or expired OTP'},req);try{return getDoctorByPhone(data.phone).then(doctor=>{if(!doctor)return send(res,404,{error:'Doctor identity is not provisioned'},req);return send(res,200,{token:createDoctorToken(data.phone),user:{id:doctor.id,name:doctor.name,specialty:doctor.specialty,phone:doctor.phone,role:'doctor'}},req);});}catch(e){if(e instanceof AuthError)return send(res,e.statusCode,{error:e.message},req);return send(res,503,{error:'Unable to create doctor session'},req);}});
+  if(url.pathname==='/api/doctor/auth/verify-otp'&&req.method==='POST')return parseBody(req,async(err,data)=>{
+    if(err||!data.phone||!data.otp)return send(res,400,{error:'phone and otp are required'},req);
+    try{
+      if(!await verifyOtp(data.phone,String(data.otp)))return send(res,401,{error:'Invalid or expired OTP'},req);
+      const doctor=await getDoctorByPhone(data.phone);
+      if(!doctor)return send(res,404,{error:'Doctor identity is not provisioned'},req);
+      return send(res,200,{token:createDoctorToken(data.phone),user:{id:doctor.id,name:doctor.name,specialty:doctor.specialty,phone:doctor.phone,role:'doctor'}},req);
+    }catch(e){
+      if(e instanceof AuthError)return send(res,e.statusCode,{error:e.message},req);
+      return send(res,503,{error:'Unable to create doctor session'},req);
+    }
+  });
   if(url.pathname==='/api/doctor/appointments'&&req.method==='GET'){const doctor=verifyRoleToken(getAuthToken(req),'doctor');if(!doctor)return send(res,401,{error:'Doctor authentication required'},req);try{const rows=await listDoctorAppointments(doctor.sub);if(rows===null)return send(res,503,{error:'DATABASE_URL not configured'},req);return send(res,200,rows,req);}catch(e){return send(res,503,{error:'Unable to load doctor appointments'},req);}}
   const doctorStatusMatch=url.pathname.match(/^\/api\/doctor\/appointments\/(\d+)\/status$/);
   if(doctorStatusMatch&&req.method==='PATCH')return parseBody(req,async(err,data)=>{const doctor=verifyRoleToken(getAuthToken(req),'doctor');if(!doctor)return send(res,401,{error:'Doctor authentication required'},req);if(err)return send(res,400,{error:'Invalid JSON'},req);try{const saved=await updateDoctorAppointmentStatus(Number(doctorStatusMatch[1]),doctor.sub,data.status);return send(res,200,saved,req);}catch(e){if(e.statusCode)return send(res,e.statusCode,{error:e.message},req);return send(res,503,{error:'Unable to update doctor appointment'},req);}});
