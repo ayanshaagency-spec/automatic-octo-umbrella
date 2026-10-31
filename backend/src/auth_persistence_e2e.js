@@ -42,7 +42,8 @@ async function main() {
     return { ok: !providerFailure, status: providerFailure ? 502 : 200 };
   };
 
-  const { issueOtp, verifyOtp, AuthError, closeOtpStore } = require('./auth');
+  const { issueOtp, verifyOtp, AuthError } = require('./auth');
+  const { closeOtpStore } = require('./otp_store');
   try {
     const migrationPath = path.join(__dirname, '..', 'db', 'migrations', '009_shared_patient_otp_store.sql');
     await pool.query(fs.readFileSync(migrationPath, 'utf8'));
