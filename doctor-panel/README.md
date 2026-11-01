@@ -24,3 +24,12 @@ The Doctor Panel is served by the existing backend at `/doctor`. It shares the e
 - Production/staging OTP requires the approved SMS provider. No development OTP is disclosed on a public deployment.
 - Video consultation is an entry point only; a live video-room provider and secure meeting-link workflow are not yet integrated.
 - Doctor scheduling/availability slots are not implemented yet. The patient app must not invent or display bookable slots.
+
+
+## Family Profiles and Doctor Scheduling
+
+- Doctors sign in using their registered phone and OTP, then publish future 30-minute slots in the Doctor Panel. They can review availability and cancel only unbooked slots.
+- Patients see only future published slots that are not already booked. A database unique index prevents duplicate active bookings.
+- Family profiles belong to the signed-in patient account. Children are guardian-managed with appointment scope. Adult family members must sign in on their own phone and explicitly allow appointment access; a decline or later revocation removes access.
+- Existing appointments and medical records remain owned by the patient account. A dependent is linked separately on the appointment; revoking family access does not delete historic clinical data.
+- Migration 010 and these endpoints are currently on the Staging feature branch. Do not claim them live until the approved Staging deployment succeeds.
