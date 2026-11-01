@@ -8,6 +8,32 @@
   const patientToken = () => localStorage.getItem('ayansha_auth_token') || '';
   const patientPhone = () => localStorage.getItem('ayansha_auth_phone') || '';
   let policies = [];
+  let uploadReadiness = false;
+
+  function renderUploadReadiness() {
+    const banner = $('insuranceStorageStatus');
+    const submit = $('insuranceDocumentForm').querySelector('button[type="submit"]');
+    $('insuranceDocumentFile').disabled = !uploadReadiness;
+    $('insuranceDocumentType').disabled = !uploadReadiness;
+    $('insurancePolicySelect').disabled = !uploadReadiness;
+    submit.disabled = !uploadReadiness;
+    banner.classList.toggle('success-message', uploadReadiness);
+    if (uploadReadiness) {
+      banner.textContent = 'Private document storage and malware scanning are configured. Files are uploaded to private storage and scanned before submission.';
+    } else {
+      banner.textContent = 'Policy details can be saved, but document upload is disabled until a private encrypted object bucket and ClamAV malware scanner are configured. No file will be accepted or stored on a public or temporary web server.';
+    }
+  }
+
+  async function refreshInsuranceStatus() {
+    try {
+      const status = await api('/api/insurance/status');
+      uploadReadiness = status.uploadsEnabled === true && status.storageConfigured === true && status.scannerConfigured === true;
+    } catch (_) {
+      uploadReadiness = false;
+    }
+    renderUploadReadiness();
+  }
 
   async function api(path, options = {}) {
     const headers = { ...(options.headers || {}) };
@@ -81,6 +107,7 @@
   }
 
   $('insuranceRefresh').addEventListener('click', refreshPolicies);
+  void refreshInsuranceStatus();
 
   $('insurancePolicyForm').addEventListener('submit', async event => {
     event.preventDefault();
@@ -114,6 +141,7 @@
 
   $('insuranceDocumentForm').addEventListener('submit', async event => {
     event.preventDefault();
+    if (!uploadReadiness) { showMessage('insuranceDocumentMessage', 'Secure private storage and malware scanning are not configured; upload is disabled.'); return; }
     if (!patientToken() || !patientPhone()) {
       showMessage('insuranceDocumentMessage', 'Please sign in before uploading documents.');
       return;
