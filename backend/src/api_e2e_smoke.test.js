@@ -302,3 +302,39 @@ test('authenticated patient access and ownership contract', async t => {
   const invalidHospitalCoordinates = await fetch(`${BASE_URL}/api/hospitals/nearby?latitude=999&longitude=0`);
   assert.equal(invalidHospitalCoordinates.status, 422);
 });
+
+test('production CORS ignores wildcard origins and allows exact configured origins only', async t => {
+  const port = 3921;
+  const base = `http://127.0.0.1:${port}`;
+  const child = spawn(process.execPath, ['src/server.js'], {
+    cwd: __dirname + '/..',
+    env: {
+      ...process.env,
+      PORT: String(port),
+      NODE_ENV: 'production',
+      DATABASE_URL: '',
+      JWT_SECRET: 'production-cors-test-secret-long-enough-for-hs256',
+      CORS_ALLOWED_ORIGINS: 'https://safe.example,*'
+    },
+    stdio: ['ignore', 'pipe', 'pipe']
+  });
+  t.after(() => child.kill());
+  let output = '';
+  child.stdout.on('data', chunk => { output += chunk.toString(); });
+  child.stderr.on('data', chunk => { output += chunk.toString(); });
+  let ready = false;
+  for (let attempt = 0; attempt < 30; attempt += 1) {
+    if (child.exitCode !== null) throw new Error(`Production CORS API exited early: ${output}`);
+    try { const response = await fetch(`${base}/health`); if (response.ok) { ready = true; break; } } catch (_) {}
+    await new Promise(resolve => setTimeout(resolve, 100));
+  }
+  assert.equal(ready, true, 'Production-mode API should start');
+
+  const safe = await fetch(`${base}/health`, { headers: { Origin: 'https://safe.example' } });
+  assert.equal(safe.status, 200);
+  assert.equal(safe.headers.get('access-control-allow-origin'), 'https://safe.example');
+
+  const evil = await fetch(`${base}/health`, { headers: { Origin: 'https://evil.example' } });
+  assert.equal(evil.status, 200);
+  assert.equal(evil.headers.get('access-control-allow-origin'), null);
+});
