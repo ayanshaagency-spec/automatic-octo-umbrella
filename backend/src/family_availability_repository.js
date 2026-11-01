@@ -90,7 +90,7 @@ async function createDoctorAvailabilitySlot(doctorPhone, input) {
   if (!input?.startsAt || Number.isNaN(startsAt.getTime()) || startsAt <= now || startsAt > maxDate ||
       startsAt.getUTCSeconds() !== 0 || startsAt.getUTCMilliseconds() !== 0 ||
       ![0, 30].includes(startsAt.getUTCMinutes())) {
-    throw httpError('startsAt must be a future 15-minute-aligned time within the next 90 days', 422);
+    throw httpError('startsAt must be a future 30-minute-aligned time within the next 90 days', 422);
   }
   try {
     const { rows } = await db.query(
