@@ -276,6 +276,36 @@ async function main() {
   });
   assert.equal(duplicateBooking.status, 409, 'database prevents two active appointments from booking the same slot');
 
+  const declinedPhone = `+9155555${timestamp}`;
+  const declinedProfile = await request('/api/family-members', {
+    method: 'POST',
+    headers: jsonHeaders(ownerToken),
+    body: JSON.stringify({
+      fullName: 'CI Declined Adult',
+      relationship: 'sibling',
+      dateOfBirth: dateYearsAgo(29),
+      phone: declinedPhone
+    })
+  });
+  assert.equal(declinedProfile.status, 201);
+  const declinedOtp = await request('/api/auth/request-otp', {
+    method: 'POST', headers: jsonHeaders(),
+    body: JSON.stringify({ phone: declinedPhone })
+  });
+  assert.equal(declinedOtp.status, 200);
+  const declinedLogin = await request('/api/auth/verify-otp', {
+    method: 'POST', headers: jsonHeaders(),
+    body: JSON.stringify({ phone: declinedPhone, otp: declinedOtp.body.devOtp, name: 'CI Declined Adult' })
+  });
+  assert.equal(declinedLogin.status, 200);
+  const consentDeclined = await request(`/api/family-members/${declinedProfile.body.id}/verify-consent`, {
+    method: 'POST', headers: jsonHeaders(declinedLogin.body.token),
+    body: JSON.stringify({ scopes: [] })
+  });
+  assert.equal(consentDeclined.status, 200);
+  assert.equal(consentDeclined.body.consent_status, 'declined');
+  assert.deepEqual(consentDeclined.body.access_scopes, []);
+
   const adultAppointment = await request('/api/appointments', {
     method: 'POST',
     headers: jsonHeaders(ownerToken),
