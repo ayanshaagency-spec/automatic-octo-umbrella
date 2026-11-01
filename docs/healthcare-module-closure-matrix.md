@@ -12,8 +12,8 @@ This matrix distinguishes implementation and automated evidence from live provid
 | Patient web portal | Implemented | Served by the existing backend; Staging backend and database health checks pass. The live directory has no verified doctor records yet. |
 | Admin operations panel | Implemented | Existing appointment and Pharmacy operations; protected doctor registration/list added. Docker smoke verifies the admin entry point. |
 | Doctor Panel | Implemented in the Staging feature branch | Served at `/doctor`; fixed asset allowlist; admin provisioning and doctor OTP sign-in flow pass isolated PostgreSQL Runtime E2E. It is not live on Staging until the queued Railway deployment completes. |
-| Flutter patient app | Implemented; safety corrections added | Fake doctors, fake slots and default Delhi coordinates removed. Flutter analyze and safety tests pass; Debug APK build was still running at last check. |
-| Backend API | Implemented for delivered MVP modules | Latest Backend Tests, Docker Build and Runtime E2E checks pass on the Staging branch. Latest branch is not yet deployed to Staging. |
+| Flutter patient app | Implemented; safety corrections added | Fake doctors, fake slots and default Delhi coordinates removed. Flutter analyze, safety tests and Debug APK build pass; APK artifact uploaded by CI and retained until 8 November 2026. |
+| Backend API | Implemented for delivered MVP modules | Latest Backend Tests, Docker Build and Runtime E2E checks pass on the Staging branch. Latest branch is not yet deployed to Staging because Railway deployment 5d28e528 remains QUEUED with no build/deploy logs. |
 | Appointments | Basic flow implemented | Protected patient/doctor flows and status updates. Real doctor availability calendar, slot publication and race-safe reservation are not implemented. |
 | Prescriptions | Implemented | Protected doctor/patient routes; covered by automated tests. No patient/test prescription data was left in the persistent Staging database. |
 | Health records | Implemented | Protected patient and doctor APIs. Anonymous access is rejected. |
@@ -46,9 +46,10 @@ This matrix distinguishes implementation and automated evidence from live provid
 
 - Staging backend: https://health-care-backend-staging-staging.up.railway.app
 - Staging `/health` and `/api/db/health` were verified successfully on the currently deployed version.
-- Deployment containing migration 009 is still `QUEUED`; migration 009 is not confirmed live on Staging.
+- Deployment `5d28e528-040c-49fc-a2a8-58175a24caf5` containing migration 009 is still `QUEUED` with no build/deploy logs; migration 009 is not confirmed live on Staging.
 - Staging directories for Pharmacy stores and delivery hospitals currently return empty arrays.
-- Production branch remains `feat/phase6-emergency-hospitals`; Production Backend and Postgres health were rechecked successfully. No Production service, branch, database, migration or secret was changed.
+- Production branch remains `feat/phase6-emergency-hospitals`; Production Backend and Postgres are Online with 0 warnings/criticals. Public `/health` and `/api/db/health` both pass. No Production service, branch, database, migration or secret was changed.
+- Floot Operations Dashboard typecheck is clean and all five tests pass. Its proxy is pinned to the Staging backend; dedicated Staging admin sign-in is disabled until the environment has its own admin credentials. The preview is ready but unpublished.
 - No fake patient, doctor, prescription, pharmacy, store, hospital or product records were inserted into the persistent Staging database.
 - PR #8 remains Draft and unmerged. No Phase 7 changes have been merged into Production.
 
