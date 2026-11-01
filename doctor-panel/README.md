@@ -2,6 +2,12 @@
 
 The Doctor Panel is served by the existing backend at `/doctor`. It shares the existing database and API; it is not a separate application or data store.
 
+## Doctor onboarding
+- An administrator signs in at `/admin` and registers a verified doctor in the **Doctors** section with the doctor's name, specialty and registered phone.
+- The admin directory is protected by the existing admin session. Duplicate phone numbers are rejected.
+- The doctor then signs in at `/doctor` by requesting and verifying an OTP on that registered phone.
+- Register only after verifying identity and credentials offline. Do not add sample doctors or unverified clinician records.
+
 ## Included workflow
 - OTP sign-in restricted to a doctor phone number provisioned by an administrator.
 - Doctor-scoped appointment queue and appointment status updates.
