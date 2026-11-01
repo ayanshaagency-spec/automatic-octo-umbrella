@@ -37,7 +37,9 @@ test('insurance endpoints enforce patient/admin auth and fail closed without pri
       INSURANCE_S3_REGION: 'us-east-1',
       INSURANCE_S3_ACCESS_KEY_ID: 'ci-only-test-access-key',
       INSURANCE_S3_SECRET_ACCESS_KEY: 'ci-only-test-secret-key',
-      INSURANCE_S3_ENDPOINT: ''
+      INSURANCE_S3_ENDPOINT: '',
+      INSURANCE_CLAMAV_HOST: '',
+      INSURANCE_CLAMAV_PORT: ''
     },
     stdio: ['ignore', 'pipe', 'pipe']
   });
@@ -57,6 +59,11 @@ test('insurance endpoints enforce patient/admin auth and fail closed without pri
   assert.equal(ready, true, 'API should start for isolated auth tests');
 
   assert.equal((await request('/api/insurance/policies')).status, 401);
+  const readiness = await request('/api/insurance/status');
+  assert.equal(readiness.status, 200);
+  assert.equal(readiness.body.storageConfigured, true);
+  assert.equal(readiness.body.scannerConfigured, false);
+  assert.equal(readiness.body.uploadsEnabled, false);
   assert.equal((await request('/api/admin/insurance/policies')).status, 401);
   assert.equal((await request('/api/insurance/documents/1/download')).status, 401);
 
@@ -71,14 +78,14 @@ test('insurance endpoints enforce patient/admin auth and fail closed without pri
   assert.equal(login.status, 200);
   const patientHeaders = { Authorization: 'Bearer ' + login.body.token };
 
-  // Private file storage is a release prerequisite. Do not accept a policy upload
-  // into a database record when secure object storage has not been configured.
+  // Policy metadata may be saved independently. File uploads remain blocked until
+  // both private object storage and the malware scanner are configured.
   const policyWhenStorageMissing = await request('/api/insurance/policies', {
     method: 'POST', headers: patientHeaders,
     body: { insurerName: 'CI Insurer', policyType: 'individual', policyNumber: 'TEST1234' }
   });
   assert.equal(policyWhenStorageMissing.status, 503);
-  assert.match(policyWhenStorageMissing.body.error, /storage and malware scanning must be configured/i);
+  assert.match(policyWhenStorageMissing.body.error, /DATABASE_URL not configured/i);
 
   const intentWhenStorageMissing = await request('/api/insurance/policies/1/documents', {
     method: 'POST', headers: patientHeaders,
