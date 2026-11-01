@@ -60,6 +60,9 @@ test('Phase 5 API smoke/E2E contract', async t => {
   const health = await fetch(`${BASE_URL}/health`);
   assert.equal(health.status, 200);
   assert.deepEqual(await health.json(), { ok: true, service: 'Ayansha Health Care' });
+  const doctorsUnavailable = await fetch(`${BASE_URL}/api/doctors`);
+  assert.equal(doctorsUnavailable.status, 503);
+  assert.equal((await doctorsUnavailable.json()).error, 'DATABASE_URL not configured');
 
   const home = await fetch(`${BASE_URL}/`);
   assert.equal(home.status, 200);
