@@ -82,13 +82,14 @@ async function createDoctorAvailabilitySlot(doctorPhone, input) {
   const db = await getDb();
   if (!db) return null;
   const duration = Number(input?.durationMinutes ?? 30);
-  if (![15, 30, 45, 60].includes(duration)) throw httpError('durationMinutes must be 15, 30, 45 or 60', 422);
+  // Fixed 30-minute blocks plus the unique doctor/start index prevent overlapping slots.
+  if (duration !== 30) throw httpError('durationMinutes must be 30 for the current scheduling model', 422);
   const startsAt = new Date(input?.startsAt);
   const now = new Date();
   const maxDate = new Date(now.getTime() + 90 * 24 * 60 * 60 * 1000);
   if (!input?.startsAt || Number.isNaN(startsAt.getTime()) || startsAt <= now || startsAt > maxDate ||
       startsAt.getUTCSeconds() !== 0 || startsAt.getUTCMilliseconds() !== 0 ||
-      startsAt.getUTCMinutes() % 15 !== 0) {
+      ![0, 30].includes(startsAt.getUTCMinutes())) {
     throw httpError('startsAt must be a future 15-minute-aligned time within the next 90 days', 422);
   }
   try {
@@ -212,7 +213,9 @@ async function createAppointment(data) {
     requestedStart = parsed.toISOString();
   }
 
-  const { rows } = await db.query(
+  let rows;
+  try {
+    ({ rows } = await db.query(
     `WITH selected_slot AS MATERIALIZED (
        SELECT s.id, s.doctor_id, s.slot_start
          FROM doctor_availability_slots s
@@ -244,7 +247,11 @@ async function createAppointment(data) {
      )
      SELECT * FROM booked`,
     [data.patientName.trim(), data.phone, doctorId, requestedSlotId, requestedStart, mode, familyMemberId]
-  );
+    ));
+  } catch (error) {
+    if (error.code === '23505') throw httpError('Selected availability slot was booked by another patient', 409);
+    throw error;
+  }
   if (!rows.length) throw httpError('Selected availability slot is no longer available', 409);
   return rows[0];
 }
