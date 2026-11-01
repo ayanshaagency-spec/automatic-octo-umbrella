@@ -52,6 +52,13 @@ jobs:
           grep -q 'Ayansha Health Care Admin' /tmp/admin.html
           grep -q 'Register a pharmacy' /tmp/admin.html
           grep -q 'Pharmacy orders' /tmp/admin.html
+          curl --fail --silent http://127.0.0.1:3000/doctor -o /tmp/doctor.html
+          grep -q 'Doctor Sign In' /tmp/doctor.html
+          curl --fail --silent http://127.0.0.1:3000/doctor/app.js -o /tmp/doctor.js
+          grep -q '/api/doctor/appointments' /tmp/doctor.js
+          curl --fail --silent http://127.0.0.1:3000/doctor/styles.css >/dev/null
+          test "$(curl --silent --output /dev/null --write-out '%{http_code}' http://127.0.0.1:3000/api/doctor/appointments)" = "401"
+          test "$(curl --silent --output /dev/null --write-out '%{http_code}' http://127.0.0.1:3000/doctor/server.js)" = "404"
           test "$(curl --silent --output /dev/null --write-out '%{http_code}' http://127.0.0.1:3000/api/db/health)" = "503"
           test "$(curl --silent --output /dev/null --write-out '%{http_code}' http://127.0.0.1:3000/.env)" = "404"
           test "$(curl --silent --output /dev/null --write-out '%{http_code}' http://127.0.0.1:3000/src/server.js)" = "404"
