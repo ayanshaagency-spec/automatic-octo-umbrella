@@ -15,7 +15,7 @@
       <div class="card-head"><h2>Publish Availability</h2><span>30-minute slots</span></div>
       <p>Publish future 30-minute appointment slots. Only published and currently free slots appear in the patient booking app.</p>
       <form id="availabilityForm">
-        <label>Slot date and time<input name="startsAt" type="datetime-local" required /></label>
+        <label>Slot date and time<input name="startsAt" type="datetime-local" step="1800" required /></label>
         <button class="primary" type="submit">Publish Slot</button>
         <p id="availabilityMessage" class="message"></p>
       </form>
