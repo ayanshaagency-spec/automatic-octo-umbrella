@@ -2,3 +2,28 @@
 .dashboard-hospitals{margin-top:1rem}.dashboard-hospitals .section-head{margin-bottom:1rem}.dashboard-hospitals .dashboard-list{margin-top:1rem}
 
 .pharmacy-panel{margin-bottom:2rem}.pharmacy-filters{display:grid;grid-template-columns:1.2fr 1fr 1fr auto;gap:10px;align-items:center;margin:1.25rem 0}.pharmacy-store-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px;margin:1rem 0}.pharmacy-store{display:flex;flex-direction:column;align-items:flex-start}.pharmacy-store button{margin-top:auto}.pharmacy-capabilities{display:flex;gap:8px;flex-wrap:wrap}.pharmacy-capabilities span{font-size:12px;border-radius:999px;padding:5px 9px;background:#eaf4f8;color:#126582}.pharmacy-order-card,.pharmacy-orders-card{border:1px solid #dceaf0;border-radius:18px;padding:22px;margin:1.25rem 0;background:#fbfdff}.pharmacy-products{display:grid;gap:8px;margin:1rem 0}.pharmacy-product-row{display:flex;justify-content:space-between;align-items:center;gap:16px;border-top:1px solid #e3edf2;padding:12px 0}.pharmacy-product-row label{width:105px;flex-shrink:0;color:var(--muted);font-size:12px}.pharmacy-product-row input{margin-top:5px}.pharmacy-price{font-size:13px;color:var(--primary);margin-top:5px}.pharmacy-checkout{display:grid;gap:10px;margin-top:1.5rem;padding-top:1.5rem;border-top:1px solid #e3edf2}.pharmacy-address-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}.pharmacy-cod-note{margin:0}@media(max-width:850px){.pharmacy-filters,.pharmacy-store-grid,.pharmacy-address-grid{grid-template-columns:1fr}.pharmacy-product-row{align-items:flex-start}.pharmacy-orders-card .section-head{align-items:flex-start}}
+
+
+.insurance-panel{margin-top:2rem}
+.insurance-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:18px}
+.insurance-form{max-width:none;align-content:start}
+.insurance-form h3{margin:0 0 6px}
+.insurance-form label{font-size:13px;font-weight:700;color:#304b60}
+.insurance-form input,
+.insurance-form select{width:100%}.small-note{font-size:12px;margin:0}
+.insurance-policy-list{margin-top:28px}
+.insurance-policy-card{margin:14px 0}
+.insurance-policy-heading{display:flex;gap:16px;justify-content:space-between;align-items:start}
+.insurance-policy-heading h4{margin:0;font-size:18px}
+.insurance-status{display:inline-flex;align-items:center;border-radius:999px;background:#e9f4f7;color:#15566f;padding:6px 10px;font-size:12px;font-weight:700;text-transform:capitalize;white-space:nowrap}
+.insurance-review-note{background:#fff8e7;padding:10px 12px;border-radius:10px;color:#77591b}
+.insurance-document-list{margin-top:14px}
+.insurance-document-row{display:flex;gap:12px;align-items:center;justify-content:space-between;padding:12px 0;border-top:1px solid #e6eef2}
+.insurance-document-row>div{display:grid;gap:4px;min-width:0}
+.insurance-document-row .muted{font-size:12px;text-transform:capitalize}
+.insurance-document-row button{flex-shrink:0}.success-message{background:#e7f7ed;color:#17643c}
+.insurance-panel .result{font-size:13px}@media(max-width:850px){
+.insurance-grid{grid-template-columns:1fr}
+.insurance-policy-heading{flex-direction:column}
+.insurance-document-row{align-items:start;flex-direction:column}}
+
