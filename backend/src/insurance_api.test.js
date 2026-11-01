@@ -92,7 +92,7 @@ test('insurance endpoints enforce patient/admin auth and fail closed without pri
     body: { insurerName: 'CI Insurer', policyType: 'individual', policyNumber: 'TEST1234' }
   });
   assert.equal(policyWhenStorageMissing.status, 503);
-  assert.match(policyWhenStorageMissing.body.error, /DATABASE_URL not configured/i);
+  assert.match(policyWhenStorageMissing.body.error, /database is not configured/i);
 
   const intentWhenStorageMissing = await request('/api/insurance/policies/1/documents', {
     method: 'POST', headers: patientHeaders,
