@@ -87,7 +87,7 @@ The per-phone database limiter is not a complete perimeter: a trusted edge/IP ra
 ## Safe setup sequence
 
 1. Approve the MSG91 account. Verify account ownership, India transactional SMS eligibility, sender/header and DLT template prerequisites, credit limits, data handling and delivery/error semantics.
-2. Keep provider URL/token only in the deployment platform's secret-variable store. Never commit real values, add them to `.env` in Git, or paste them into issues/PR comments.
+2. Keep `MSG91_AUTH_KEY` only in the deployment platform's secret-variable store. Never commit real values, add them to `.env` in Git, or paste them into issues/PR comments.
 3. Deploy the shared-store migration only to the isolated Staging database after the existing Staging backend build is admitted. Verify that migration 009 can be applied twice without data loss.
 4. Configure the MSG91 Flow adapter and Staging secrets. Use an authorised test phone and verify SMS delivery, invalid/expired code, single-use behavior, five failed attempts, rolling throttling, concurrent requests, provider timeout/4xx/5xx, DLT/template rejection and missing-secret behavior.
 5. Verify no OTP, token, raw phone number, provider token or database URL appears in logs or build artifacts.
