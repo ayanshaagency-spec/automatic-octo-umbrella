@@ -57,6 +57,14 @@ test('real PostgreSQL patient journey E2E', async t => {
      RETURNING id`, [DOCTOR_PHONE]
   );
   const doctorId = doctor.rows[0].id;
+  const slotStart = new Date(Date.now() + 48 * 60 * 60 * 1000);
+  slotStart.setUTCHours(9, 30, 0, 0);
+  const doctorSlot = await db.query(
+    `INSERT INTO doctor_availability_slots (doctor_id, slot_start, duration_minutes, created_by_phone)
+     VALUES ($1,$2,30,$3) RETURNING id`,
+    [doctorId, slotStart.toISOString(), DOCTOR_PHONE]
+  );
+  const slotId = doctorSlot.rows[0].id;
   const hospital = await db.query(
     `INSERT INTO hospitals (name, address, city, state, latitude, longitude, phone, emergency_available, active)
      VALUES ('CI E2E Hospital', 'Test Address', 'Delhi', 'Delhi', 28.6139, 77.2090, '01100000000', TRUE, TRUE)
@@ -108,7 +116,7 @@ test('real PostgreSQL patient journey E2E', async t => {
       patientName: 'CI E2E Patient',
       phone: PHONE,
       doctorId,
-      appointmentAt: new Date(Date.now() + 86400000).toISOString(),
+      slotId,
       mode: 'Video'
     })
   });
