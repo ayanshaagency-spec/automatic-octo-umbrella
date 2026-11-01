@@ -126,6 +126,59 @@ const server=http.createServer(async(req,res)=>{
     }
   });
 
+
+  const publicAvailabilityMatch=url.pathname.match(/^\/api\/doctors\/(\d+)\/availability$/);
+  if(publicAvailabilityMatch&&req.method==='GET'){
+    const doctorId=Number(publicAvailabilityMatch[1]);
+    if(!Number.isSafeInteger(doctorId)||doctorId<=0)return send(res,422,{error:'doctorId must be a positive integer'},req);
+    const fromRaw=url.searchParams.get('from');
+    const toRaw=url.searchParams.get('to');
+    const validDate=value=>typeof value==='string'&&/^\d{4}-\d{2}-\d{2}$/.test(value)&&!Number.isNaN(Date.parse(value+'T00:00:00Z'))&&new Date(value+'T00:00:00Z').toISOString().slice(0,10)===value;
+    if(!validDate(fromRaw)||!validDate(toRaw))return send(res,422,{error:'from and to are required YYYY-MM-DD dates'},req);
+    const from=new Date(fromRaw+'T00:00:00.000Z');
+    const to=new Date(toRaw+'T00:00:00.000Z');
+    if(to<=from||(to-from)>31*24*60*60*1000)return send(res,422,{error:'Date range must be 1 to 31 days'},req);
+    try{
+      const rows=await listPublicDoctorAvailability(doctorId,from.toISOString(),to.toISOString());
+      if(rows===null)return send(res,503,{error:'DATABASE_URL not configured'},req);
+      return send(res,200,rows,req);
+    }catch(e){return send(res,503,{error:'Unable to load doctor availability'},req);}
+  }
+  if(url.pathname==='/api/doctor/availability-slots'&&req.method==='GET'){
+    const doctor=verifyRoleToken(getAuthToken(req),'doctor');
+    if(!doctor)return send(res,401,{error:'Doctor authentication required'},req);
+    try{
+      const rows=await listDoctorAvailabilitySlots(doctor.sub,url.searchParams.get('from'),url.searchParams.get('to'));
+      if(rows===null)return send(res,503,{error:'DATABASE_URL not configured'},req);
+      return send(res,200,rows,req);
+    }catch(e){return send(res,503,{error:'Unable to load doctor availability'},req);}
+  }
+  if(url.pathname==='/api/doctor/availability-slots'&&req.method==='POST')return parseBody(req,async(err,data)=>{
+    const doctor=verifyRoleToken(getAuthToken(req),'doctor');
+    if(!doctor)return send(res,401,{error:'Doctor authentication required'},req);
+    if(err)return send(res,400,{error:'Invalid JSON'},req);
+    try{
+      const saved=await createDoctorAvailabilitySlot(doctor.sub,data);
+      if(!saved)return send(res,503,{error:'DATABASE_URL not configured'},req);
+      return send(res,201,saved,req);
+    }catch(e){
+      if(e.statusCode)return send(res,e.statusCode,{error:e.message},req);
+      return send(res,503,{error:'Unable to publish availability slot'},req);
+    }
+  });
+  const availabilityCancelMatch=url.pathname.match(/^\/api\/doctor\/availability-slots\/(\d+)$/);
+  if(availabilityCancelMatch&&req.method==='DELETE'){
+    const doctor=verifyRoleToken(getAuthToken(req),'doctor');
+    if(!doctor)return send(res,401,{error:'Doctor authentication required'},req);
+    try{
+      const saved=await cancelDoctorAvailabilitySlot(doctor.sub,Number(availabilityCancelMatch[1]));
+      return send(res,200,saved,req);
+    }catch(e){
+      if(e.statusCode)return send(res,e.statusCode,{error:e.message},req);
+      return send(res,503,{error:'Unable to cancel availability slot'},req);
+    }
+  }
+
   if(url.pathname==='/api/doctors'&&req.method==='GET'){try{const rows=await listDoctors();if(rows===null)return send(res,503,{error:'DATABASE_URL not configured'},req);return send(res,200,rows,req);}catch(e){return send(res,503,{error:'Unable to load doctors'},req);}}
   if(url.pathname==='/api/db/health'&&req.method==='GET'){try{const db=await getDb();if(!db)return send(res,503,{ok:false,error:'DATABASE_URL not configured'},req);await db.query('SELECT 1');return send(res,200,{ok:true,database:'connected'},req);}catch(e){return send(res,503,{ok:false,error:'Database unavailable'},req);}}
   if(url.pathname==='/api/auth/request-otp'&&req.method==='POST')return parseBody(req,async(err,data)=>{if(err||!data.phone)return send(res,400,{error:'phone is required'},req);try{const result=await issueOtp(data.phone);return send(res,200,{message:'OTP sent',...result},req);}catch(e){if(e instanceof AuthError)return send(res,e.statusCode,{error:e.message},req);return send(res,502,{error:'Unable to send OTP'},req);}});
