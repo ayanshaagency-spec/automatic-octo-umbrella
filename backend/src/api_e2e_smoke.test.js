@@ -115,6 +115,26 @@ test('Phase 5 API smoke/E2E contract', async t => {
   const adminSession = await adminLogin.json();
   assert.equal(adminSession.user.role, 'admin');
   assert.ok(adminSession.token);
+  const anonymousDoctorDirectory = await fetch(`${BASE_URL}/api/admin/doctors`);
+  assert.equal(anonymousDoctorDirectory.status, 401);
+  const adminDoctorDirectory = await fetch(`${BASE_URL}/api/admin/doctors`, {
+    headers: { Authorization: `Bearer ${adminSession.token}` }
+  });
+  assert.equal(adminDoctorDirectory.status, 503);
+  assert.equal((await adminDoctorDirectory.json()).error, 'DATABASE_URL not configured');
+  const invalidDoctor = await fetch(`${BASE_URL}/api/admin/doctors`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${adminSession.token}` },
+    body: JSON.stringify({ name: 'A', specialty: '', phone: '123' })
+  });
+  assert.equal(invalidDoctor.status, 422);
+  const validDoctorWithoutDatabase = await fetch(`${BASE_URL}/api/admin/doctors`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${adminSession.token}` },
+    body: JSON.stringify({ name: 'Dr Test', specialty: 'General Medicine', phone: '+919876543210' })
+  });
+  assert.equal(validDoctorWithoutDatabase.status, 503);
+  assert.equal((await validDoctorWithoutDatabase.json()).error, 'DATABASE_URL not configured');
   const noAdminAuth = await fetch(`${BASE_URL}/api/admin/appointments`);
   assert.equal(noAdminAuth.status, 401);
   assert.equal((await noAdminAuth.json()).error, 'Admin authentication required');
