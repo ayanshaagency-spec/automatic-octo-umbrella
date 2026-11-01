@@ -8,12 +8,16 @@ CREATE TABLE IF NOT EXISTS family_members (
   relationship VARCHAR(24) NOT NULL CHECK (relationship IN ('child','parent','spouse','sibling','other')),
   date_of_birth DATE NOT NULL,
   phone VARCHAR(30),
-  consent_status VARCHAR(32) NOT NULL CHECK (consent_status IN ('guardian_managed','pending_member_verification','member_verified','revoked')),
+  consent_status VARCHAR(32) NOT NULL CHECK (consent_status IN ('guardian_managed','pending_member_verification','member_verified','declined','revoked')),
   access_scopes TEXT[] NOT NULL DEFAULT ARRAY[]::TEXT[],
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   revoked_at TIMESTAMPTZ
 );
+
+ALTER TABLE family_members DROP CONSTRAINT IF EXISTS family_members_consent_status_check;
+ALTER TABLE family_members ADD CONSTRAINT family_members_consent_status_check
+  CHECK (consent_status IN ('guardian_managed','pending_member_verification','member_verified','declined','revoked'));
 
 CREATE INDEX IF NOT EXISTS family_members_owner_idx
   ON family_members(owner_patient_id, created_at DESC);
