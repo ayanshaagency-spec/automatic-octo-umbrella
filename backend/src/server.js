@@ -4,7 +4,7 @@ const path = require('path');
 const PORT = process.env.PORT || 3000;
 const { issueOtp, verifyOtp, createToken, verifyToken, AuthError } = require('./auth');
 const { getDb } = require('./db');
-const { listDoctors, listAppointments, updateAppointmentStatus, createAppointment, getDoctorByPhone, listDoctorAppointments, updateDoctorAppointmentStatus } = require('./repository');
+const { listDoctors, listAdminDoctors, createDoctor, listAppointments, updateAppointmentStatus, createAppointment, getDoctorByPhone, listDoctorAppointments, updateDoctorAppointmentStatus } = require('./repository');
 const { listPrescriptions, createPrescription, listHealthRecords, createHealthRecord } = require('./phase3_repository');
 const { listLabOrders, createLabOrder, updateLabOrderStatus } = require('./phase4_repository');
 const { listPayments, getPaymentById, setProviderOrderId, createPayment, updatePaymentStatus } = require('./phase5_payment_repository');
@@ -118,6 +118,19 @@ const server=http.createServer(async(req,res)=>{
   if(url.pathname==='/api/doctor/appointments'&&req.method==='GET'){const doctor=verifyRoleToken(getAuthToken(req),'doctor');if(!doctor)return send(res,401,{error:'Doctor authentication required'},req);try{const rows=await listDoctorAppointments(doctor.sub);if(rows===null)return send(res,503,{error:'DATABASE_URL not configured'},req);return send(res,200,rows,req);}catch(e){return send(res,503,{error:'Unable to load doctor appointments'},req);}}
   const doctorStatusMatch=url.pathname.match(/^\/api\/doctor\/appointments\/(\d+)\/status$/);
   if(doctorStatusMatch&&req.method==='PATCH')return parseBody(req,async(err,data)=>{const doctor=verifyRoleToken(getAuthToken(req),'doctor');if(!doctor)return send(res,401,{error:'Doctor authentication required'},req);if(err)return send(res,400,{error:'Invalid JSON'},req);try{const saved=await updateDoctorAppointmentStatus(Number(doctorStatusMatch[1]),doctor.sub,data.status);return send(res,200,saved,req);}catch(e){if(e.statusCode)return send(res,e.statusCode,{error:e.message},req);return send(res,503,{error:'Unable to update doctor appointment'},req);}});
+  if(url.pathname==='/api/admin/doctors'&&req.method==='GET'){
+    if(!requireAdmin(req,res))return;
+    try{const rows=await listAdminDoctors();if(rows===null)return send(res,503,{error:'DATABASE_URL not configured'},req);return send(res,200,rows,req);}
+    catch(e){return send(res,503,{error:'Unable to load doctors'},req);}
+  }
+  if(url.pathname==='/api/admin/doctors'&&req.method==='POST'){
+    if(!requireAdmin(req,res))return;
+    return parseBody(req,async(err,data)=>{
+      if(err)return send(res,400,{error:'Invalid JSON'},req);
+      try{const saved=await createDoctor(data);if(saved)return send(res,201,saved,req);return send(res,503,{error:'DATABASE_URL not configured'},req);}
+      catch(e){if(e.statusCode)return send(res,e.statusCode,{error:e.message},req);return send(res,503,{error:'Unable to register doctor'},req);}
+    });
+  }
   if(url.pathname==='/api/admin/login'&&req.method==='POST')return parseBody(req,(err,data)=>{if(err)return send(res,400,{error:'Invalid JSON'},req);try{if(!verifyAdminCredentials(data.email,data.password))return send(res,401,{error:'Invalid admin credentials'},req);return send(res,200,{token:createAdminToken(data.email),user:{email:String(data.email).trim().toLowerCase(),role:'admin'}},req);}catch(e){if(e instanceof AuthError)return send(res,e.statusCode,{error:e.message},req);return send(res,503,{error:'Unable to create admin session'},req);}});
   if(url.pathname==='/api/admin/appointments'&&req.method==='GET'){if(!requireAdmin(req,res))return;try{const rows=await listAppointments();if(rows===null)return send(res,503,{error:'DATABASE_URL not configured'},req);return send(res,200,rows,req);}catch(e){return send(res,503,{error:'Unable to load admin appointments'},req);}}
   if(url.pathname==='/api/emergency'&&req.method==='GET')return send(res,200,emergencyResponse(),req);
