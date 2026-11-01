@@ -197,27 +197,20 @@ async function createAppointment(data) {
   const db = await getDb();
   if (!db) return null;
   const doctorId = Number(data.doctorId);
-  if (!Number.isSafeInteger(doctorId) || doctorId <= 0) throw httpError('doctorId must be a valid positive integer', 422);
+  if (!Number.isSafeInteger(doctorId) || doctorId <= 0) {
+    throw httpError('doctorId must be a valid positive integer', 422);
+  }
   const mode = data.mode || 'Video';
-  if (!['Video', 'In-clinic'].includes(mode)) throw httpError('mode must be Video or In-clinic', 422);
+  if (!['Video', 'In-clinic'].includes(mode)) {
+    throw httpError('mode must be Video or In-clinic', 422);
+  }
   if (typeof data.patientName !== 'string' || data.patientName.trim().length < 2 || data.patientName.trim().length > 120) {
     throw httpError('patientName must be between 2 and 120 characters', 422);
   }
 
-  let familyMemberId = null;
-  if (data.familyMemberId != null) {
-    const { rows } = await db.query(
-      `SELECT fm.id
-         FROM family_members fm
-         JOIN patients owner ON owner.id = fm.owner_patient_id
-        WHERE fm.id = $1 AND owner.phone = $2
-          AND fm.revoked_at IS NULL
-          AND fm.consent_status IN ('guardian_managed','member_verified')
-          AND 'appointments' = ANY(fm.access_scopes)`,
-      [Number(data.familyMemberId), data.phone]
-    );
-    if (!rows.length) throw httpError('Family-member appointment permission is not granted', 403);
-    familyMemberId = Number(rows[0].id);
+  const familyMemberId = data.familyMemberId == null ? null : Number(data.familyMemberId);
+  if (familyMemberId !== null && (!Number.isSafeInteger(familyMemberId) || familyMemberId <= 0)) {
+    throw httpError('familyMemberId must be a valid positive integer', 422);
   }
 
   const requestedSlotId = data.slotId == null ? null : Number(data.slotId);
@@ -230,49 +223,80 @@ async function createAppointment(data) {
     if (Number.isNaN(parsed.getTime())) throw httpError('appointmentAt must be a valid date', 422);
     requestedStart = parsed.toISOString();
   }
+  if (requestedSlotId === null && requestedStart === null) {
+    throw httpError('A doctor-published availability slot is required', 422);
+  }
 
-  let rows;
+  let result;
   try {
-    ({ rows } = await db.query(
-    `WITH selected_slot AS MATERIALIZED (
-       SELECT s.id, s.doctor_id, s.slot_start
-         FROM doctor_availability_slots s
-        WHERE s.doctor_id = $3
-          AND s.cancelled_at IS NULL
-          AND s.slot_start > NOW()
-          AND (
-            ($4::bigint IS NOT NULL AND s.id = $4)
-            OR ($4::bigint IS NULL AND s.slot_start = $5::timestamptz)
-          )
-          AND NOT EXISTS (
-            SELECT 1 FROM appointments existing
-             WHERE existing.slot_id = s.id AND existing.status <> 'cancelled'
-          )
-        FOR UPDATE
-     ),
-     patient AS (
-       INSERT INTO patients (name, phone)
-       SELECT $1, $2 FROM selected_slot
-       ON CONFLICT (phone) DO UPDATE SET name = EXCLUDED.name
-       RETURNING id
-     ),
-     booked AS (
-       INSERT INTO appointments
-         (patient_id, doctor_id, appointment_at, mode, slot_id, family_member_id)
-       SELECT patient.id, selected_slot.doctor_id, selected_slot.slot_start,
-              $6, selected_slot.id, $7
-         FROM patient CROSS JOIN selected_slot
-       RETURNING id, patient_id, doctor_id, appointment_at, mode, status, slot_id, family_member_id
-     )
-     SELECT * FROM booked`,
-    [data.patientName.trim(), data.phone, doctorId, requestedSlotId, requestedStart, mode, familyMemberId]
-    ));
+    result = await db.query(
+      `WITH family_guard AS MATERIALIZED (
+         SELECT fm.id
+           FROM family_members fm
+           JOIN patients owner ON owner.id = fm.owner_patient_id
+          WHERE $7::bigint IS NOT NULL
+            AND fm.id = $7
+            AND owner.phone = $2
+            AND fm.revoked_at IS NULL
+            AND fm.consent_status IN ('guardian_managed','member_verified')
+            AND 'appointments' = ANY(fm.access_scopes)
+          FOR UPDATE OF fm
+       ),
+       selected_slot AS MATERIALIZED (
+         SELECT s.id, s.doctor_id, s.slot_start
+           FROM doctor_availability_slots s
+          WHERE s.doctor_id = $3
+            AND s.cancelled_at IS NULL
+            AND s.slot_start > NOW()
+            AND (
+              ($4::bigint IS NOT NULL AND s.id = $4)
+              OR ($4::bigint IS NULL AND s.slot_start = $5::timestamptz)
+            )
+            AND NOT EXISTS (
+              SELECT 1 FROM appointments existing
+               WHERE existing.slot_id = s.id AND existing.status <> 'cancelled'
+            )
+          FOR UPDATE OF s
+       ),
+       patient AS (
+         INSERT INTO patients (name, phone)
+         SELECT $1, $2
+           FROM selected_slot
+          WHERE $7::bigint IS NULL OR EXISTS (SELECT 1 FROM family_guard)
+         ON CONFLICT (phone) DO UPDATE SET name = EXCLUDED.name
+         RETURNING id
+       ),
+       booked AS (
+         INSERT INTO appointments
+           (patient_id, doctor_id, appointment_at, mode, slot_id, family_member_id)
+         SELECT patient.id, selected_slot.doctor_id, selected_slot.slot_start,
+                $6, selected_slot.id, $7
+           FROM patient CROSS JOIN selected_slot
+         RETURNING id, patient_id, doctor_id, appointment_at, mode, status, slot_id, family_member_id
+       ),
+       status AS (
+         SELECT
+           ($7::bigint IS NULL OR EXISTS (SELECT 1 FROM family_guard)) AS family_allowed,
+           EXISTS (SELECT 1 FROM selected_slot) AS slot_available
+       )
+       SELECT booked.*, status.family_allowed, status.slot_available
+         FROM status
+         LEFT JOIN booked ON TRUE`,
+      [data.patientName.trim(), data.phone, doctorId, requestedSlotId, requestedStart, mode, familyMemberId]
+    );
   } catch (error) {
-    if (error.code === '23505') throw httpError('Selected availability slot was booked by another patient', 409);
+    if (error.code === '23505') {
+      throw httpError('Selected availability slot was booked by another patient', 409);
+    }
     throw error;
   }
-  if (!rows.length) throw httpError('Selected availability slot is no longer available', 409);
-  return rows[0];
+
+  const row = result.rows[0];
+  if (!row.family_allowed) throw httpError('Family-member appointment permission is not granted', 403);
+  if (!row.slot_available || !row.id) throw httpError('Selected availability slot is no longer available', 409);
+  delete row.family_allowed;
+  delete row.slot_available;
+  return row;
 }
 
 module.exports = {
