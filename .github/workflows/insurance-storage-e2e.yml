@@ -2,7 +2,7 @@ name: Insurance Private Storage + Malware E2E
 
 on:
   push:
-    branches: ["feat/phase8-health-insurance-documents"]
+    branches: ["feat/phase7-pharmacy-railway-aligned"]
     paths:
       - "backend/src/insurance_*"
       - "backend/db/migrations/004_phase8_health_insurance_documents.sql"
