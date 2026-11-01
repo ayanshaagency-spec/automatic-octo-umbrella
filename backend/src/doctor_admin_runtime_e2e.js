@@ -3,7 +3,7 @@
 const assert = require('node:assert/strict');
 
 async function main() {
-  if (process.env.DOCTOR_ADMIN_E2E_CI !== '1') {
+  if (process.env.GITHUB_ACTIONS !== 'true' || process.env.DOCTOR_ADMIN_E2E_CI !== '1') {
     throw new Error('Doctor admin E2E is restricted to the CI disposable database.');
   }
   const databaseUrl = new URL(process.env.DATABASE_URL || '');
