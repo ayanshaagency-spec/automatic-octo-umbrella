@@ -1,5 +1,51 @@
 const { getDb } = require('./db');
 
+async function listAdminDoctors() {
+  const db = await getDb();
+  if (!db) return null;
+  const { rows } = await db.query(
+    'SELECT id, name, specialty, phone, created_at FROM doctors ORDER BY name, id'
+  );
+  return rows;
+}
+
+async function createDoctor(data) {
+  const name = typeof data?.name === 'string' ? data.name.trim() : '';
+  const specialty = typeof data?.specialty === 'string' ? data.specialty.trim() : '';
+  const phone = typeof data?.phone === 'string' ? data.phone.trim() : '';
+  if (name.length < 2 || name.length > 120) {
+    const error = new Error('name must be between 2 and 120 characters');
+    error.statusCode = 422;
+    throw error;
+  }
+  if (specialty.length < 2 || specialty.length > 120) {
+    const error = new Error('specialty must be between 2 and 120 characters');
+    error.statusCode = 422;
+    throw error;
+  }
+  if (!/^\\+?[1-9]\\d{9,14}$/.test(phone)) {
+    const error = new Error('phone must be a valid international phone number');
+    error.statusCode = 422;
+    throw error;
+  }
+  const db = await getDb();
+  if (!db) return null;
+  try {
+    const { rows } = await db.query(
+      'INSERT INTO doctors (name, specialty, phone) VALUES ($1,$2,$3) RETURNING id, name, specialty, phone, created_at',
+      [name, specialty, phone]
+    );
+    return rows[0];
+  } catch (cause) {
+    if (cause && cause.code === '23505') {
+      const error = new Error('A doctor is already registered with this phone number');
+      error.statusCode = 409;
+      throw error;
+    }
+    throw cause;
+  }
+}
+
 async function listDoctors() {
   const db = await getDb();
   if (!db) return null;
@@ -138,4 +184,4 @@ async function updateDoctorAppointmentStatus(id, doctorPhone, status) {
   return rows[0];
 }
 
-module.exports = { listDoctors, listAppointments, updateAppointmentStatus, createAppointment, getDoctorByPhone, listDoctorAppointments, updateDoctorAppointmentStatus };
+module.exports = { listDoctors, listAdminDoctors, createDoctor, listAppointments, updateAppointmentStatus, createAppointment, getDoctorByPhone, listDoctorAppointments, updateDoctorAppointmentStatus };
