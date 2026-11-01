@@ -16,6 +16,78 @@ function addMedicine(values = {}) {
   row.innerHTML = `<div class="medicine-row"><input name="medicineName" required placeholder="Medicine name" value="${esc(values.medicineName)}"><input name="dosage" required placeholder="Dosage" value="${esc(values.dosage)}"><input name="frequency" required placeholder="Frequency" value="${esc(values.frequency)}"><input name="duration" required placeholder="Duration" value="${esc(values.duration)}"></div><input name="instructions" placeholder="Instructions" value="${esc(values.instructions)}"><button type="button" class="secondary small remove">Remove</button>`;
   row.querySelector('.remove').onclick = () => row.remove(); medicinesEl.appendChild(row);
 }
+
+const availabilityList = document.getElementById('availabilityList');
+const availabilityForm = document.getElementById('availabilityForm');
+const availabilityMessage = document.getElementById('availabilityMessage');
+
+async function loadAvailability() {
+  if (!availabilityList) return;
+  availabilityList.innerHTML = '<div class="empty">Loading schedule…</div>';
+  try {
+    const res = await fetch(`${API}/api/doctor/availability-slots`, {headers: authHeaders()});
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.error || 'Availability API unavailable');
+    const items = Array.isArray(data) ? data : [];
+    availabilityList.innerHTML = items.length ? items.map(slot => {
+      const isBooked = slot.status === 'booked';
+      return `<div class="appointment"><div><strong>${esc(new Date(slot.slot_start).toLocaleString())}</strong><div class="meta">30 minutes · ${isBooked ? 'Booked' : 'Available'}</div></div><div class="appointment-actions"><span class="tag">${isBooked ? 'Booked' : 'Available'}</span><button type="button" class="secondary small" data-cancel-slot="${esc(slot.id)}" ${isBooked ? 'disabled' : ''}>Cancel</button></div></div>`;
+    }).join('') : '<div class="empty">No availability published yet.</div>';
+    availabilityList.querySelectorAll('button[data-cancel-slot]').forEach(button => {
+      button.onclick = () => cancelAvailabilitySlot(button.dataset.cancelSlot, button);
+    });
+  } catch (error) {
+    availabilityList.innerHTML = `<div class="empty">${esc(error.message)}</div>`;
+  }
+}
+
+async function cancelAvailabilitySlot(id, button) {
+  button.disabled = true;
+  try {
+    const res = await fetch(`${API}/api/doctor/availability-slots/${encodeURIComponent(id)}`, {
+      method: 'DELETE',
+      headers: authHeaders()
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.error || 'Could not cancel slot');
+    await loadAvailability();
+  } catch (error) {
+    availabilityMessage.className = 'message error';
+    availabilityMessage.textContent = error.message;
+    button.disabled = false;
+  }
+}
+
+availabilityForm.addEventListener('submit', async event => {
+  event.preventDefault();
+  availabilityMessage.className = 'message';
+  availabilityMessage.textContent = 'Publishing slot…';
+  const formData = new FormData(availabilityForm);
+  const startsAt = new Date(formData.get('startsAt'));
+  if (Number.isNaN(startsAt.getTime())) {
+    availabilityMessage.className = 'message error';
+    availabilityMessage.textContent = 'Select a valid date and time.';
+    return;
+  }
+  try {
+    const res = await fetch(`${API}/api/doctor/availability-slots`, {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json', ...authHeaders()},
+      body: JSON.stringify({startsAt: startsAt.toISOString(), durationMinutes: 30})
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.error || 'Could not publish availability');
+    availabilityMessage.className = 'message success';
+    availabilityMessage.textContent = 'Availability published.';
+    availabilityForm.reset();
+    await loadAvailability();
+  } catch (error) {
+    availabilityMessage.className = 'message error';
+    availabilityMessage.textContent = error.message;
+  }
+});
+document.getElementById('refreshAvailability').onclick = loadAvailability;
+
 async function loadAppointments() {
   try {
     const res = await fetch(`${API}/api/doctor/appointments`,{headers:authHeaders()}); if (!res.ok) throw new Error('Appointment API unavailable');
@@ -41,5 +113,5 @@ document.getElementById('addMedicine').onclick=()=>addMedicine();
 document.getElementById('refreshBtn').onclick=loadAppointments;
 document.getElementById('logoutBtn').onclick=()=>{sessionStorage.removeItem(TOKEN_KEY);location.reload();};
 document.getElementById('requestDoctorOtp').onclick=async()=>{const phone=document.getElementById('doctorPhone').value.trim();const m=document.getElementById('loginMessage');try{const res=await fetch(API+'/api/doctor/auth/request-otp',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({phone})});const data=await res.json().catch(()=>({}));if(!res.ok)throw new Error(data.error||'Unable to send OTP');document.getElementById('otpBox').hidden=false;m.className='message success';m.textContent=data.devOtp?'Development OTP: '+data.devOtp:'OTP sent. Check the registered channel.';}catch(e){m.className='message error';m.textContent=e.message;}};
-document.getElementById('verifyDoctorOtp').onclick=async()=>{const phone=document.getElementById('doctorPhone').value.trim(),otp=document.getElementById('doctorOtp').value.trim(),m=document.getElementById('loginMessage');try{const res=await fetch(API+'/api/doctor/auth/verify-otp',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({phone,otp})});const data=await res.json().catch(()=>({}));if(!res.ok)throw new Error(data.error||'Unable to verify OTP');sessionStorage.setItem(TOKEN_KEY,data.token);doctorLogin.hidden=true;workspace.hidden=false;addMedicine();loadAppointments();}catch(e){m.className='message error';m.textContent=e.message;}};
-if(token()){doctorLogin.hidden=true;workspace.hidden=false;addMedicine();loadAppointments();}
+document.getElementById('verifyDoctorOtp').onclick=async()=>{const phone=document.getElementById('doctorPhone').value.trim(),otp=document.getElementById('doctorOtp').value.trim(),m=document.getElementById('loginMessage');try{const res=await fetch(API+'/api/doctor/auth/verify-otp',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({phone,otp})});const data=await res.json().catch(()=>({}));if(!res.ok)throw new Error(data.error||'Unable to verify OTP');sessionStorage.setItem(TOKEN_KEY,data.token);doctorLogin.hidden=true;workspace.hidden=false;addMedicine();loadAppointments();loadAvailability();}catch(e){m.className='message error';m.textContent=e.message;}};
+if(token()){doctorLogin.hidden=true;workspace.hidden=false;addMedicine();loadAppointments();loadAvailability();}
