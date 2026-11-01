@@ -1,4 +1,4 @@
-const API = (window.AYAN_SHA_API_URL || 'http://localhost:3000').replace(/\/$/, '');
+const API = (window.AYAN_SHA_API_URL || window.location.origin).replace(/\/$/, '');
 const TOKEN_KEY='ayansha_doctor_token';
 const token=()=>sessionStorage.getItem(TOKEN_KEY);
 const authHeaders=()=>token()?{Authorization:'Bearer '+token()}:{};
