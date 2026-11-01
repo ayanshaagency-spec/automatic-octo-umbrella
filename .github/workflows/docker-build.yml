@@ -50,6 +50,7 @@ jobs:
           grep -q 'searchStores' /tmp/pharmacy-app.js
           curl --fail --silent http://127.0.0.1:3000/admin -o /tmp/admin.html
           grep -q 'Ayansha Health Care Admin' /tmp/admin.html
+          grep -q 'Register a doctor' /tmp/admin.html
           grep -q 'Register a pharmacy' /tmp/admin.html
           grep -q 'Pharmacy orders' /tmp/admin.html
           curl --fail --silent http://127.0.0.1:3000/doctor -o /tmp/doctor.html
