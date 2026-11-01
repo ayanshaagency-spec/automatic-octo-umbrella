@@ -73,11 +73,12 @@ async function handleInsuranceRoute(req, res, url, context) {
   if (pathname === '/api/insurance/status' && req.method === 'GET') {
     const storageConfigured = storage.isStorageConfigured();
     const scannerConfigured = scanner.isScannerConfigured();
-    return send(200, {
+    send(200, {
       storageConfigured,
       scannerConfigured,
       uploadsEnabled: storageConfigured && scannerConfigured
     });
+    return true;
   }
 
   const patientCollection = pathname === '/api/insurance/policies';
