@@ -9,21 +9,28 @@ const BASE_URL = 'http://127.0.0.1:' + PORT;
 const ADMIN_EMAIL = 'insurance-ci-admin@example.test';
 const ADMIN_PASSWORD = 'ci-only-insurance-admin-password';
 const JWT_SECRET = 'insurance-ci-jwt-secret-long-enough-for-hs256';
+let server = null;
+let output = '';
 
 async function request(route, options = {}) {
   const headers = { ...(options.headers || {}) };
   if (options.body !== undefined) headers['Content-Type'] = 'application/json';
-  const response = await fetch(BASE_URL + route, {
-    method: options.method || 'GET',
-    headers,
-    body: options.body === undefined ? undefined : JSON.stringify(options.body)
-  });
+  let response;
+  try {
+    response = await fetch(BASE_URL + route, {
+      method: options.method || 'GET',
+      headers,
+      body: options.body === undefined ? undefined : JSON.stringify(options.body)
+    });
+  } catch (error) {
+    throw new Error(`Request to ${route} failed (serverExit=${server?.exitCode}): ${error.message}\n${output}`);
+  }
   const body = await response.json().catch(() => ({}));
   return { status: response.status, body };
 }
 
 test('insurance endpoints enforce patient/admin auth and fail closed without private storage', async t => {
-  const server = spawn(process.execPath, ['src/server.js'], {
+  server = spawn(process.execPath, ['src/server.js'], {
     cwd: __dirname + '/..',
     env: {
       ...process.env,
@@ -44,7 +51,7 @@ test('insurance endpoints enforce patient/admin auth and fail closed without pri
     stdio: ['ignore', 'pipe', 'pipe']
   });
   t.after(() => server.kill());
-  let output = '';
+  output = '';
   server.stdout.on('data', chunk => { output += chunk.toString(); });
   server.stderr.on('data', chunk => { output += chunk.toString(); });
   let ready = false;
