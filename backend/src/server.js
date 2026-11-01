@@ -5,7 +5,7 @@ const PORT = process.env.PORT || 3000;
 const { issueOtp, verifyOtp, createToken, verifyToken, AuthError } = require('./auth');
 const { getDb } = require('./db');
 const { listDoctors, listAdminDoctors, createDoctor, listAppointments, updateAppointmentStatus, getDoctorByPhone, listDoctorAppointments, updateDoctorAppointmentStatus } = require('./repository');
-const { listFamilyMembers, createFamilyMember, revokeFamilyMember, verifyAdultFamilyMemberConsent, createDoctorAvailabilitySlot, listDoctorAvailabilitySlots, listPublicDoctorAvailability, cancelDoctorAvailabilitySlot, createAppointment } = require('./family_availability_repository');
+const { listFamilyMembers, createFamilyMember, revokeFamilyMember, listFamilyConsentRequests, verifyAdultFamilyMemberConsent, createDoctorAvailabilitySlot, listDoctorAvailabilitySlots, listPublicDoctorAvailability, cancelDoctorAvailabilitySlot, createAppointment } = require('./family_availability_repository');
 const { listPrescriptions, createPrescription, listHealthRecords, createHealthRecord } = require('./phase3_repository');
 const { listLabOrders, createLabOrder, updateLabOrderStatus } = require('./phase4_repository');
 const { listPayments, getPaymentById, setProviderOrderId, createPayment, updatePaymentStatus } = require('./phase5_payment_repository');
@@ -112,6 +112,14 @@ const server=http.createServer(async(req,res)=>{
       if(e.statusCode)return send(res,e.statusCode,{error:e.message},req);
       return send(res,503,{error:'Unable to revoke family profile'},req);
     }
+  }
+  if(url.pathname==='/api/family-consent-requests'&&req.method==='GET'){
+    const auth=requireAuth(req,res);if(!auth)return;
+    try{
+      const rows=await listFamilyConsentRequests(auth.sub);
+      if(rows===null)return send(res,503,{error:'DATABASE_URL not configured'},req);
+      return send(res,200,rows,req);
+    }catch(e){return send(res,503,{error:'Unable to load consent requests'},req);}
   }
   const familyConsentMatch=url.pathname.match(/^\/api\/family-members\/(\d+)\/verify-consent$/);
   if(familyConsentMatch&&req.method==='POST')return parseBody(req,async(err,data)=>{
