@@ -76,6 +76,9 @@ async function main() {
     const migrationPath = path.join(__dirname, '..', 'db', 'migrations', '008_phase7_pharmacy.sql');
     await pool.query(fs.readFileSync(migrationPath, 'utf8'));
 
+    const familyAvailabilityMigration = path.join(__dirname, '..', 'db', 'migrations', '010_family_profiles_doctor_availability.sql');
+    await pool.query(fs.readFileSync(familyAvailabilityMigration, 'utf8'));
+
     const hospitalOne = (await pool.query(
       "INSERT INTO hospitals (name, address, city, state, active) VALUES ('CI Hospital A', '1 Test Road', 'Faridabad', 'Haryana', TRUE) RETURNING id"
     )).rows[0];
