@@ -224,7 +224,9 @@ async function main() {
     method: 'DELETE', headers: doctorHeaders
   });
   expectStatus(cancelledSlot, 200, 'Doctor can cancel an unbooked slot');
-  const publicAfterCancel = await request('/api/doctors/' + doctorCreated.body.id + '/availability?from=' + from + '&to=' + to);
+  const slotFourFrom = slotFour.startsAt.toISOString().slice(0, 10);
+  const slotFourTo = new Date(slotFour.startsAt.getTime() + 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+  const publicAfterCancel = await request('/api/doctors/' + doctorCreated.body.id + '/availability?from=' + slotFourFrom + '&to=' + slotFourTo);
   expectStatus(publicAfterCancel, 200, 'Public availability after cancellation');
   assert.equal(publicAfterCancel.body.some(row => Number(row.id) === slotFour.id), false,
     'Cancelled slots must not appear in the public directory');
@@ -248,7 +250,7 @@ async function main() {
   expectStatus(doctorSlots, 200, 'Doctor can inspect own schedule');
   assert.ok(doctorSlots.body.some(slot => Number(slot.id) === slotOne.id && slot.status === 'booked'));
   assert.equal(doctorSlots.body.some(slot => Number(slot.id) === slotFour.id), false,
-    'Cancelled slots must not appear in the doctor's active schedule');
+    'Cancelled slots must not appear in the doctor active schedule');
   assert.ok(doctorSlots.body.some(slot => Number(slot.id) === slotFive.id && slot.status === 'available'));
 
   console.log('Family + availability PostgreSQL E2E passed: owner scoping, minor guardian access, adult OTP consent, consent scope limit, revocation, doctor-only slot publishing, unique slots, published-only visibility, concurrent double-booking protection and cancellation rules.');
