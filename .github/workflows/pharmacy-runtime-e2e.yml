@@ -83,6 +83,20 @@ jobs:
           JWT_SECRET: pharmacy-ci-jwt-secret-long-enough-for-hs256
           PHARMACY_E2E_CI: '1'
         run: node src/auth_persistence_e2e.js
+      - name: Verify doctor admin onboarding against isolated PostgreSQL
+        working-directory: backend
+        env:
+          NODE_ENV: test
+          DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/ayansha_healthcare
+          ADMIN_EMAIL: pharmacy-ci-admin@example.test
+          ADMIN_PASSWORD: ci-only-pharmacy-admin-password
+          JWT_SECRET: pharmacy-ci-jwt-secret-long-enough-for-hs256
+          OTP_PROVIDER_URL: ''
+          OTP_PROVIDER_TOKEN: ''
+          PHARMACY_E2E_BASE_URL: http://127.0.0.1:3918
+          DOCTOR_ADMIN_E2E_CI: '1'
+        run: node src/doctor_admin_runtime_e2e.js
+
 
       - name: Verify runtime database connection
         run: |
