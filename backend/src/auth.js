@@ -1,5 +1,6 @@
 const crypto = require('crypto');
 const { saveOtpChallenge, consumeOtpChallenge, deleteOtpChallenge } = require('./otp_store');
+const { isMsg91Configured, sendMsg91Otp } = require('./msg91_sms');
 
 const otpStore = new Map();
 const otpRequestStore = new Map();
@@ -102,6 +103,18 @@ function verifyToken(token) {
 }
 
 async function sendOtp(phone, otp) {
+  const provider = (process.env.OTP_PROVIDER || '').trim().toLowerCase() || 'generic';
+  if (provider === 'msg91') {
+    if (!isMsg91Configured()) throw new AuthError('MSG91 OTP provider is not configured');
+    try {
+      await sendMsg91Otp({ phone, otp });
+      return { delivery: 'provider_accepted' };
+    } catch (error) {
+      throw new AuthError('MSG91 OTP delivery failed', error.statusCode === 422 ? 422 : 502);
+    }
+  }
+  if (provider !== 'generic') throw new AuthError('Unsupported OTP provider configuration');
+
   const providerUrl = (process.env.OTP_PROVIDER_URL || '').trim();
   const accessToken = (process.env.OTP_PROVIDER_TOKEN || '').trim();
   if (!providerUrl || !accessToken) {
@@ -126,12 +139,12 @@ async function sendOtp(phone, otp) {
   const response = await fetch(parsedProviderUrl, {
     method: 'POST',
     headers: {
-      Authorization: `Bearer ${accessToken}`,
+      Authorization: 'Bearer ' + accessToken,
       'Content-Type': 'application/json'
     },
     body: JSON.stringify({
       to: String(phone),
-      message: `Your Ayansha Health Care verification code is ${otp}. It expires in 5 minutes.`
+      message: 'Your Ayansha Health Care verification code is ' + otp + '. It expires in 5 minutes.'
     }),
     signal: AbortSignal.timeout(8000)
   });
@@ -141,6 +154,16 @@ async function sendOtp(phone, otp) {
 
 function usesEphemeralOtpStore() {
   return process.env.NODE_ENV === 'development' || process.env.NODE_ENV === 'test';
+}
+
+function isOtpProviderConfigured() {
+  const provider = (process.env.OTP_PROVIDER || '').trim().toLowerCase() || 'generic';
+  if (provider === 'msg91') return isMsg91Configured();
+  if (provider !== 'generic') return false;
+  return Boolean(
+    (process.env.OTP_PROVIDER_URL || '').trim() &&
+    (process.env.OTP_PROVIDER_TOKEN || '').trim()
+  );
 }
 
 function hashPhone(phone) {
@@ -171,7 +194,7 @@ async function issueOtp(phone) {
     }
   }
 
-  if (!(process.env.OTP_PROVIDER_URL || '').trim() || !(process.env.OTP_PROVIDER_TOKEN || '').trim()) {
+  if (!isOtpProviderConfigured()) {
     throw new AuthError('OTP provider is not configured');
   }
 
