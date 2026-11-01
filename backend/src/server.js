@@ -33,7 +33,7 @@ const server=http.createServer(async(req,res)=>{
   if(req.method==='OPTIONS') return send(res,204,{},req);
   const url = new URL(req.url, `http://${req.headers.host || 'localhost'}`);
   const insuranceHandled = await handleInsuranceRoute(req, res, url, { send: (status, body) => send(res, status, body, req) });
-  if (insuranceHandled) return;
+  if (insuranceHandled || res.writableEnded) return;
   // Serve only the existing, fixed admin entry point. No user-controlled file path is accepted.
   if(req.method==='GET' && url.pathname==='/admin'){
     const adminFile=path.resolve(__dirname,'../../admin-panel/index.html');
