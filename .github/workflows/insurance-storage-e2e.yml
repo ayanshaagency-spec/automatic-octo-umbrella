@@ -1,0 +1,146 @@
+name: Insurance Private Storage + Malware E2E
+
+on:
+  push:
+    branches: ["feat/phase8-health-insurance-documents"]
+    paths:
+      - "backend/src/insurance_*"
+      - "backend/db/migrations/004_phase8_health_insurance_documents.sql"
+      - "backend/package.json"
+      - ".github/workflows/insurance-storage-e2e.yml"
+  pull_request:
+    branches: ["feat/phase6-emergency-hospitals"]
+    paths:
+      - "backend/src/insurance_*"
+      - "backend/db/migrations/004_phase8_health_insurance_documents.sql"
+      - "backend/package.json"
+      - ".github/workflows/insurance-storage-e2e.yml"
+
+jobs:
+  private-storage-malware-e2e:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: ayansha
+          POSTGRES_PASSWORD: ayansha
+          POSTGRES_DB: ayansha_healthcare
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd="pg_isready -U ayansha -d ayansha_healthcare"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=10
+    env:
+      DATABASE_URL: postgresql://ayansha:ayansha@localhost:5432/ayansha_healthcare
+      NODE_ENV: test
+      PORT: "3926"
+      JWT_SECRET: ci-only-insurance-private-storage-test-secret
+      ADMIN_EMAIL: insurance-ci-admin@example.test
+      ADMIN_PASSWORD: ci-only-insurance-admin-password
+      INSURANCE_PIPELINE_E2E: "1"
+      INSURANCE_S3_BUCKET: insurance-ci-documents
+      INSURANCE_S3_REGION: us-east-1
+      INSURANCE_S3_ACCESS_KEY_ID: insurance-ci-access
+      INSURANCE_S3_SECRET_ACCESS_KEY: insurance-ci-secret-test-only
+      INSURANCE_S3_ENDPOINT: http://127.0.0.1:9090
+      INSURANCE_S3_FORCE_PATH_STYLE: "true"
+      INSURANCE_CLAMAV_HOST: 127.0.0.1
+      INSURANCE_CLAMAV_PORT: "3310"
+      INSURANCE_CLAMAV_TIMEOUT_MS: "30000"
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: backend/package.json
+      - run: npm install
+      - run: psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f db/schema.sql
+      - run: npm run db:migrate
+      - name: Start disposable S3 API simulator (test-only)
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker run -d --name insurance-s3mock \
+            -p 127.0.0.1:9090:9090 \
+            adobe/s3mock:latest
+          for attempt in $(seq 1 90); do
+            if curl --silent --output /dev/null http://127.0.0.1:9090; then exit 0; fi
+            sleep 1
+          done
+          docker logs insurance-s3mock
+          exit 1
+      - name: Start private ClamAV malware scanner with CI-only signature
+        shell: bash
+        run: |
+          set -euo pipefail
+          printf '%s\n' 'Ayansha.Test.Quarantine:0:*:4159414E5348412D434C414D41562D544553542D494E464543544544' > "$RUNNER_TEMP/insurance-ci-test.ndb"
+          docker run -d --name insurance-clamav \
+            -p 127.0.0.1:3310:3310 \
+            -v "$RUNNER_TEMP/insurance-ci-test.ndb:/var/lib/clamav/ayansha-ci-test.ndb:rw" \
+            clamav/clamav:stable
+      - name: Verify the mounted CI signature with clamscan
+        shell: bash
+        run: |
+          set -euo pipefail
+          set +e
+          output="$(docker exec insurance-clamav sh -c "printf '%s' 'AYANSHA-CLAMAV-TEST-INFECTED' > /tmp/insurance-marker.txt && clamscan --database=/var/lib/clamav/ayansha-ci-test.ndb /tmp/insurance-marker.txt" 2>&1)"
+          status=$?
+          set -e
+          printf '%s\\n' "$output"
+          if [[ "$status" -ne 1 ]] || ! grep -Fq 'Ayansha.Test.Quarantine.UNOFFICIAL FOUND' <<<"$output"; then
+            echo "Mounted CI-only ClamAV signature did not match its test marker." >&2
+            exit 1
+          fi
+      - name: Wait for ClamAV signature database and scanner
+        shell: bash
+        run: |
+          node <<'NODE'
+          const { Readable } = require('node:stream');
+          const { scanStream } = require('./src/insurance_scanner');
+          const pause = ms => new Promise(resolve => setTimeout(resolve, ms));
+          (async () => {
+            let lastState = 'scanner unavailable';
+            for (let attempt = 0; attempt < 180; attempt += 1) {
+              try {
+                const clean = await scanStream(Readable.from([Buffer.from('Ayansha CI scanner readiness probe')]), { maxBytes: 1024 });
+                if (clean.status !== 'clean') {
+                  throw new Error('Expected clean readiness probe, got ' + clean.status);
+                }
+                const marker = await scanStream(Readable.from([Buffer.from('AYANSHA-CLAMAV-TEST-INFECTED')]), { maxBytes: 1024 });
+                if (marker.status === 'infected' && marker.signature.startsWith('Ayansha.Test.Quarantine')) {
+                  console.log('ClamAV is ready and detected the synthetic quarantine marker.');
+                  return;
+                }
+                if (marker.status !== 'clean') {
+                  throw new Error('Unexpected marker scan result: ' + marker.status + ' / ' + (marker.signature || 'no-signature'));
+                }
+                lastState = 'scanner is up but CI test signature is not loaded yet';
+              } catch (error) {
+                lastState = error.message;
+              }
+              await pause(1000);
+            }
+            throw new Error('ClamAV did not become ready with the test signature: ' + lastState);
+          })().catch(error => { console.error(error.message); process.exit(1); });
+          NODE
+      - name: Verify private uploads, clean scan, synthetic quarantine and blocked downloads
+        run: node --test src/insurance_pipeline_e2e.test.js
+      - name: Show disposable service logs on failure
+        if: failure()
+        working-directory: .
+        run: |
+          docker logs insurance-s3mock || true
+          docker logs insurance-clamav || true
+      - name: Stop disposable services
+        if: always()
+        working-directory: .
+        run: |
+          docker rm -f insurance-s3mock insurance-clamav >/dev/null 2>&1 || true
