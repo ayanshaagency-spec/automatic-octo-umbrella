@@ -82,7 +82,8 @@ async function verifyAdultFamilyMemberConsent(memberId, memberPhone, grantedScop
   const scopes = validateGrantedScopes(grantedScopes);
   const { rows } = await db.query(
     `UPDATE family_members
-        SET consent_status = 'member_verified', access_scopes = $3,
+        SET consent_status = CASE WHEN cardinality($3::text[]) > 0 THEN 'member_verified' ELSE 'declined' END,
+            access_scopes = $3,
             updated_at = NOW()
       WHERE id = $1 AND phone = $2
         AND consent_status = 'pending_member_verification'
@@ -250,7 +251,8 @@ async function createAppointment(data) {
         FOR UPDATE
      ),
      patient AS (
-       INSERT INTO patients (name, phone) VALUES ($1,$2)
+       INSERT INTO patients (name, phone)
+       SELECT $1, $2 FROM selected_slot
        ON CONFLICT (phone) DO UPDATE SET name = EXCLUDED.name
        RETURNING id
      ),
