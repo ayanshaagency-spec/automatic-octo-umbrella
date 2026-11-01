@@ -18,7 +18,14 @@ async function main() {
   if (!adminEmail || !adminPassword) throw new Error('CI-only admin credentials are required.');
 
   const request = async (path, options = {}) => {
-    const response = await fetch(`${baseUrl}${path}`, options);
+    const requestOptions = { ...options, headers: { ...(options.headers || {}) } };
+    if (requestOptions.body !== undefined && typeof requestOptions.body !== 'string') {
+      requestOptions.body = JSON.stringify(requestOptions.body);
+    }
+    if (requestOptions.body !== undefined && !requestOptions.headers['Content-Type']) {
+      requestOptions.headers['Content-Type'] = 'application/json';
+    }
+    const response = await fetch(`${baseUrl}${path}`, requestOptions);
     const body = await response.json().catch(() => ({}));
     return { status: response.status, body };
   };
