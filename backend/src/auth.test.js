@@ -140,7 +140,7 @@ test('MSG91 Flow provider sends the locally generated OTP using the configured t
     assert.equal(sentRequest.options.headers.authkey, 'test-msg91-auth-key');
     assert.equal(sentRequest.body.template_id, 'test-template-id');
     assert.equal(sentRequest.body.recipients[0].mobiles, '919111111111');
-    assert.match(sentRequest.body.recipients[0].otp, /^\\d{6}$/);
+    assert.match(sentRequest.body.recipients[0].otp, /^\d{6}$/);
     assert.equal(await verifyOtp(phone, sentRequest.body.recipients[0].otp), true);
     assert.equal(await verifyOtp(phone, sentRequest.body.recipients[0].otp), false, 'provider OTP remains single-use');
   } finally {
