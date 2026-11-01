@@ -39,6 +39,28 @@ const server=http.createServer(async(req,res)=>{
     }
     return send(res,503,{error:'Admin panel unavailable'},req);
   }
+  if(req.method==='GET' && (url.pathname==='/doctor' || url.pathname==='/doctor/')){
+    const doctorFile=path.resolve(__dirname,'../../doctor-panel/index.html');
+    if(fs.existsSync(doctorFile) && fs.statSync(doctorFile).isFile()){
+      res.writeHead(200,{'Content-Type':'text/html; charset=utf-8','X-Content-Type-Options':'nosniff','Cache-Control':'no-store'});
+      return fs.createReadStream(doctorFile).pipe(res);
+    }
+    return send(res,503,{error:'Doctor panel unavailable'},req);
+  }
+  if(req.method==='GET' && url.pathname.startsWith('/doctor/')){
+    const assetName=url.pathname.slice('/doctor/'.length);
+    const doctorAssets={
+      'app.js':{file:'app.js',type:'text/javascript; charset=utf-8'},
+      'health-record.js':{file:'health-record.js',type:'text/javascript; charset=utf-8'},
+      'styles.css':{file:'styles.css',type:'text/css; charset=utf-8'}
+    };
+    const asset=doctorAssets[assetName];
+    if(!asset) return send(res,404,{error:'Not found'},req);
+    const assetFile=path.resolve(__dirname,'../../doctor-panel',asset.file);
+    if(!fs.existsSync(assetFile) || !fs.statSync(assetFile).isFile()) return send(res,404,{error:'Not found'},req);
+    res.writeHead(200,{'Content-Type':asset.type,'X-Content-Type-Options':'nosniff','Cache-Control':'no-cache'});
+    return fs.createReadStream(assetFile).pipe(res);
+  }
   if(req.method==='GET' && (url.pathname==='/' || url.pathname.startsWith('/web/'))){
     const relative=url.pathname==='/'?'index.html':url.pathname.replace(/^\/web\//,'');
     const file=path.join(__dirname,'../../web',relative);
