@@ -22,7 +22,7 @@ input:focus,select:focus,button:focus-visible{outline:3px solid #5fc3ce66;outlin
 </head>
 <body>
 <main>
-<header><div><p class="eyebrow">Operations console</p><h1>Ayansha Health Care — Admin</h1><p class="muted">Appointments, pharmacy stores, catalogue, stock and order operations.</p></div><div class="top-actions"><span id="sessionLabel" class="muted">Signed out</span><button id="logout" class="secondary hidden" type="button">Log out</button></div></header>
+<header><div><p class="eyebrow">Operations console</p><h1>Ayansha Health Care — Admin</h1><p class="muted">Doctor access, appointments, pharmacy stores, catalogue, stock and order operations.</p></div><div class="top-actions"><span id="sessionLabel" class="muted">Signed out</span><button id="logout" class="secondary hidden" type="button">Log out</button></div></header>
 <section id="login" class="card">
 <p class="eyebrow">Secure access</p><h2>Admin sign in</h2><p class="muted">Credentials are verified server-side. No admin password or signing secret is stored in this page.</p>
 <div class="form-grid"><div class="field"><label for="email">Admin email</label><input id="email" type="email" autocomplete="username" placeholder="Admin email"></div><div class="field"><label for="password">Password</label><input id="password" type="password" autocomplete="current-password" placeholder="Admin password"></div><div class="field" style="justify-content:end"><button id="loginBtn" type="button">Sign in</button></div></div><p id="loginError" class="error" role="alert"></p>
@@ -30,11 +30,13 @@ input:focus,select:focus,button:focus-visible{outline:3px solid #5fc3ce66;outlin
 <section id="dashboard" class="hidden">
 <div class="stats">
 <div class="stat"><span>Appointments</span><b id="appointmentCount">—</b></div>
+<div class="stat"><span>Doctors</span><b id="doctorCount">—</b></div>
 <div class="stat"><span>Pharmacy stores</span><b id="storeCount">—</b></div>
 <div class="stat"><span>Orders in queue</span><b id="orderCount">—</b></div>
 </div>
 <nav class="tabs" aria-label="Admin sections">
 <button type="button" data-tab="appointmentsPanel" aria-selected="true">Appointments</button>
+<button type="button" data-tab="doctorsPanel" aria-selected="false">Doctors</button>
 <button type="button" data-tab="storesPanel" aria-selected="false">Pharmacy stores</button>
 <button type="button" data-tab="cataloguePanel" aria-selected="false">Catalogue & stock</button>
 <button type="button" data-tab="ordersPanel" aria-selected="false">Pharmacy orders</button>
@@ -42,6 +44,21 @@ input:focus,select:focus,button:focus-visible{outline:3px solid #5fc3ce66;outlin
 <section id="appointmentsPanel" class="card panel">
 <div class="section-head"><div><p class="eyebrow">Care operations</p><h2>Appointments</h2></div><button type="button" class="secondary" id="reloadAppointments">Refresh</button></div>
 <p id="appointmentStatus" class="muted" aria-live="polite">Loading appointments…</p><div id="appointments"></div>
+</section>
+<section id="doctorsPanel" class="card panel hidden">
+<div class="section-head"><div><p class="eyebrow">Clinical team</p><h2>Register a doctor</h2></div><button type="button" class="secondary" id="reloadDoctors">Refresh doctors</button></div>
+<p class="notice">Register only a verified clinician after checking identity and credentials offline. The doctor must complete OTP verification on the registered phone before accessing appointments or patient records.</p>
+<form id="doctorForm">
+<div class="form-grid">
+<div class="field"><label for="doctorName">Doctor name *</label><input id="doctorName" required minlength="2" maxlength="120" autocomplete="name"></div>
+<div class="field"><label for="doctorSpecialty">Specialty *</label><input id="doctorSpecialty" required minlength="2" maxlength="120"></div>
+<div class="field"><label for="doctorPhone">Registered phone *</label><input id="doctorPhone" required inputmode="tel" maxlength="16" placeholder="+919876543210" autocomplete="tel"></div>
+</div>
+<div class="actions"><button type="submit">Register doctor</button><span id="doctorFormMessage" aria-live="polite"></span></div>
+</form>
+<hr style="border:0;border-top:1px solid var(--line);margin:22px 0">
+<div class="section-head"><div><h2>Registered doctors</h2><p class="muted">Only doctors with a registered phone can request OTP sign-in.</p></div></div>
+<div id="doctorsList"></div>
 </section>
 <section id="storesPanel" class="card panel hidden">
 <div class="section-head"><div><p class="eyebrow">Pharmacy network</p><h2>Register a pharmacy</h2></div><button type="button" class="secondary" id="reloadStores">Refresh stores</button></div>
@@ -117,6 +134,22 @@ function setTab(id){
  if(id==='ordersPanel')loadOrders();
 }
 document.querySelectorAll('[data-tab]').forEach(button=>button.addEventListener('click',()=>setTab(button.dataset.tab)));
+async function loadDoctors(){
+ const target=$('doctorsList');target.innerHTML='<div class="empty">Loading doctors…</div>';
+ try{
+  const rows=await api('/api/admin/doctors');$('doctorCount').textContent=rows.length;
+  target.innerHTML=rows.length?'<div class="table-wrap"><table><thead><tr><th>Doctor</th><th>Specialty</th><th>Registered phone</th><th>Identity</th></tr></thead><tbody>'+rows.map(d=>'<tr><td><strong>'+esc(d.name)+'</strong><div class="muted">#'+Number(d.id)+'</div></td><td>'+esc(d.specialty)+'</td><td>'+esc(d.phone)+'</td><td>'+statusPill('registered')+'</td></tr>').join('')+'</tbody></table></div>':'<div class="empty">No doctors registered yet. Register a verified clinician above.</div>';
+ }catch(e){$('doctorCount').textContent='—';target.innerHTML='<div class="empty">Doctor directory unavailable: '+esc(e.message)+'</div>'}
+}
+$('doctorForm').addEventListener('submit',async event=>{
+ event.preventDefault();showMessage('doctorFormMessage','Registering doctor…');
+ const body={name:$('doctorName').value.trim(),specialty:$('doctorSpecialty').value.trim(),phone:$('doctorPhone').value.trim()};
+ try{
+  const doctor=await api('/api/admin/doctors',{method:'POST',body:JSON.stringify(body)});
+  showMessage('doctorFormMessage','Doctor registered (#'+doctor.id+'). OTP sign-in is enabled for the registered phone.',true);
+  $('doctorForm').reset();await loadDoctors();
+ }catch(e){showMessage('doctorFormMessage',e.message)}
+});
 async function loadAppointments(){
  $('appointmentStatus').textContent='Loading appointments…';
  try{
@@ -225,12 +258,13 @@ $('ordersList').addEventListener('click',async event=>{
 });
 $('orderStatusFilter').addEventListener('change',loadOrders);
 $('reloadAppointments').onclick=loadAppointments;
+$('reloadDoctors').onclick=loadDoctors;
 $('reloadStores').onclick=loadStores;
 $('reloadProducts').onclick=loadProducts;
 $('reloadOrders').onclick=loadOrders;
 async function openDashboard(){
  $('login').classList.add('hidden');$('dashboard').classList.remove('hidden');$('logout').classList.remove('hidden');$('sessionLabel').textContent='Admin session active';
- await Promise.all([loadAppointments(),loadStores(),loadOrders()]);
+ await Promise.all([loadAppointments(),loadDoctors(),loadStores(),loadOrders()]);
 }
 $('loginBtn').onclick=async()=>{
  $('loginError').textContent='';
