@@ -96,5 +96,63 @@ $('aiBtn').onclick=async()=>{const s=$('symptoms').value.trim();if(!s){$('aiResu
 $('labForm').addEventListener('submit',async e=>{e.preventDefault();if(!authToken){$('labResult').textContent='Please login before booking a lab test.';return}try{const r=await api('/api/lab-orders',{method:'POST',body:JSON.stringify({phone:authPhone,patientName:$('labPatient').value,testName:$('labName').value})});$('labResult').textContent='Lab order created: '+(r.id||'success')}catch(x){$('labResult').textContent=x.message}});
 $('hospitalBtn').onclick=async()=>{try{const d=await api('/api/hospitals/nearby?latitude='+encodeURIComponent($('lat').value)+'&longitude='+encodeURIComponent($('lng').value));$('hospitalList').innerHTML=d.hospitals?.length?d.hospitals.map(h=>'<article class="card hospital"><h3>'+esc(h.name)+'</h3><p class="muted">'+esc(h.address||'')+'</p><p>'+esc(h.phone||'')+'</p></article>').join(''):'<div class="card">No hospitals returned.</div>'}catch(e){$('hospitalList').innerHTML='<div class="card">'+esc(e.message)+'</div>'}};
 async function loadEmergency(){try{const d=await api('/api/emergency');const contacts=Array.isArray(d.contacts)?d.contacts:[];$('emergencyText').innerHTML='<strong>'+esc(d.disclaimer||'For urgent medical help, contact emergency services immediately.')+'</strong>'+ (contacts.length?'<div class="emergency-contacts">'+contacts.map(c=>'<div class="dashboard-item"><strong>'+esc(c.name||c.service||'Emergency service')+'</strong><span>'+esc(c.phone||c.number||'')+'</span></div>').join('')+'</div>':'');const primary=contacts.find(c=>c.phone||c.number);if(primary)$('callBtn').href='tel:'+(primary.phone||primary.number)}catch(e){$('emergencyText').textContent='Emergency information could not be loaded. If this is life-threatening, call 112 immediately.'}}
-function updateSessionUI(){const logged=Boolean(authToken&&authPhone);$('sessionStatus').textContent=logged?'Logged in: '+authPhone:'Guest';$('logoutBtn').classList.toggle('hidden',!logged);$('loginBtn').classList.toggle('hidden',logged);$('dashboardPhone').value=logged?authPhone:'';$('dashboardPhone').readOnly=logged;$('phone').value=logged?authPhone:'';$('phone').readOnly=logged;$('labPhone').value=logged?authPhone:'';$('labPhone').readOnly=logged;if(logged){$('patientName').value=$('patientName').value||'';loadFamilyArea();loadAppointmentSlots()}else{loadFamilyArea()}} $('logoutBtn').onclick=()=>{authToken='';authPhone='';localStorage.removeItem('ayansha_auth_token');localStorage.removeItem('ayansha_auth_phone');updateSessionUI();$('dashboardGrid').innerHTML='<div class="card">Logged out. Please login to view your records.</div>';$('appointmentResult').textContent='';$('labResult').textContent='';$('aiResult').textContent='';}; updateSessionUI(); $('loginBtn').onclick=()=>{const phone=prompt('Enter phone number');if(!phone)return;api('/api/auth/request-otp',{method:'POST',body:JSON.stringify({phone})}).then(d=>{const otp=prompt((d.devOtp?'Development OTP: '+d.devOtp+'\n':'')+'Enter OTP');return otp?api('/api/auth/verify-otp',{method:'POST',body:JSON.stringify({phone,otp})):null}).then(d=>{if(d){authToken=d.token;authPhone=d.user.phone;localStorage.setItem('ayansha_auth_token',authToken);localStorage.setItem('ayansha_auth_phone',authPhone);updateSessionUI();alert('Login successful')}}).catch(e=>alert(e.message))};
+function updateSessionUI() {
+  const logged = Boolean(authToken && authPhone);
+  $('sessionStatus').textContent = logged ? 'Logged in: ' + authPhone : 'Guest';
+  $('logoutBtn').classList.toggle('hidden', !logged);
+  $('loginBtn').classList.toggle('hidden', logged);
+  $('dashboardPhone').value = logged ? authPhone : '';
+  $('dashboardPhone').readOnly = logged;
+  $('phone').value = logged ? authPhone : '';
+  $('phone').readOnly = logged;
+  $('labPhone').value = logged ? authPhone : '';
+  $('labPhone').readOnly = logged;
+  if (logged) {
+    $('patientName').value = $('patientName').value || '';
+    loadFamilyArea();
+    loadAppointmentSlots();
+  } else {
+    loadFamilyArea();
+  }
+}
+
+$('logoutBtn').onclick = () => {
+  authToken = '';
+  authPhone = '';
+  localStorage.removeItem('ayansha_auth_token');
+  localStorage.removeItem('ayansha_auth_phone');
+  updateSessionUI();
+  $('dashboardGrid').innerHTML = '<div class="card">Logged out. Please login to view your records.</div>';
+  $('appointmentResult').textContent = '';
+  $('labResult').textContent = '';
+  $('aiResult').textContent = '';
+};
+
+updateSessionUI();
+
+$('loginBtn').onclick = async () => {
+  const phone = prompt('Enter phone number');
+  if (!phone) return;
+  try {
+    const challenge = await api('/api/auth/request-otp', {
+      method: 'POST',
+      body: JSON.stringify({ phone })
+    });
+    const otpPrompt = (challenge.devOtp ? 'Development OTP: ' + challenge.devOtp + '\\n' : '') + 'Enter OTP';
+    const otp = prompt(otpPrompt);
+    if (!otp) return;
+    const verified = await api('/api/auth/verify-otp', {
+      method: 'POST',
+      body: JSON.stringify({ phone, otp })
+    });
+    authToken = verified.token;
+    authPhone = verified.user.phone;
+    localStorage.setItem('ayansha_auth_token', authToken);
+    localStorage.setItem('ayansha_auth_phone', authPhone);
+    updateSessionUI();
+    alert('Login successful');
+  } catch (error) {
+    alert(error instanceof Error ? error.message : 'Login failed. Please try again.');
+  }
+};
 loadDoctors();loadEmergency();
