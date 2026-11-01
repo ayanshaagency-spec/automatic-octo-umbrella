@@ -114,9 +114,8 @@ async function main() {
 
   const doctorToken = await loginDoctor(doctorPhone);
   const doctorHeaders = authHeaders(doctorToken);
-  expectStatus(await request('/api/doctor/availability-slots'), 200, 'Doctor can read own availability');
-  expectStatus(await request('/api/doctor/availability-slots'), 401, 'Patient token cannot access doctor availability')
-    .status === 401 ? undefined : undefined;
+  expectStatus(await request('/api/doctor/availability-slots', { headers: doctorHeaders }), 200, 'Doctor can read own availability');
+  expectStatus(await request('/api/doctor/availability-slots', { headers: ownerHeaders }), 401, 'Patient token cannot access doctor availability');
 
   function futureAlignedSlot(daysAhead) {
     const date = new Date(Date.now() + daysAhead * 24 * 60 * 60 * 1000);
@@ -235,11 +234,12 @@ async function main() {
   });
   expectStatus(revoked, 200, 'Owner revokes adult dependent access');
   assert.equal(revoked.body.consent_status, 'revoked');
+  const slotFive = await publishSlot(7);
   const revokedBooking = await request('/api/appointments', {
     method: 'POST', headers: ownerHeaders,
     body: {
       patientName: 'Family CI Owner', phone: ownerPhone, doctorId: Number(doctorCreated.body.id),
-      slotId: slotFour.id, familyMemberId: Number(adult.body.id), mode: 'In-clinic'
+      slotId: slotFive.id, familyMemberId: Number(adult.body.id), mode: 'In-clinic'
     }
   });
   expectStatus(revokedBooking, 403, 'Revoked family access cannot be used for a new booking');
@@ -247,7 +247,9 @@ async function main() {
   const doctorSlots = await request('/api/doctor/availability-slots', { headers: doctorHeaders });
   expectStatus(doctorSlots, 200, 'Doctor can inspect own schedule');
   assert.ok(doctorSlots.body.some(slot => Number(slot.id) === slotOne.id && slot.status === 'booked'));
-  assert.ok(doctorSlots.body.some(slot => Number(slot.id) === slotFour.id && slot.status === 'available' && slot.cancelled_at === undefined));
+  assert.equal(doctorSlots.body.some(slot => Number(slot.id) === slotFour.id), false,
+    'Cancelled slots must not appear in the doctor's active schedule');
+  assert.ok(doctorSlots.body.some(slot => Number(slot.id) === slotFive.id && slot.status === 'available'));
 
   console.log('Family + availability PostgreSQL E2E passed: owner scoping, minor guardian access, adult OTP consent, consent scope limit, revocation, doctor-only slot publishing, unique slots, published-only visibility, concurrent double-booking protection and cancellation rules.');
 }
