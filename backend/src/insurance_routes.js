@@ -70,6 +70,16 @@ async function handleInsuranceRoute(req, res, url, context) {
   const send = (status, body) => context.send(status, body);
   const pathname = url.pathname;
 
+  if (pathname === '/api/insurance/status' && req.method === 'GET') {
+    const storageConfigured = storage.isStorageConfigured();
+    const scannerConfigured = scanner.isScannerConfigured();
+    return send(200, {
+      storageConfigured,
+      scannerConfigured,
+      uploadsEnabled: storageConfigured && scannerConfigured
+    });
+  }
+
   const patientCollection = pathname === '/api/insurance/policies';
   const patientCreateDocument = pathname.match(/^\/api\/insurance\/policies\/(\d+)\/documents$/);
   const patientCompleteDocument = pathname.match(/^\/api\/insurance\/documents\/(\d+)\/complete$/);
@@ -93,10 +103,6 @@ async function handleInsuranceRoute(req, res, url, context) {
     if (patientCollection && req.method === 'POST') {
       const patient = getPatient(req);
       if (!patient) { send(401, { error: 'Patient authentication required' }); return true; }
-      if (!storage.isStorageConfigured() || !scanner.isScannerConfigured()) {
-        send(503, { error: 'Private document storage and malware scanning must be configured before insurance submission is enabled' });
-        return true;
-      }
       const parsed = await parseBody(req);
       if (parsed.error) { send(parsed.error.statusCode, { error: parsed.error.message }); return true; }
       const validated = validatePolicyInput(parsed.value);
