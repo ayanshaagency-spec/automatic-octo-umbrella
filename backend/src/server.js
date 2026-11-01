@@ -155,8 +155,23 @@ const server=http.createServer(async(req,res)=>{
   if(url.pathname==='/api/doctor/availability-slots'&&req.method==='GET'){
     const doctor=verifyRoleToken(getAuthToken(req),'doctor');
     if(!doctor)return send(res,401,{error:'Doctor authentication required'},req);
+    const fromRaw=url.searchParams.get('from');
+    const toRaw=url.searchParams.get('to');
+    const validFilter=value=>value===null||(
+      typeof value==='string'&&!Number.isNaN(Date.parse(value))&&
+      value.length<=40
+    );
+    if(!validFilter(fromRaw)||!validFilter(toRaw))return send(res,422,{error:'from and to must be valid date/time filters'},req);
+    const from=fromRaw===null?null:new Date(fromRaw);
+    const to=toRaw===null?null:new Date(toRaw);
+    if((from&&Number.isNaN(from.getTime()))||(to&&Number.isNaN(to.getTime()))||
+       (from&&to&&(to<=from||(to-from)>90*24*60*60*1000))){
+      return send(res,422,{error:'Availability query range must be positive and no longer than 90 days'},req);
+    }
     try{
-      const rows=await listDoctorAvailabilitySlots(doctor.sub,url.searchParams.get('from'),url.searchParams.get('to'));
+      const rows=await listDoctorAvailabilitySlots(
+        doctor.sub,from?from.toISOString():null,to?to.toISOString():null
+      );
       if(rows===null)return send(res,503,{error:'DATABASE_URL not configured'},req);
       return send(res,200,rows,req);
     }catch(e){return send(res,503,{error:'Unable to load doctor availability'},req);}
