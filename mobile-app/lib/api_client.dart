@@ -87,11 +87,29 @@ class ApiClient {
     return _list(response.body);
   }
 
+  Future<List<Map<String, dynamic>>> getDoctorAvailability({
+    required int doctorId,
+    required DateTime date,
+  }) async {
+    String day(DateTime value) =>
+        '${value.year.toString().padLeft(4, '0')}-${value.month.toString().padLeft(2, '0')}-${value.day.toString().padLeft(2, '0')}';
+    final from = DateTime.utc(date.year, date.month, date.day);
+    final to = from.add(const Duration(days: 1));
+    final uri = Uri.parse('$baseUrl/api/doctors/$doctorId/availability')
+        .replace(queryParameters: {'from': day(from), 'to': day(to)});
+    final response = await http.get(uri).timeout(_timeout);
+    if (response.statusCode != 200) {
+      throw _error(response, 'Unable to load doctor availability');
+    }
+    return _list(response.body);
+  }
+
   Future<Map<String, dynamic>> createAppointment({
     required String patientName,
     required String phone,
     required int doctorId,
-    required DateTime appointmentAt,
+    required int slotId,
+    String? familyMemberId,
     required String mode,
   }) async {
     final response = await http
@@ -102,7 +120,8 @@ class ApiClient {
             'patientName': patientName,
             'phone': phone,
             'doctorId': doctorId,
-            'appointmentAt': appointmentAt.toIso8601String(),
+            'slotId': slotId,
+            if (familyMemberId != null) 'familyMemberId': int.parse(familyMemberId),
             'mode': mode,
           }),
         )
@@ -111,6 +130,74 @@ class ApiClient {
       throw _error(response, 'Unable to create appointment');
     }
     return Map<String, dynamic>.from(jsonDecode(response.body));
+  }
+
+
+  Future<List<Map<String, dynamic>>> getFamilyMembers() async {
+    final response = await http
+        .get(Uri.parse('$baseUrl/api/family-members'), headers: _authHeaders)
+        .timeout(_timeout);
+    if (response.statusCode != 200) {
+      throw _error(response, 'Unable to load family profiles');
+    }
+    return _list(response.body);
+  }
+
+  Future<Map<String, dynamic>> createFamilyMember({
+    required String fullName,
+    required String relationship,
+    required DateTime dateOfBirth,
+    String? phone,
+  }) async {
+    final dob = '${dateOfBirth.year.toString().padLeft(4, '0')}-${dateOfBirth.month.toString().padLeft(2, '0')}-${dateOfBirth.day.toString().padLeft(2, '0')}';
+    final response = await http
+        .post(
+          Uri.parse('$baseUrl/api/family-members'),
+          headers: _jsonHeaders,
+          body: jsonEncode({
+            'fullName': fullName,
+            'relationship': relationship,
+            'dateOfBirth': dob,
+            if (phone != null && phone.trim().isNotEmpty) 'phone': phone.trim(),
+          }),
+        )
+        .timeout(_timeout);
+    if (response.statusCode != 201) {
+      throw _error(response, 'Unable to add family profile');
+    }
+    return Map<String, dynamic>.from(jsonDecode(response.body));
+  }
+
+  Future<void> revokeFamilyMember(int id) async {
+    final response = await http
+        .delete(Uri.parse('$baseUrl/api/family-members/$id'), headers: _authHeaders)
+        .timeout(_timeout);
+    if (response.statusCode != 200) {
+      throw _error(response, 'Unable to revoke family access');
+    }
+  }
+
+  Future<List<Map<String, dynamic>>> getFamilyConsentRequests() async {
+    final response = await http
+        .get(Uri.parse('$baseUrl/api/family-consent-requests'), headers: _authHeaders)
+        .timeout(_timeout);
+    if (response.statusCode != 200) {
+      throw _error(response, 'Unable to load family consent requests');
+    }
+    return _list(response.body);
+  }
+
+  Future<void> respondToFamilyConsent(int memberId, {required bool allowAppointments}) async {
+    final response = await http
+        .post(
+          Uri.parse('$baseUrl/api/family-members/$memberId/verify-consent'),
+          headers: _jsonHeaders,
+          body: jsonEncode({'scopes': allowAppointments ? ['appointments'] : []}),
+        )
+        .timeout(_timeout);
+    if (response.statusCode != 200) {
+      throw _error(response, 'Unable to save family consent');
+    }
   }
 
   Future<List<Map<String, dynamic>>> getPrescriptions(String phone) async {
