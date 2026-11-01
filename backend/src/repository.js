@@ -63,11 +63,14 @@ async function listAppointments(phone) {
     where = 'WHERE p.phone = $1';
   }
   const { rows } = await db.query(
-    `SELECT a.id, a.patient_id, a.doctor_id, p.name AS patient_name, p.phone,
-            d.name AS doctor_name, d.specialty, a.appointment_at, a.mode, a.status
+    `SELECT a.id, a.patient_id, a.doctor_id, a.family_member_id,
+            COALESCE(fm.full_name, p.name) AS patient_name,
+            p.phone, fm.relationship AS family_relationship,
+            d.name AS doctor_name, d.specialty, a.appointment_at, a.mode, a.status, a.slot_id
        FROM appointments a
        JOIN patients p ON p.id = a.patient_id
        JOIN doctors d ON d.id = a.doctor_id
+       LEFT JOIN family_members fm ON fm.id = a.family_member_id
        ${where}
       ORDER BY a.appointment_at DESC`,
     params
@@ -159,11 +162,14 @@ async function listDoctorAppointments(phone) {
   const db = await getDb();
   if (!db) return null;
   const { rows } = await db.query(
-    `SELECT a.id, a.patient_id, a.doctor_id, p.name AS patient_name, p.phone,
-            d.name AS doctor_name, d.specialty, a.appointment_at, a.mode, a.status
+    `SELECT a.id, a.patient_id, a.doctor_id, a.family_member_id,
+            COALESCE(fm.full_name, p.name) AS patient_name,
+            p.phone, fm.relationship AS family_relationship,
+            d.name AS doctor_name, d.specialty, a.appointment_at, a.mode, a.status, a.slot_id
        FROM appointments a
        JOIN patients p ON p.id = a.patient_id
        JOIN doctors d ON d.id = a.doctor_id
+       LEFT JOIN family_members fm ON fm.id = a.family_member_id
       WHERE d.phone = $1
       ORDER BY a.appointment_at DESC`, [phone]);
   return rows;
