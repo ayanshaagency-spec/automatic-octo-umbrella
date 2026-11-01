@@ -18,6 +18,15 @@ input:focus,select:focus,button:focus-visible{outline:3px solid #5fc3ce66;outlin
 .table-wrap{overflow-x:auto}table{width:100%;border-collapse:collapse;font-size:13px}th,td{text-align:left;padding:11px 9px;border-bottom:1px solid #e5edf1;vertical-align:top}th{color:#607586;font-size:11px;text-transform:uppercase;letter-spacing:.6px}td .muted{margin-top:3px}.pill{display:inline-block;border-radius:999px;padding:4px 8px;background:#eaf4f7;color:#315768;font-size:11px;white-space:nowrap}.pill.pending{background:#fff4dc;color:#885d05}.pill.active{background:#e4f5eb;color:#17643c}.pill.inactive{background:#f1f3f5;color:#52616d}.empty{padding:18px;color:var(--muted);font-size:13px;background:#f8fbfc;border-radius:10px}.panel{scroll-margin-top:20px}.product-editor{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px;min-width:470px}.product-editor input,.product-editor select{width:100%}.small{padding:7px 10px;font-size:12px}.row-actions{display:flex;gap:6px;flex-wrap:wrap}.status-select{min-width:150px}
 @media(max-width:780px){main{margin-top:12px}.form-grid,.stats{grid-template-columns:1fr 1fr}.product-editor{grid-template-columns:1fr 1fr}.section-head{align-items:flex-start;flex-direction:column}header{align-items:flex-start;flex-direction:column}}
 @media(max-width:520px){.form-grid,.stats{grid-template-columns:1fr}.card{padding:15px}td,th{padding:9px 7px}}
+.insurance-admin-policy{border:1px solid var(--line);border-radius:12px;padding:16px;margin:14px 0;background:#fff}
+.insurance-admin-head{display:flex;justify-content:space-between;gap:12px;align-items:start;flex-wrap:wrap}
+.insurance-admin-head h3{margin:0}
+.insurance-admin-status{background:#edf7f8;color:#135f70;padding:5px 9px;border-radius:999px;font-size:12px;text-transform:capitalize;white-space:nowrap}
+.insurance-admin-doc{display:flex;justify-content:space-between;gap:10px;padding:10px 0;border-top:1px solid #e5eeee;align-items:center}
+.insurance-admin-policy label{display:block;margin-top:12px;font-size:13px;font-weight:700}
+.insurance-admin-policy select,.insurance-admin-policy textarea{width:100%;box-sizing:border-box;padding:10px;border-radius:8px;border:1px solid #bfd1d6;margin:6px 0 10px}
+.insurance-admin-policy textarea{min-height:68px}
+.insurance-admin-policy button{margin:6px 6px 6px 0}
 </style>
 </head>
 <body>
@@ -40,6 +49,7 @@ input:focus,select:focus,button:focus-visible{outline:3px solid #5fc3ce66;outlin
 <button type="button" data-tab="storesPanel" aria-selected="false">Pharmacy stores</button>
 <button type="button" data-tab="cataloguePanel" aria-selected="false">Catalogue & stock</button>
 <button type="button" data-tab="ordersPanel" aria-selected="false">Pharmacy orders</button>
+<button type="button" data-tab="insurancePanel" aria-selected="false">Health insurance</button>
 </nav>
 <section id="appointmentsPanel" class="card panel">
 <div class="section-head"><div><p class="eyebrow">Care operations</p><h2>Appointments</h2></div><button type="button" class="secondary" id="reloadAppointments">Refresh</button></div>
@@ -105,6 +115,11 @@ input:focus,select:focus,button:focus-visible{outline:3px solid #5fc3ce66;outlin
 <p class="notice">Pharmacy payments are cash on delivery in this MVP. Review prescription details in the authorised clinical workflow before dispensing.</p>
 <div id="ordersList"></div>
 </section>
+<section id="insurancePanel" class="card panel hidden">
+<div class="section-head"><div><p class="eyebrow">Private patient documents</p><h2>Health Insurance Document Reviews</h2><p class="muted">Only authenticated admins can view policy metadata and download documents that passed malware scanning. “Verified” means Ayansha staff reviewed the submission, not that an insurer approved a claim.</p></div><button id="insuranceRefresh" type="button" class="secondary">Refresh insurance records</button></div>
+<div class="field" style="max-width:320px;margin-bottom:14px"><label for="insuranceStatusFilter">Filter by status</label><select id="insuranceStatusFilter"><option value="">All statuses</option><option value="submitted">Submitted</option><option value="under_review">Under review</option><option value="need_more_documents">Need more documents</option><option value="verified">Verified</option><option value="rejected">Rejected</option><option value="draft">Draft</option></select></div>
+<p id="insuranceMessage" class="muted" role="status"></p><div id="insuranceReviews"><div class="empty">Select Health insurance to load the protected review queue.</div></div>
+</section>
 <p class="muted">Security note: use production only after verifying the configured admin account, patient OTP provider and migration plan. This page does not add pharmacy or product data automatically.</p>
 </section>
 <script>
@@ -125,6 +140,41 @@ const statusPill=value=>'<span class="pill '+(['approved','active','delivered'].
 let registeredStores=[];
 let currentProducts=[];
 let currentTab='appointmentsPanel';
+const insuranceEsc=value=>String(value??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const insuranceTransitions={draft:[],submitted:['under_review','need_more_documents','rejected'],under_review:['verified','need_more_documents','rejected'],need_more_documents:['under_review','rejected'],verified:['under_review'],rejected:[]};
+const insuranceStatusName=value=>String(value||'').replaceAll('_',' ');
+async function loadInsurancePolicies(){
+ const out=$('insuranceReviews'),msg=$('insuranceMessage'),status=$('insuranceStatusFilter').value;
+ out.innerHTML='<div class="empty">Loading private insurance records…</div>';msg.textContent='';
+ try{
+  const rows=await api('/api/admin/insurance/policies'+(status?'?status='+encodeURIComponent(status):''));
+  if(!rows.length){out.innerHTML='<div class="empty">No insurance policies match this filter.</div>';return;}
+  out.innerHTML=rows.map(policy=>{
+   const docs=(policy.documents||[]).map(doc=>'<div class="insurance-admin-doc"><span>'+insuranceEsc(doc.filename)+' · '+insuranceEsc(insuranceStatusName(doc.status))+' · scan: '+insuranceEsc(insuranceStatusName(doc.scanStatus||'pending'))+'</span>'+(doc.status==='submitted'&&doc.scanStatus==='clean'?'<button type="button" class="secondary small" data-insurance-admin-download="'+Number(doc.id)+'">Download privately</button>':'<span class="muted">Not downloadable</span>')+'</div>').join('');
+   const next=insuranceTransitions[policy.status]||[];
+   const controls=next.length?'<label>Update review status</label><select data-insurance-next="'+Number(policy.id)+'">'+next.map(value=>'<option value="'+value+'">'+insuranceEsc(insuranceStatusName(value))+'</option>').join('')+'</select><label>Review note (required for needs-more-documents/rejected)</label><textarea data-insurance-note="'+Number(policy.id)+'" maxlength="500" placeholder="Avoid unnecessary medical detail"></textarea><button type="button" class="small" data-insurance-review="'+Number(policy.id)+'">Save review</button>':'<p class="muted">No further review action available from this status.</p>';
+   return '<article class="insurance-admin-policy"><div class="insurance-admin-head"><div><h3>'+insuranceEsc(policy.insurerName)+' · •••• '+insuranceEsc(policy.policyNumberLast4)+'</h3><p>Patient: '+insuranceEsc(policy.patientName)+' · '+insuranceEsc(policy.patientPhone)+'</p><p>Type: '+insuranceEsc(policy.policyType)+' · Expiry: '+insuranceEsc(policy.policyExpiry||'Not provided')+'</p></div><span class="insurance-admin-status">'+insuranceEsc(insuranceStatusName(policy.status))+'</span></div><p><strong>Documents</strong></p>'+(docs||'<p class="muted">No documents attached.</p>')+controls+(policy.reviewNote?'<p class="notice">Previous note: '+insuranceEsc(policy.reviewNote)+'</p>':'')+'</article>';
+  }).join('');
+  out.querySelectorAll('[data-insurance-admin-download]').forEach(button=>button.addEventListener('click',()=>downloadInsuranceDocument(Number(button.dataset.insuranceAdminDownload))));
+  out.querySelectorAll('[data-insurance-review]').forEach(button=>button.addEventListener('click',async()=>{
+   const id=Number(button.dataset.insuranceReview),select=out.querySelector('[data-insurance-next="'+id+'"]'),note=out.querySelector('[data-insurance-note="'+id+'"]');
+   button.disabled=true;msg.textContent='Saving review…';
+   try{await api('/api/admin/insurance/policies/'+id+'/status',{method:'PATCH',body:JSON.stringify({status:select.value,reviewNote:note.value.trim()})});msg.textContent='Review status updated.';await loadInsurancePolicies();}
+   catch(error){msg.textContent=error.message;button.disabled=false;}
+  }));
+ }catch(error){out.innerHTML='<div class="empty">Insurance review queue unavailable: '+insuranceEsc(error.message)+'</div>';}
+}
+async function downloadInsuranceDocument(id){
+ let tab=null;
+ try{
+  tab=window.open('about:blank','_blank');if(tab)tab.opener=null;
+  const result=await api('/api/insurance/documents/'+id+'/download');
+  if(tab)tab.location.href=result.downloadUrl;
+  else $('insuranceMessage').textContent='Your browser blocked the download window. Allow pop-ups and try again.';
+ }catch(error){if(tab)tab.close();$('insuranceMessage').textContent=error.message;}
+}
+$('insuranceRefresh').addEventListener('click',loadInsurancePolicies);
+$('insuranceStatusFilter').addEventListener('change',loadInsurancePolicies);
 function setTab(id){
  currentTab=id;
  document.querySelectorAll('[data-tab]').forEach(button=>button.setAttribute('aria-selected',String(button.dataset.tab===id)));
@@ -132,6 +182,7 @@ function setTab(id){
  if(id==='storesPanel')loadStores();
  if(id==='cataloguePanel'){populateStorePicker();if($('catalogueStore').value)loadProducts();}
  if(id==='ordersPanel')loadOrders();
+  if(id==='insurancePanel')loadInsurancePolicies();
 }
 document.querySelectorAll('[data-tab]').forEach(button=>button.addEventListener('click',()=>setTab(button.dataset.tab)));
 async function loadDoctors(){
