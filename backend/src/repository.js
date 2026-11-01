@@ -23,7 +23,7 @@ async function createDoctor(data) {
     error.statusCode = 422;
     throw error;
   }
-  if (!/^\\+?[1-9]\\d{9,14}$/.test(phone)) {
+  if (!/^[+]?[1-9][0-9]{9,14}$/.test(phone)) {
     const error = new Error('phone must be a valid international phone number');
     error.statusCode = 422;
     throw error;
