@@ -36,6 +36,18 @@ Use a dedicated non-production backend and disposable staging database only. Do 
 
 ## Current limitation / release gate
 
-A real provider account/template and a hosted staging environment with the provider configured are external prerequisites. Automated OTP works only in local/CI `development` or `test` mode; these modes must not be used for a publicly reachable environment. In `staging` and `production`, missing OTP provider configuration fails closed.
+A real provider account/template and a hosted staging environment with the provider configured are external prerequisites. Automated OTP works only in local/CI `development` or `test` mode; these modes must not be used in a publicly reachable environment. In `staging` and `production`, missing OTP provider configuration fails closed.
 
-The pharmacy migration `backend/db/migrations/008_phase7_pharmacy.sql` has only been applied by the isolated Runtime E2E workflow to its disposable PostgreSQL database. No production migration or deployment was performed as part of this acceptance work.
+### Database migration state
+
+- `008_phase7_pharmacy.sql`: applied on the isolated **Staging PostgreSQL** by the successful Staging pre-deploy workflow on 31 October 2026. The deployment log reported that the schema and migrations were applied. It was not applied to Production.
+- `009_shared_patient_otp_store.sql`: CI Runtime E2E has passed against disposable PostgreSQL on commit `bc84077add5567a650322f1065e34745ee2745d6`. The corresponding Railway Staging deployment is still queued; therefore this migration is **not yet verified as live on Staging**.
+- Production remains on the existing Phase 6 branch and database. No Pharmacy/OTP migration has been applied to Production.
+
+### Live staging acceptance still open
+
+- The public Staging backend and database health endpoints respond successfully.
+- The stores and pharmacy delivery-hospital directories currently return empty arrays. No synthetic, unverified store, hospital, product, patient or prescription rows were inserted into the persistent Staging database.
+- Anonymous access to Pharmacy admin/order, patient lab, prescription, health-record and payment APIs is rejected with HTTP 401.
+- Human sign-in/order/fulfilment acceptance is not complete: Staging SMS provider credentials/template and an authorised test phone are not configured. Do not disclose development OTPs on the public service.
+- Pharmacy release remains gated on verified real store licensing/catalogue data and explicit release approval.
