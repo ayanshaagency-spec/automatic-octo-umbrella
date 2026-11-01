@@ -19,6 +19,7 @@ const { status: whatsappStatus, sendWhatsApp } = require('./whatsapp');
 const { getAiStatus, generateSymptomGuidance } = require('./ai');
 const { verifyAdminCredentials, createAdminToken, createDoctorToken, verifyRoleToken } = require('./roles');
 const { handlePharmacyRoute } = require('./pharmacy_routes');
+const { handleInsuranceRoute } = require('./insurance_routes');
 
 const configuredOrigins = (process.env.CORS_ALLOWED_ORIGINS || '').split(',').map(v => v.trim()).filter(Boolean);
 const isAllowedOrigin = origin => !origin || configuredOrigins.includes(origin) || (['development','test'].includes(process.env.NODE_ENV) && (configuredOrigins.includes('*') || /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin)));
@@ -31,6 +32,8 @@ const requireAuth=(req,res)=>{const payload=verifyToken(getAuthToken(req));if(!p
 const server=http.createServer(async(req,res)=>{
   if(req.method==='OPTIONS') return send(res,204,{},req);
   const url = new URL(req.url, `http://${req.headers.host || 'localhost'}`);
+  const insuranceHandled = await handleInsuranceRoute(req, res, url, { send: (status, body) => send(res, status, body, req) });
+  if (insuranceHandled) return;
   // Serve only the existing, fixed admin entry point. No user-controlled file path is accepted.
   if(req.method==='GET' && url.pathname==='/admin'){
     const adminFile=path.resolve(__dirname,'../../admin-panel/index.html');
