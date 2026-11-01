@@ -81,6 +81,51 @@ const server=http.createServer(async(req,res)=>{
     return send(res,whatsappStatus().configured?200:503,await sendWhatsApp({to:data.to,text:data.text,event:data.event}),req);
   });
   if(url.pathname==='/health') return send(res,200,{ok:true,service:'Ayansha Health Care'},req);
+
+  if(url.pathname==='/api/family-members'&&req.method==='GET'){
+    const auth=requireAuth(req,res);if(!auth)return;
+    try{
+      const rows=await listFamilyMembers(auth.sub);
+      if(rows===null)return send(res,503,{error:'DATABASE_URL not configured'},req);
+      return send(res,200,rows,req);
+    }catch(e){return send(res,503,{error:'Unable to load family profiles'},req);}
+  }
+  if(url.pathname==='/api/family-members'&&req.method==='POST')return parseBody(req,async(err,data)=>{
+    const auth=requireAuth(req,res);if(!auth)return;
+    if(err)return send(res,400,{error:'Invalid JSON'},req);
+    try{
+      const saved=await createFamilyMember(auth.sub,data);
+      if(!saved)return send(res,503,{error:'DATABASE_URL not configured'},req);
+      return send(res,201,saved,req);
+    }catch(e){
+      if(e.statusCode)return send(res,e.statusCode,{error:e.message},req);
+      return send(res,503,{error:'Unable to create family profile'},req);
+    }
+  });
+  const familyRevokeMatch=url.pathname.match(/^\/api\/family-members\/(\d+)$/);
+  if(familyRevokeMatch&&req.method==='DELETE'){
+    const auth=requireAuth(req,res);if(!auth)return;
+    try{
+      const saved=await revokeFamilyMember(auth.sub,Number(familyRevokeMatch[1]));
+      return send(res,200,saved,req);
+    }catch(e){
+      if(e.statusCode)return send(res,e.statusCode,{error:e.message},req);
+      return send(res,503,{error:'Unable to revoke family profile'},req);
+    }
+  }
+  const familyConsentMatch=url.pathname.match(/^\/api\/family-members\/(\d+)\/verify-consent$/);
+  if(familyConsentMatch&&req.method==='POST')return parseBody(req,async(err,data)=>{
+    const auth=requireAuth(req,res);if(!auth)return;
+    if(err)return send(res,400,{error:'Invalid JSON'},req);
+    try{
+      const saved=await verifyAdultFamilyMemberConsent(Number(familyConsentMatch[1]),auth.sub,data.scopes||[]);
+      return send(res,200,saved,req);
+    }catch(e){
+      if(e.statusCode)return send(res,e.statusCode,{error:e.message},req);
+      return send(res,503,{error:'Unable to record family-member consent'},req);
+    }
+  });
+
   if(url.pathname==='/api/doctors'&&req.method==='GET'){try{const rows=await listDoctors();if(rows===null)return send(res,503,{error:'DATABASE_URL not configured'},req);return send(res,200,rows,req);}catch(e){return send(res,503,{error:'Unable to load doctors'},req);}}
   if(url.pathname==='/api/db/health'&&req.method==='GET'){try{const db=await getDb();if(!db)return send(res,503,{ok:false,error:'DATABASE_URL not configured'},req);await db.query('SELECT 1');return send(res,200,{ok:true,database:'connected'},req);}catch(e){return send(res,503,{ok:false,error:'Database unavailable'},req);}}
   if(url.pathname==='/api/auth/request-otp'&&req.method==='POST')return parseBody(req,async(err,data)=>{if(err||!data.phone)return send(res,400,{error:'phone is required'},req);try{const result=await issueOtp(data.phone);return send(res,200,{message:'OTP sent',...result},req);}catch(e){if(e instanceof AuthError)return send(res,e.statusCode,{error:e.message},req);return send(res,502,{error:'Unable to send OTP'},req);}});
