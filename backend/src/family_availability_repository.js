@@ -59,6 +59,23 @@ async function revokeFamilyMember(ownerPhone, memberId) {
   return rows[0];
 }
 
+async function listFamilyConsentRequests(memberPhone) {
+  const db = await getDb();
+  if (!db) return null;
+  const { rows } = await db.query(
+    `SELECT fm.id, fm.full_name, fm.relationship, fm.date_of_birth,
+            fm.consent_status, owner.name AS owner_name, fm.created_at
+       FROM family_members fm
+       JOIN patients owner ON owner.id = fm.owner_patient_id
+      WHERE fm.phone = $1
+        AND fm.consent_status = 'pending_member_verification'
+        AND fm.revoked_at IS NULL
+      ORDER BY fm.created_at DESC`,
+    [memberPhone]
+  );
+  return rows;
+}
+
 async function verifyAdultFamilyMemberConsent(memberId, memberPhone, grantedScopes = []) {
   const db = await getDb();
   if (!db) return null;
@@ -260,6 +277,7 @@ module.exports = {
   listFamilyMembers,
   createFamilyMember,
   revokeFamilyMember,
+  listFamilyConsentRequests,
   verifyAdultFamilyMemberConsent,
   createDoctorAvailabilitySlot,
   listDoctorAvailabilitySlots,
