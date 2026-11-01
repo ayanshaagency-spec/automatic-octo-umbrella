@@ -1,4 +1,5 @@
 const crypto = require('crypto');
+const { saveOtpChallenge, consumeOtpChallenge, deleteOtpChallenge } = require('./otp_store');
 
 const otpStore = new Map();
 const otpRequestStore = new Map();
@@ -138,39 +139,102 @@ async function sendOtp(phone, otp) {
   return { delivery: 'provider_accepted' };
 }
 
+function usesEphemeralOtpStore() {
+  return process.env.NODE_ENV === 'development' || process.env.NODE_ENV === 'test';
+}
+
+function hashPhone(phone) {
+  return crypto.createHmac('sha256', getJwtSecret()).update(String(phone)).digest('hex');
+}
+
+function hashOtp(phoneHash, otp) {
+  return crypto.createHmac('sha256', getJwtSecret()).update(`${phoneHash}:${String(otp)}`).digest('hex');
+}
+
 async function issueOtp(phone) {
   const normalizedPhone = String(phone).trim();
   if (!/^\+?[1-9]\d{9,14}$/.test(normalizedPhone)) {
     throw new AuthError('phone must be a valid international phone number', 422);
   }
-  pruneOtpStore();
-  enforceOtpRequestLimit(normalizedPhone);
+
   const otp = String(crypto.randomInt(100000, 1000000));
-  otpStore.set(normalizedPhone, { otp, expiresAt: Date.now() + OTP_TTL_MS, attempts: 0 });
+  if (usesEphemeralOtpStore()) {
+    pruneOtpStore();
+    enforceOtpRequestLimit(normalizedPhone);
+    otpStore.set(normalizedPhone, { otp, expiresAt: Date.now() + OTP_TTL_MS, attempts: 0 });
+    try {
+      const delivery = await sendOtp(normalizedPhone, otp);
+      return { ...delivery, expiresInSeconds: OTP_TTL_MS / 1000 };
+    } catch (error) {
+      otpStore.delete(normalizedPhone);
+      throw error;
+    }
+  }
+
+  if (!(process.env.OTP_PROVIDER_URL || '').trim() || !(process.env.OTP_PROVIDER_TOKEN || '').trim()) {
+    throw new AuthError('OTP provider is not configured');
+  }
+
+  const phoneHash = hashPhone(normalizedPhone);
+  const challengeId = crypto.randomUUID();
+  const otpHash = hashOtp(phoneHash, otp);
+  try {
+    await saveOtpChallenge({
+      phoneHash,
+      challengeId,
+      otpHash,
+      requestLimit: OTP_REQUEST_LIMIT,
+      windowMs: OTP_REQUEST_WINDOW_MS,
+      ttlMs: OTP_TTL_MS
+    });
+  } catch (error) {
+    if (error.statusCode === 429) throw new AuthError('Too many OTP requests. Please try again later.', 429);
+    throw new AuthError('OTP storage is temporarily unavailable', 503);
+  }
+
   try {
     const delivery = await sendOtp(normalizedPhone, otp);
     return { ...delivery, expiresInSeconds: OTP_TTL_MS / 1000 };
   } catch (error) {
-    otpStore.delete(normalizedPhone);
+    // Keep the request event for throttling, but remove only this challenge.
+    // A slow failed delivery must not delete a newer code requested by the patient.
+    await deleteOtpChallenge(phoneHash, challengeId).catch(() => {});
     throw error;
   }
 }
 
-function verifyOtp(phone, otp) {
+async function verifyOtp(phone, otp) {
   const normalizedPhone = String(phone).trim();
-  const record = otpStore.get(normalizedPhone);
-  if (!record) return false;
-  if (record.expiresAt < Date.now()) {
+  if (!/^\+?[1-9]\d{9,14}$/.test(normalizedPhone)) return false;
+
+  if (usesEphemeralOtpStore()) {
+    const record = otpStore.get(normalizedPhone);
+    if (!record) return false;
+    if (record.expiresAt < Date.now()) {
+      otpStore.delete(normalizedPhone);
+      return false;
+    }
+    if (record.otp !== String(otp).trim()) {
+      record.attempts = (record.attempts || 0) + 1;
+      if (record.attempts >= OTP_VERIFY_ATTEMPT_LIMIT) otpStore.delete(normalizedPhone);
+      return false;
+    }
     otpStore.delete(normalizedPhone);
-    return false;
+    return true;
   }
-  if (record.otp !== String(otp).trim()) {
-    record.attempts = (record.attempts || 0) + 1;
-    if (record.attempts >= OTP_VERIFY_ATTEMPT_LIMIT) otpStore.delete(normalizedPhone);
-    return false;
+
+  try {
+    const phoneHash = hashPhone(normalizedPhone);
+    const candidateOtpHash = hashOtp(phoneHash, String(otp).trim());
+    return await consumeOtpChallenge({
+      phoneHash,
+      candidateOtpHash,
+      maxAttempts: OTP_VERIFY_ATTEMPT_LIMIT
+    });
+  } catch (error) {
+    if (error instanceof AuthError) throw error;
+    throw new AuthError('OTP verification is temporarily unavailable', 503);
   }
-  otpStore.delete(normalizedPhone);
-  return true;
 }
 
 module.exports = { issueOtp, verifyOtp, createToken, verifyToken, AuthError };
