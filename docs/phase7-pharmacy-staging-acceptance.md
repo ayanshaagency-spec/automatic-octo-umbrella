@@ -25,12 +25,13 @@ These automated checks test the API plus key served-UI contracts. They do not re
 
 Use a dedicated non-production backend and disposable staging database only. Do not use real patient records, real prescriptions, real licence scans, or live medicines/orders for rehearsals.
 
-- [ ] Confirm the deployed commit is the intended Pharmacy branch commit and the environment is explicitly marked as staging.
+- [x] Confirm the deployed commit is the intended Pharmacy branch commit and the environment is explicitly marked as staging. Verified 2 November 2026: Railway Staging deployment `ba4a55cc-e8c8-4255-8c2e-b352e7a3e57c` is running the pinned commit `24d4e4b9b54b5ec36322069a8d3586b208aa312a` from `feat/phase7-pharmacy-railway-aligned`.
 - [ ] Confirm `NODE_ENV=staging`; configure the approved SMS provider using its real provider-specific adapter and secret store. Never expose development OTPs in a publicly reachable environment.
 - [ ] Request an OTP to an authorised test phone and confirm SMS delivery, expiry, one-time use, throttling, and generic failure behavior.
 - [ ] Sign in through the real patient page; search stores; open a product catalogue; place a synthetic COD order; confirm the order appears in patient history.
 - [ ] Sign in through the existing `/admin` page; confirm the order is in the admin fulfilment queue; filter by status/store; accept the order; confirm patient history reflects the new status.
-- [ ] Confirm anonymous and cross-patient requests are denied; verify invalid prescription matching and invalid status transitions fail without changing stock.
+- [x] Confirm anonymous access is denied. Read-only Staging GET checks on 2 November returned HTTP 401 for family members/consent, doctor availability/appointments, admin doctors/appointments, patient appointments, prescriptions, health records, lab orders, payments, pharmacy admin stores/orders, patient pharmacy orders, and patient/admin insurance policy collections.
+- [ ] Verify invalid prescription matching and invalid status transitions fail without changing stock using authenticated test accounts in Staging.
 - [ ] Record pass/fail, date, tested commit, and non-sensitive evidence in [Launch Readiness issue #9](https://github.com/ayanshaagency-spec/automatic-octo-umbrella/issues/9). Do not attach OTPs, tokens, secrets, identity documents, or patient information.
 - [ ] Obtain explicit release approval before merge, production deployment, or any production database migration.
 
@@ -38,16 +39,26 @@ Use a dedicated non-production backend and disposable staging database only. Do 
 
 A real provider account/template and a hosted staging environment with the provider configured are external prerequisites. Automated OTP works only in local/CI `development` or `test` mode; these modes must not be used in a publicly reachable environment. In `staging` and `production`, missing OTP provider configuration fails closed.
 
+## Staging deployment and smoke-test evidence — 2 November 2026
+
+- Railway Staging backend deployment `ba4a55cc-e8c8-4255-8c2e-b352e7a3e57c` completed with status `SUCCESS` on commit `24d4e4b9b54b5ec36322069a8d3586b208aa312a`. The Staging backend and its separate PostgreSQL service both reported Online; no Staging environment issues were reported.
+- Docker build completed. The build output reported 0 npm vulnerabilities.
+- The existing pre-deploy runner executed `db/schema.sql` and the sorted SQL migration set present at this commit: `002_production_schema_alignment.sql`, `003_doctor_identity.sql`, `004_phase8_health_insurance_documents.sql`, `008_phase7_pharmacy.sql`, `009_shared_patient_otp_store.sql`, and `010_family_profiles_doctor_availability.sql`. The deployment log reported `schema and migrations applied`. This is Staging-only evidence; no Production migration was run.
+- `/health` returned `{"ok":true,"service":"Ayansha Health Care"}`; `/api/db/health` returned `{"ok":true,"database":"connected"}`.
+- Existing patient homepage, `/admin`, `/doctor`, patient JavaScript/CSS and doctor JavaScript/CSS assets all returned successfully.
+- Public pharmacy stores and delivery-hospital endpoints returned empty arrays. No synthetic, unverified store, hospital, product, patient or prescription rows were inserted into persistent Staging.
+- `/api/insurance/status` reports `storageConfigured=false`, `scannerConfigured=false`, and `uploadsEnabled=false`. This is fail-closed behavior; real insurance document upload is unavailable on this Staging environment until private storage and malware scanning are configured.
+- Anonymous read-only requests to patient/doctor/admin data APIs returned HTTP 401. No unauthenticated data access was observed in this sweep.
+
 ### Database migration state
 
-- `008_phase7_pharmacy.sql`: applied on the isolated **Staging PostgreSQL** by the successful Staging pre-deploy workflow on 31 October 2026. The deployment log reported that the schema and migrations were applied. It was not applied to Production.
-- `009_shared_patient_otp_store.sql`: CI Runtime E2E has passed against disposable PostgreSQL on commit `bc84077add5567a650322f1065e34745ee2745d6`. The corresponding Railway Staging deployment is still queued; therefore this migration is **not yet verified as live on Staging**.
-- Production remains on the existing Phase 6 branch and database. No Pharmacy/OTP migration has been applied to Production.
+- The Staging deployment runner reported successful execution of the schema and sorted migration set listed above, including Pharmacy, shared OTP store and Family/Doctor Availability migrations. Existing migration scripts may be idempotently re-applied by the runner; the deployment log does not distinguish newly created objects from already-present objects.
+- Production remains on the existing Phase 6 branch, commit `27704fc9085bc23c0352ac076e756a40f2ff18cb`, and its last known backend and PostgreSQL deployments remain `SUCCESS`. Production had no staged changes; no source change, variable change, deployment, schema migration or data mutation was performed there.
 
 ### Live staging acceptance still open
 
-- The public Staging backend and database health endpoints respond successfully.
-- The stores and pharmacy delivery-hospital directories currently return empty arrays. No synthetic, unverified store, hospital, product, patient or prescription rows were inserted into the persistent Staging database.
-- Anonymous access to Pharmacy admin/order, patient lab, prescription, health-record and payment APIs is rejected with HTTP 401.
-- Human sign-in/order/fulfilment acceptance is not complete: Staging SMS provider credentials/template and an authorised test phone are not configured. Do not disclose development OTPs on the public service.
-- Pharmacy release remains gated on verified real store licensing/catalogue data and explicit release approval.
+- A human patient/admin/doctor sign-in and Pharmacy order/fulfilment click-through is still pending because the Staging SMS provider is not configured.
+- Staging does not contain `OTP_PROVIDER`, `MSG91_AUTH_KEY`, or `MSG91_TEMPLATE_ID`. No secret values were read, changed, or added. No actual MSG91 SMS delivery or authenticated OTP login was claimed.
+- Insurance document upload is disabled until private storage and malware scanning are configured.
+- Real pharmacy stores, licences and product catalogues still require independent verification and onboarding. Keep every unverified store/product inactive.
+- Pharmacy release remains gated on full authenticated staging acceptance, verified store data and explicit release approval. PR #8 remains Draft and unmerged.
