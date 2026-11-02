@@ -1,3 +1,5 @@
+BEGIN;
+
 -- Phase 8: health insurance metadata only. Binary files belong in a private S3-compatible bucket.
 -- Never put patient-uploaded file bytes or credentials in PostgreSQL/GitHub.
 CREATE TABLE IF NOT EXISTS insurance_policies (
@@ -48,3 +50,5 @@ CREATE INDEX IF NOT EXISTS idx_insurance_documents_policy_created
   ON insurance_documents(policy_id, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_insurance_documents_patient_created
   ON insurance_documents(patient_id, created_at DESC);
+
+COMMIT;
