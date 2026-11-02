@@ -62,3 +62,19 @@ A real provider account/template and a hosted staging environment with the provi
 - Insurance document upload is disabled until private storage and malware scanning are configured.
 - Real pharmacy stores, licences and product catalogues still require independent verification and onboarding. Keep every unverified store/product inactive.
 - Pharmacy release remains gated on full authenticated staging acceptance, verified store data and explicit release approval. PR #8 remains Draft and unmerged.
+
+
+### Migration 008 — Phase 6 Production schema compatibility review (read-only, 2 November 2026)
+
+Reviewed `backend/db/migrations/008_phase7_pharmacy.sql` at commit `24d4e4b` against the Phase 6 Production schema line at commit `27704fc9085bc23c0352ac076e756a40f2ff18cb`.
+
+- The Phase 6 migration `002_production_schema_alignment.sql` creates `hospitals.id SERIAL PRIMARY KEY` (PostgreSQL integer). The Pharmacy migration uses `INTEGER` for `pharmacy_stores.hospital_id`, `pharmacy_orders.delivery_hospital_id`, `pharmacy_orders.patient_id`, and `pharmacy_orders.prescription_id`, matching the existing `hospitals.id`, `patients.id`, and `prescriptions.id` integer identifiers.
+- Pharmacy-owned identifiers use `BIGSERIAL/BIGINT` consistently for stores, products, orders and order items and their corresponding foreign keys.
+- The migration creates only the four new Pharmacy tables and their indexes. It does not ALTER existing Phase 6 tables, update/delete existing rows, or seed sample stores/products.
+- Foreign-key delete behavior is explicit: hospital/patient/prescription references on stores/orders use RESTRICT; store-to-product and order-to-item ownership use CASCADE; historical order-item product references use RESTRICT.
+- DDL is wrapped in a transaction and table/index creation uses `IF NOT EXISTS`. This supports re-running the migration when the existing objects retain the expected shape; `IF NOT EXISTS` alone does not validate a conflicting pre-existing table/index definition.
+- The Staging pre-deploy runner applied the migration set successfully. This source-level compatibility review found no ID-type mismatch against the Phase 6 schema.
+
+**Still open before any Production release:** take and verify a restorable backup/snapshot; document and rehearse restore/rollback; measure execution/lock impact with a representative copy; and obtain explicit release approval. The rollback for this additive schema should prefer restoring a verified pre-release backup if new Pharmacy data has been written; do not blindly DROP tables after launch because they may contain order/audit data.
+
+This review is documentation-only. It did not connect to, change or migrate the Production database.
