@@ -1,3 +1,5 @@
+BEGIN;
+
 -- Phase 10: Family profiles and doctor-published appointment availability.
 -- Additive only: preserve existing patient, doctor, appointment and clinical records.
 
@@ -15,9 +17,8 @@ CREATE TABLE IF NOT EXISTS family_members (
   revoked_at TIMESTAMPTZ
 );
 
-ALTER TABLE family_members DROP CONSTRAINT IF EXISTS family_members_consent_status_check;
-ALTER TABLE family_members ADD CONSTRAINT family_members_consent_status_check
-  CHECK (consent_status IN ('guardian_managed','pending_member_verification','member_verified','declined','revoked'));
+-- The inline consent_status CHECK above already defines the complete allowed set.
+-- Avoid dropping/recreating the same constraint on every idempotent deployment.
 
 CREATE INDEX IF NOT EXISTS family_members_owner_idx
   ON family_members(owner_patient_id, created_at DESC);
@@ -54,3 +55,5 @@ CREATE UNIQUE INDEX IF NOT EXISTS appointments_active_slot_unique_idx
 CREATE INDEX IF NOT EXISTS appointments_family_member_idx
   ON appointments(family_member_id, appointment_at DESC)
   WHERE family_member_id IS NOT NULL;
+
+COMMIT;
