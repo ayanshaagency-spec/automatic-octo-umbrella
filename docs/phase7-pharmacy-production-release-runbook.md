@@ -82,10 +82,21 @@ The Railway Production backend's current pre-deploy command runs `db/schema.sql`
 
 - Production environment health on 2 November: backend and Postgres Online, one replica each, zero active warnings/criticals, zero recent failures in the 7-day query, and no staged/pending Railway work.
 - Production `/health` and `/api/db/health` returned healthy/connected. Patient homepage and `/admin` loaded. `/doctor` returned HTTP 404 on the Phase 6 Production deployment; the Phase 6 server does not define that route, while the PR branch adds the Doctor page route and image asset. After an approved release, verify the route and complete an authenticated Doctor click-through.
-- The Production Railway service config currently reports source branch `feat/phase6-emergency-hospitals` with configured `commitSha=de561ee377f460903e42e328a4a15586b62c436d`, while its latest deployment metadata and GitHub base-branch HEAD report `27704fc9085bc23c0352ac076e756a40f2ff18cb`. This discrepancy was not changed. Reconcile/confirm the actual deploy pin and expected source SHA in Railway before choosing any release action; do not assume a push/merge will deploy the intended commit.
+- The Production Railway service config reports source branch `feat/phase6-emergency-hospitals` with `commitSha=de561ee377f460903e42e328a4a15586b62c436d`; the latest live deployment metadata and GitHub base-branch HEAD report `27704fc9085bc23c0352ac076e756a40f2ff18cb`. A GitHub compare confirms the configured SHA is an ancestor of the deployed SHA (7 commits ahead, 0 behind), so the two SHAs are not divergent. The live deployment is identified by deployment metadata as `27704fc`. Before the next release, confirm whether Railway's `source.commitSha` field represents a pin or an older resolved source reference; do not change it blindly.
 - The GitHub Phase 6 base branch currently reports branch protection disabled and no required status checks. Require an explicit maintainer review and configure an agreed protected-branch/release gate before merging; no repository protection settings were changed.
 - PR #8 currently changes 66 files (+7,983 / -94), across Pharmacy, Insurance, OTP, Family/Doctor availability, patient/admin/doctor UI, mobile app and CI. Review and approve this complete scope intentionally; do not treat it as a Pharmacy-only patch.
 - Production Postgres has a 500 MB attached volume; the latest 24-hour disk metric was approximately 0.105 GB used. This is a point-in-time capacity signal, not a backup or restore test. Patient documents must remain in approved private object storage, not the database volume.
+
+
+### Migration hardening applied on the feature branch — 2 November 2026
+
+Read-only review found migrations 004 and 010 did not explicitly bracket their multi-statement DDL in a transaction. Migration 010 also dropped and recreated the same consent-status check already declared inline when creating `family_members`, causing unnecessary DDL/lock work on repeated deploys.
+
+The following additive, feature-branch-only hardening was committed:
+- `2a60ba5b996d4771d2d30d16d8e02efd4101c5ee`: migration 004 now explicitly uses `BEGIN` / `COMMIT`.
+- `a84018595bf4b08f26dad05f7ac07672c8229517`: migration 010 now explicitly uses `BEGIN` / `COMMIT` and no longer drops/recreates the identical inline consent-status constraint. Its table/column/index creation remains guarded with `IF NOT EXISTS`.
+
+Both edits preserve the declared schema shape and do not modify existing patient/appointment rows. CI and Staging application deployment must be verified against the final feature-branch head before considering these changes validated. Staging is deliberately still pinned to the previously tested application commit, so these edits have not yet been applied to Staging or Production.
 
 **Dry-run result:** Production is healthy and has no active Railway deployment work, but the release is **NOT READY**. The expanded migration review, source-pin reconciliation, authenticated staging acceptance, provider/storage setup as applicable, verified store onboarding, branch/reviewer gate, and backup/restore rehearsal remain open. No Production change was made.
 
