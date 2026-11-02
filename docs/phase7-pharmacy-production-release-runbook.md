@@ -67,6 +67,28 @@ Read-only source review on 2 November 2026 compared `backend/db/migrations/008_p
 
 This source review does not replace a Production backup, isolated restore rehearsal, or execution-time observation against a representative copy.
 
+## 4A. Full release-set dry-run findings — 2 November 2026
+
+The Railway Production backend's current pre-deploy command runs `db/schema.sql` and then **every** `.sql` file under `db/migrations` in sorted filename order on a deployment. It does not select only migration 008. The PR #8 branch adds these four migration files relative to the current Phase 6 base:
+
+- `004_phase8_health_insurance_documents.sql`: creates insurance policy/document metadata tables, foreign keys, constraints and indexes. It does not configure private object storage or malware scanning. Keep uploads disabled until those services are configured and verified.
+- `008_phase7_pharmacy.sql`: adds four Pharmacy tables and indexes. The preceding source-level ID type review found Pharmacy foreign-key types compatible with Phase 6 patient, hospital and prescription integer IDs.
+- `009_shared_patient_otp_store.sql`: adds shared OTP challenge and request-rate event tables storing HMAC-derived values, not raw phone numbers or OTP codes. Production provider account, approved DLT template and secure secret configuration remain pending.
+- `010_family_profiles_doctor_availability.sql`: adds family-member and doctor-availability tables and indexes, and also alters the existing `appointments` table to add `slot_id` and `family_member_id` foreign-key columns plus indexes. This is beyond the Pharmacy-only schema. Its lock/validation impact must be reviewed and measured on a representative restored copy before Production.
+
+**Release-gate consequence:** migration 008's earlier review is not a complete review of the Production release set. Review migrations 004, 009 and 010 independently, including FK target types, existing-table assumptions, repeat-application behaviour, lock duration and recovery if a later file fails after an earlier file commits. The staging pre-deploy log confirms the set ran successfully in Staging, but no Production migration has run and no Production database was inspected directly.
+
+### Additional read-only release checks
+
+- Production environment health on 2 November: backend and Postgres Online, one replica each, zero active warnings/criticals, zero recent failures in the 7-day query, and no staged/pending Railway work.
+- Production `/health` and `/api/db/health` returned healthy/connected. Patient homepage and `/admin` loaded. `/doctor` returned HTTP 404 on the Phase 6 Production deployment; the Phase 6 server does not define that route, while the PR branch adds the Doctor page route and image asset. After an approved release, verify the route and complete an authenticated Doctor click-through.
+- The Production Railway service config currently reports source branch `feat/phase6-emergency-hospitals` with configured `commitSha=de561ee377f460903e42e328a4a15586b62c436d`, while its latest deployment metadata and GitHub base-branch HEAD report `27704fc9085bc23c0352ac076e756a40f2ff18cb`. This discrepancy was not changed. Reconcile/confirm the actual deploy pin and expected source SHA in Railway before choosing any release action; do not assume a push/merge will deploy the intended commit.
+- The GitHub Phase 6 base branch currently reports branch protection disabled and no required status checks. Require an explicit maintainer review and configure an agreed protected-branch/release gate before merging; no repository protection settings were changed.
+- PR #8 currently changes 66 files (+7,983 / -94), across Pharmacy, Insurance, OTP, Family/Doctor availability, patient/admin/doctor UI, mobile app and CI. Review and approve this complete scope intentionally; do not treat it as a Pharmacy-only patch.
+- Production Postgres has a 500 MB attached volume; the latest 24-hour disk metric was approximately 0.105 GB used. This is a point-in-time capacity signal, not a backup or restore test. Patient documents must remain in approved private object storage, not the database volume.
+
+**Dry-run result:** Production is healthy and has no active Railway deployment work, but the release is **NOT READY**. The expanded migration review, source-pin reconciliation, authenticated staging acceptance, provider/storage setup as applicable, verified store onboarding, branch/reviewer gate, and backup/restore rehearsal remain open. No Production change was made.
+
 ## 5. Controlled release sequence — only after all gates are signed off
 
 1. Record the final approved Git commit and confirm the target Railway service/environment is Production.
