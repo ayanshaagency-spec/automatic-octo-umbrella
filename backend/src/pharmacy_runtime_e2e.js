@@ -113,6 +113,8 @@ async function main() {
     assert.match(adminPage.body.raw || '', /id="ordersPanel"/, 'Admin page should expose pharmacy fulfilment queue');
     assert.match(adminPage.body.raw || '', /id="orderStatusFilter"/, 'Admin queue should expose status filtering');
     assert.match(adminPage.body.raw || '', /\/api\/pharmacy\/admin\/orders/, 'Admin client should integrate the authorised pharmacy queue API');
+    assert.match(adminPage.body.raw || '', /Your admin session has expired\. Please sign in again\./,
+      'Admin UI should clear an expired role token and return to the sign-in screen');
 
     const adminLogin = await request(baseUrl, '/api/admin/login', {
       method: 'POST',
