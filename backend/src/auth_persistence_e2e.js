@@ -66,6 +66,19 @@ async function main() {
     assert.equal(await verifyOtp(firstPhone, firstCode), true);
     assert.equal(await verifyOtp(firstPhone, firstCode), false, 'a verified code must be single-use');
 
+    // Two concurrent verifications across separate requests must never consume the same OTP twice.
+    const concurrentVerifyPhone = '+919100000007';
+    await issueOtp(concurrentVerifyPhone);
+    const concurrentVerifyCode = deliveries.at(-1).message.match(/code is (\\d{6})/)[1];
+    const concurrentVerifications = await Promise.all([
+      verifyOtp(concurrentVerifyPhone, concurrentVerifyCode),
+      verifyOtp(concurrentVerifyPhone, concurrentVerifyCode)
+    ]);
+    assert.equal(concurrentVerifications.filter(Boolean).length, 1,
+      'exactly one concurrent verification may consume the OTP');
+    assert.equal(concurrentVerifications.filter(result => result === false).length, 1,
+      'the competing verification must be rejected after the OTP is consumed');
+
     // Rolling limits persist in PostgreSQL and permit no more than three sends per phone.
     const limitedPhone = '+919100000002';
     await issueOtp(limitedPhone);
