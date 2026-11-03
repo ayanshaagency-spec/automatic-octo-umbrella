@@ -78,3 +78,45 @@ Reviewed `backend/db/migrations/008_phase7_pharmacy.sql` at commit `24d4e4b` aga
 **Still open before any Production release:** take and verify a restorable backup/snapshot; document and rehearse restore/rollback; measure execution/lock impact with a representative copy; and obtain explicit release approval. The rollback for this additive schema should prefer restoring a verified pre-release backup if new Pharmacy data has been written; do not blindly DROP tables after launch because they may contain order/audit data.
 
 This review is documentation-only. It did not connect to, change or migrate the Production database.
+
+
+## Staging acceptance refresh — 3 November 2026
+
+### Latest CI-only verification
+
+- Latest Phase 7 branch head: `68d441b9bf00bdb0286c10f0354067fce825837a`.
+- All 10 reported GitHub check runs for this head completed successfully. These include backend tests, Pharmacy/OTP/Doctor/Admin/Family Runtime E2E, Docker build, insurance private-storage/malware E2E, Flutter analysis/tests and debug APK build/upload.
+- Added a concurrency regression to `backend/src/auth_persistence_e2e.js`: two concurrent verifications of one valid OTP must result in exactly one success and one rejection. It runs only against the CI workflow's disposable localhost PostgreSQL database. This does not enable a Staging OTP bypass and is not evidence of real SMS delivery.
+
+### Latest live Staging smoke checks
+
+- Current Staging backend deployment: `970dd885-c3cb-4d8f-934b-b95b5bcac5d7`, status `SUCCESS`; backend and PostgreSQL are Online, 1/1 replicas, zero recent failures, zero active warnings/criticals and no pending Railway changes.
+- Deployment logs report `schema and migrations applied` and Railway `/health` healthcheck succeeded.
+- Live `/health` returned `{"ok":true,"service":"Ayansha Health Care"}`; `/api/db/health` returned `{"ok":true,"database":"connected"}`.
+- Patient homepage, `/admin`, `/doctor` and `/web/pharmacy.js` load. Pharmacy is a section at `/#pharmacy`; there is no standalone `/pharmacy` route.
+- `/api/pharmacy/stores` and `/api/pharmacy/hospitals` return empty arrays. No synthetic or unverified persistent Staging records were added.
+- Anonymous patient Pharmacy orders, Pharmacy admin orders and Admin doctor API requests return HTTP 401 as expected.
+
+### Admin authentication configuration blocker
+
+- Read-only Railway variable inventory on 3 November shows the Staging backend does not have variable names `ADMIN_EMAIL` or `ADMIN_PASSWORD`.
+- The existing server implementation requires both values to be configured before Admin sign-in can succeed. Staging Admin login therefore remains unconfigured and must not be marked as human-verified.
+- Production has both variable names present, but Production credentials must never be copied into Staging. Configure a separate Staging-only Admin identity/password directly in Railway's Staging secret-variable settings. Do not share credentials in chat, GitHub or screenshots.
+- Variable values were not read or changed. `NODE_ENV` value could not be independently confirmed from the available redacted inventory.
+
+### Provider configuration and release gates
+
+- Staging variable inventory also has no `OTP_PROVIDER`, `MSG91_AUTH_KEY`, `MSG91_TEMPLATE_ID`, `MSG91_OTP_VARIABLE`, `OTP_PROVIDER_URL` or `OTP_PROVIDER_TOKEN`. The real Staging OTP provider remains unconfigured and fails closed.
+- MSG91 account/template/SMS setup is intentionally deferred; this note does not authorize or perform any provider configuration.
+- Human Patient → Pharmacy COD order → Admin fulfilment testing remains pending until a dedicated Staging Admin credential and real Staging OTP provider are configured.
+- Store licences, approved stores and medicine catalogues are not onboarded; the public Pharmacy directory is empty.
+- Insurance upload remains disabled until private object storage and malware scanning are configured on the live Staging service.
+
+### Source and deployment lineage clarification
+
+- Railway Staging service config still reports a commit pin at `a84018595bf4b08f26dad05f7ac07672c8229517`.
+- Latest live deployment metadata reports commit `8b6954c8ab6dd45b3715bbd5936ea8765c810a82`, whose direct parent is `a84018595bf4b08f26dad05f7ac07672c8229517`; that intervening commit changes only `docs/phase7-pharmacy-production-release-runbook.md`.
+- The latest branch head `68d441b` adds only a CI E2E test file (concurrent OTP verification); it does not change the live server implementation. No source pin change or Staging redeploy was needed for this test-only change.
+- Production backend remains on the Phase 6 line with latest deployment metadata commit `27704fc9085bc23c0352ac076e756a40f2ff18cb`; Production and its database remain Online with no pending changes.
+
+PR #8 remains Draft and unmerged. No Production variables, source, deployment, schema or data were changed.
