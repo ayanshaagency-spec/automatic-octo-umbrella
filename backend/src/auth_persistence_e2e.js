@@ -69,7 +69,7 @@ async function main() {
     // Two concurrent verifications across separate requests must never consume the same OTP twice.
     const concurrentVerifyPhone = '+919100000007';
     await issueOtp(concurrentVerifyPhone);
-    const concurrentVerifyCode = deliveries.at(-1).message.match(/code is (\\d{6})/)[1];
+    const concurrentVerifyCode = deliveries.at(-1).message.match(/code is (\d{6})/)[1];
     const concurrentVerifications = await Promise.all([
       verifyOtp(concurrentVerifyPhone, concurrentVerifyCode),
       verifyOtp(concurrentVerifyPhone, concurrentVerifyCode)
