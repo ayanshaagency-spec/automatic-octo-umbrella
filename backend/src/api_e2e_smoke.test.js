@@ -69,7 +69,7 @@ test('Phase 5 API smoke/E2E contract', async t => {
   assert.match(home.headers.get('content-type'), /text\/html/);
   const portalPage = await fetch(`${BASE_URL}/portal`);
   assert.equal(portalPage.status, 200);
-  assert.match(portalPage.headers.get('content-type'), /text\\/html/);
+  assert.match(portalPage.headers.get('content-type'), /(?:text\/html)/);
   assert.equal(portalPage.headers.get('cache-control'), 'no-store');
   const portalHtml = await portalPage.text();
   assert.match(portalHtml, /Patient Workspace/);
