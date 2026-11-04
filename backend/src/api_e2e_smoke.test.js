@@ -399,6 +399,22 @@ test('OTP and Admin authentication endpoints enforce shared rate limits', async 
   assert.equal(otpBlocked.status, 429);
   assert.ok((await otpBlocked.json()).retryAfterSeconds >= 1);
 
+  const verifyIp = '203.0.113.123';
+  for (let attempt = 0; attempt < 30; attempt += 1) {
+    const response = await fetch(`${BASE_URL}/api/auth/verify-otp`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-Real-IP': verifyIp },
+      body: JSON.stringify({ phone: `+9191000020${String(attempt).padStart(2, '0')}`, otp: '000000' })
+    });
+    assert.equal(response.status, 401);
+  }
+  const doctorVerifyBlocked = await fetch(`${BASE_URL}/api/doctor/auth/verify-otp`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'X-Real-IP': verifyIp },
+    body: JSON.stringify({ phone: '+919100002099', otp: '000000' })
+  });
+  assert.equal(doctorVerifyBlocked.status, 429, 'Patient and Doctor OTP verification share the source-IP throttle');
+
   const adminIp = '203.0.113.122';
   for (let attempt = 0; attempt < 8; attempt += 1) {
     const response = await fetch(`${BASE_URL}/api/admin/login`, {
