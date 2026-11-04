@@ -141,7 +141,7 @@ async function main() {
     assert.equal(failedState.rows[0].events, 1);
 
     // Shared IP/email buckets are stored as HMAC-only keys and remain atomic under concurrency.
-    const { consumeAuthRateLimit, hashBucket } = require('./auth_rate_limit');
+    const { consumeAuthRateLimit, hashBucket, closeAuthRateLimitPool } = require('./auth_rate_limit');
     const rateLimitIp = '203.0.113.200';
     const rateLimitHash = hashBucket('otp:ip', rateLimitIp);
     const concurrentIpAttempts = await Promise.all(
@@ -194,9 +194,7 @@ async function main() {
     globalThis.fetch = nativeFetch;
     await pool.query('TRUNCATE patient_otp_challenges, patient_otp_request_events, auth_rate_limit_buckets RESTART IDENTITY').catch(() => {});
     await closeOtpStore();
-    const { getDb } = require('./db');
-    const sharedDb = await getDb().catch(() => null);
-    if (sharedDb) await sharedDb.end().catch(() => {});
+    await closeAuthRateLimitPool();
     await pool.end();
   }
 }
