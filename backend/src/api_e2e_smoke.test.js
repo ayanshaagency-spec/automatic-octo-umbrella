@@ -357,6 +357,16 @@ test('production CORS ignores wildcard origins and allows exact configured origi
   const evil = await fetch(`${base}/health`, { headers: { Origin: 'https://evil.example' } });
   assert.equal(evil.status, 200);
   assert.equal(evil.headers.get('access-control-allow-origin'), null);
+
+  const productionAdminLoginWithoutLimiterDatabase = await fetch(`${base}/api/admin/login`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'X-Real-IP': '203.0.113.240' },
+    body: JSON.stringify({ email: 'admin@example.test', password: 'not-used-without-limiter-db' })
+  });
+  assert.equal(productionAdminLoginWithoutLimiterDatabase.status, 503,
+    'Production Admin login must fail closed when the shared rate-limit database is unavailable');
+  assert.equal((await productionAdminLoginWithoutLimiterDatabase.json()).error,
+    'Authentication protection is temporarily unavailable');
 });
 
 
