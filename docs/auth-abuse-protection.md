@@ -8,6 +8,7 @@
 |---|---|---:|
 | Patient + Doctor OTP request | Client IP | 10 requests / 15 minutes |
 | Patient + Doctor OTP request | Phone number | 3 requests / 15 minutes (existing shared OTP-event limiter) |
+| Patient + Doctor OTP verification | Client IP | 30 attempts / 15 minutes |
 | Admin login | Client IP | 30 attempts / 15 minutes |
 | Admin login | Normalized email | 8 attempts / 15 minutes |
 
