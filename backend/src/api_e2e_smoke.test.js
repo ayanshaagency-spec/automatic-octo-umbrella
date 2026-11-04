@@ -75,11 +75,11 @@ test('Phase 5 API smoke/E2E contract', async t => {
   assert.match(portalHtml, /Patient Workspace/);
   assert.match(portalHtml, /Doctor Workspace/);
   assert.match(portalHtml, /Admin Workspace/);
-  assert.match(portalHtml, /href="\\/doctor"/);
-  assert.match(portalHtml, /href="\\/admin"/);
+  assert.ok(portalHtml.includes('href="/doctor"'));
+  assert.ok(portalHtml.includes('href="/admin"'));
   const portalStyles = await fetch(`${BASE_URL}/web/portal.css`);
   assert.equal(portalStyles.status, 200);
-  assert.match(portalStyles.headers.get('content-type'), /text\\/css/);
+  assert.ok((portalStyles.headers.get('content-type') || '').includes('text/css'));
   const webScript = await fetch(`${BASE_URL}/web/app.js`);
   assert.equal(webScript.status, 200);
   assert.match(webScript.headers.get('content-type'), /javascript/);
