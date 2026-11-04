@@ -141,14 +141,9 @@ async function main() {
     assert.equal(failedState.rows[0].events, 1);
 
     // Shared IP/email buckets are stored as HMAC-only keys and remain atomic under concurrency.
-    const { consumeAuthRateLimit } = require('./auth_rate_limit');
+    const { consumeAuthRateLimit, hashBucket } = require('./auth_rate_limit');
     const rateLimitIp = '203.0.113.200';
-    const rateLimitHash = crypto.createHmac('sha256', process.env.JWT_SECRET)
-      .update('ayansha-auth-rate-limit\\0')
-      .update('otp:ip')
-      .update('\\0')
-      .update(rateLimitIp)
-      .digest('hex');
+    const rateLimitHash = hashBucket('otp:ip', rateLimitIp);
     const concurrentIpAttempts = await Promise.all(
       Array.from({ length: 12 }, () => consumeAuthRateLimit({
         namespace: 'otp:ip',
