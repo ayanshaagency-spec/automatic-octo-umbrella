@@ -92,7 +92,7 @@ async function main() {
       'INSERT INTO prescriptions (patient_id) VALUES ($1) RETURNING id', [patient.id]
     )).rows[0];
     await pool.query(
-      "INSERT INTO prescription_items (prescription_id, medicine_name) VALUES ($1, 'Amoxicillin 250mg')",
+      "INSERT INTO prescription_items (prescription_id, medicine_name, dosage, frequency, duration, instructions) VALUES ($1, 'Amoxicillin 250mg', '250 mg', 'twice daily', '5 days', 'CI fixture')",
       [prescription.id]
     );
 
