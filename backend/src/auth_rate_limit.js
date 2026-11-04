@@ -97,6 +97,7 @@ async function consumeAuthRateLimit({ namespace, identifier, limit, windowMs, no
          ELSE auth_rate_limit_buckets.expires_at
        END
      RETURNING request_count,
+       (request_count <= $2) AS within_limit,
        GREATEST(1, CEIL(EXTRACT(EPOCH FROM (
          window_started_at + ($3::bigint * INTERVAL '1 millisecond') - NOW()
        ))))::int AS retry_after_seconds`,
@@ -121,7 +122,7 @@ async function consumeAuthRateLimit({ namespace, identifier, limit, windowMs, no
 
   const count = Number(result.rows[0]?.request_count || 0);
   return {
-    allowed: count <= limit,
+    allowed: result.rows[0]?.within_limit === true,
     limit,
     remaining: Math.max(0, limit - count),
     retryAfterSeconds: Math.max(1, Number(result.rows[0]?.retry_after_seconds || 1))
@@ -132,4 +133,4 @@ function resetMemoryRateLimitsForTests() {
   memoryBuckets.clear();
 }
 
-module.exports = { getTrustedClientIp, consumeAuthRateLimit, resetMemoryRateLimitsForTests };
+module.exports = { getTrustedClientIp, consumeAuthRateLimit, resetMemoryRateLimitsForTests, hashBucket };
