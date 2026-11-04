@@ -10,7 +10,7 @@ const {
 
 const SECRET = 'auth-rate-limit-test-secret-long-enough-for-hmac';
 
-function withTestEnvironment(fn) {
+async function withTestEnvironment(fn) {
   const previous = {
     NODE_ENV: process.env.NODE_ENV,
     DATABASE_URL: process.env.DATABASE_URL,
@@ -21,7 +21,7 @@ function withTestEnvironment(fn) {
   process.env.JWT_SECRET = SECRET;
   resetMemoryRateLimitsForTests();
   try {
-    return fn();
+    return await fn();
   } finally {
     resetMemoryRateLimitsForTests();
     for (const [key, value] of Object.entries(previous)) {
