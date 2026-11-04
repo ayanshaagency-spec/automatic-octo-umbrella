@@ -58,6 +58,15 @@ const server=http.createServer(async(req,res)=>{
   const url = new URL(req.url, `http://${req.headers.host || 'localhost'}`);
   const insuranceHandled = await handleInsuranceRoute(req, res, url, { send: (status, body) => send(res, status, body, req) });
   if (insuranceHandled || res.writableEnded) return;
+  // Serve the shared role portal from a fixed file path; never accept a user-controlled file path.
+  if(req.method==='GET' && (url.pathname==='/portal' || url.pathname==='/portal/')){
+    const portalFile=path.resolve(__dirname,'../../web/portal.html');
+    if(fs.existsSync(portalFile) && fs.statSync(portalFile).isFile()){
+      res.writeHead(200,{'Content-Type':'text/html; charset=utf-8','X-Content-Type-Options':'nosniff','Cache-Control':'no-store'});
+      return fs.createReadStream(portalFile).pipe(res);
+    }
+    return send(res,503,{error:'Role portal unavailable'},req);
+  }
   // Serve only the existing, fixed admin entry point. No user-controlled file path is accepted.
   if(req.method==='GET' && url.pathname==='/admin'){
     const adminFile=path.resolve(__dirname,'../../admin-panel/index.html');
