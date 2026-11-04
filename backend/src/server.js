@@ -20,6 +20,7 @@ const { getAiStatus, generateSymptomGuidance } = require('./ai');
 const { verifyAdminCredentials, createAdminToken, createDoctorToken, verifyRoleToken } = require('./roles');
 const { handlePharmacyRoute } = require('./pharmacy_routes');
 const { handleInsuranceRoute } = require('./insurance_routes');
+const { consumeAuthRateLimit, getTrustedClientIp } = require('./auth_rate_limit');
 
 const configuredOrigins = (process.env.CORS_ALLOWED_ORIGINS || '').split(',').map(v => v.trim()).filter(Boolean);
 const isAllowedOrigin = origin => !origin || configuredOrigins.includes(origin) || (['development','test'].includes(process.env.NODE_ENV) && (configuredOrigins.includes('*') || /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin)));
@@ -29,6 +30,29 @@ const parseRawBody=(req,done)=>{let body='';req.setEncoding('utf8');req.on('data
 const getAuthToken=(req)=>{const header=req.headers.authorization||'';return header.startsWith('Bearer ')?header.slice(7):null;};
 const requireAdmin=(req,res)=>{const payload=verifyRoleToken(getAuthToken(req),'admin');if(!payload){send(res,401,{error:'Admin authentication required'},req);return null;}return payload;};
 const requireAuth=(req,res)=>{const payload=verifyToken(getAuthToken(req));if(!payload){send(res,401,{error:'Authentication required'},req);return null;}return payload;};
+const AUTH_RATE_LIMIT_WINDOW_MS = 15 * 60 * 1000;
+async function enforceAuthRateLimit(req,res,namespace,identifier,limit){
+  try{
+    const outcome=await consumeAuthRateLimit({
+      namespace,
+      identifier,
+      limit,
+      windowMs:AUTH_RATE_LIMIT_WINDOW_MS
+    });
+    if(!outcome.allowed){
+      send(res,429,{
+        error:'Too many authentication attempts. Please try again later.',
+        retryAfterSeconds:outcome.retryAfterSeconds
+      },req);
+      return false;
+    }
+    return true;
+  }catch(_error){
+    // Fail closed in Staging/Production if the shared PostgreSQL limiter is unavailable.
+    send(res,503,{error:'Authentication protection is temporarily unavailable'},req);
+    return false;
+  }
+}
 const server=http.createServer(async(req,res)=>{
   if(req.method==='OPTIONS') return send(res,204,{},req);
   const url = new URL(req.url, `http://${req.headers.host || 'localhost'}`);
@@ -207,7 +231,17 @@ const server=http.createServer(async(req,res)=>{
 
   if(url.pathname==='/api/doctors'&&req.method==='GET'){try{const rows=await listDoctors();if(rows===null)return send(res,503,{error:'DATABASE_URL not configured'},req);return send(res,200,rows,req);}catch(e){return send(res,503,{error:'Unable to load doctors'},req);}}
   if(url.pathname==='/api/db/health'&&req.method==='GET'){try{const db=await getDb();if(!db)return send(res,503,{ok:false,error:'DATABASE_URL not configured'},req);await db.query('SELECT 1');return send(res,200,{ok:true,database:'connected'},req);}catch(e){return send(res,503,{ok:false,error:'Database unavailable'},req);}}
-  if(url.pathname==='/api/auth/request-otp'&&req.method==='POST')return parseBody(req,async(err,data)=>{if(err||!data.phone)return send(res,400,{error:'phone is required'},req);try{const result=await issueOtp(data.phone);return send(res,200,{message:'OTP sent',...result},req);}catch(e){if(e instanceof AuthError)return send(res,e.statusCode,{error:e.message},req);return send(res,502,{error:'Unable to send OTP'},req);}});
+  if(url.pathname==='/api/auth/request-otp'&&req.method==='POST')return parseBody(req,async(err,data)=>{
+    if(!await enforceAuthRateLimit(req,res,'otp:ip',getTrustedClientIp(req),10))return;
+    if(err||!data?.phone)return send(res,400,{error:'phone is required'},req);
+    try{
+      const result=await issueOtp(data.phone);
+      return send(res,200,{message:'OTP sent',...result},req);
+    }catch(e){
+      if(e instanceof AuthError)return send(res,e.statusCode,{error:e.message},req);
+      return send(res,502,{error:'Unable to send OTP'},req);
+    }
+  });
   if(url.pathname==='/api/auth/verify-otp'&&req.method==='POST')return parseBody(req,async(err,data)=>{
     if(err||!data.phone||!data.otp)return send(res,400,{error:'phone and otp are required'},req);
     try{
@@ -227,7 +261,20 @@ const server=http.createServer(async(req,res)=>{
       return send(res,503,{error:'Unable to create secure session'},req);
     }
   });
-  if(url.pathname==='/api/doctor/auth/request-otp'&&req.method==='POST')return parseBody(req,async(err,data)=>{if(err||!data.phone)return send(res,400,{error:'phone is required'},req);try{const doctor=await getDoctorByPhone(data.phone);if(doctor===null)return send(res,503,{error:'DATABASE_URL not configured'},req);if(!doctor)return send(res,404,{error:'Doctor identity is not provisioned'},req);const result=await issueOtp(data.phone);return send(res,200,{message:'OTP sent',...result,doctor:{id:doctor.id,name:doctor.name,specialty:doctor.specialty}},req);}catch(e){if(e instanceof AuthError)return send(res,e.statusCode,{error:e.message},req);return send(res,502,{error:'Unable to send doctor OTP'},req);}});
+  if(url.pathname==='/api/doctor/auth/request-otp'&&req.method==='POST')return parseBody(req,async(err,data)=>{
+    if(!await enforceAuthRateLimit(req,res,'otp:ip',getTrustedClientIp(req),10))return;
+    if(err||!data?.phone)return send(res,400,{error:'phone is required'},req);
+    try{
+      const doctor=await getDoctorByPhone(data.phone);
+      if(doctor===null)return send(res,503,{error:'DATABASE_URL not configured'},req);
+      if(!doctor)return send(res,404,{error:'Doctor identity is not provisioned'},req);
+      const result=await issueOtp(data.phone);
+      return send(res,200,{message:'OTP sent',...result,doctor:{id:doctor.id,name:doctor.name,specialty:doctor.specialty}},req);
+    }catch(e){
+      if(e instanceof AuthError)return send(res,e.statusCode,{error:e.message},req);
+      return send(res,502,{error:'Unable to send doctor OTP'},req);
+    }
+  });
   if(url.pathname==='/api/doctor/auth/verify-otp'&&req.method==='POST')return parseBody(req,async(err,data)=>{
     if(err||!data.phone||!data.otp)return send(res,400,{error:'phone and otp are required'},req);
     try{
@@ -256,7 +303,19 @@ const server=http.createServer(async(req,res)=>{
       catch(e){if(e.statusCode)return send(res,e.statusCode,{error:e.message},req);return send(res,503,{error:'Unable to register doctor'},req);}
     });
   }
-  if(url.pathname==='/api/admin/login'&&req.method==='POST')return parseBody(req,(err,data)=>{if(err)return send(res,400,{error:'Invalid JSON'},req);try{if(!verifyAdminCredentials(data.email,data.password))return send(res,401,{error:'Invalid admin credentials'},req);return send(res,200,{token:createAdminToken(data.email),user:{email:String(data.email).trim().toLowerCase(),role:'admin'}},req);}catch(e){if(e instanceof AuthError)return send(res,e.statusCode,{error:e.message},req);return send(res,503,{error:'Unable to create admin session'},req);}});
+  if(url.pathname==='/api/admin/login'&&req.method==='POST')return parseBody(req,async(err,data)=>{
+    if(!await enforceAuthRateLimit(req,res,'admin:ip',getTrustedClientIp(req),30))return;
+    const email=typeof data?.email==='string'?data.email.trim().toLowerCase().slice(0,254):'';
+    if(!await enforceAuthRateLimit(req,res,'admin:email',email||'(missing)',8))return;
+    if(err)return send(res,400,{error:'Invalid JSON'},req);
+    try{
+      if(!verifyAdminCredentials(email,data?.password))return send(res,401,{error:'Invalid admin credentials'},req);
+      return send(res,200,{token:createAdminToken(email),user:{email,role:'admin'}},req);
+    }catch(e){
+      if(e instanceof AuthError)return send(res,e.statusCode,{error:e.message},req);
+      return send(res,503,{error:'Unable to create admin session'},req);
+    }
+  });
   if(url.pathname==='/api/admin/appointments'&&req.method==='GET'){if(!requireAdmin(req,res))return;try{const rows=await listAppointments();if(rows===null)return send(res,503,{error:'DATABASE_URL not configured'},req);return send(res,200,rows,req);}catch(e){return send(res,503,{error:'Unable to load admin appointments'},req);}}
   if(url.pathname==='/api/emergency'&&req.method==='GET')return send(res,200,emergencyResponse(),req);
   if(url.pathname==='/api/hospitals/nearby'&&req.method==='GET'){try{const {latitude,longitude}=validateCoordinates(url.searchParams.get('latitude'),url.searchParams.get('longitude'));const rows=await listNearbyHospitals(latitude,longitude,url.searchParams.get('radiusKm')||25,url.searchParams.get('limit')||20);if(rows===null)return send(res,503,{error:'Hospital directory database is not configured'},req);return send(res,200,{latitude,longitude,radiusKm:Number(url.searchParams.get('radiusKm')||25),hospitals:rows},req);}catch(e){if(e.statusCode)return send(res,e.statusCode,{error:e.message},req);return send(res,503,{error:'Unable to load nearby hospitals'},req);}}
