@@ -2,10 +2,28 @@
 
 const crypto = require('node:crypto');
 const net = require('node:net');
-const { getDb } = require('./db');
+const { Pool } = require('pg');
 
 const memoryBuckets = new Map();
 let cleanupCounter = 0;
+let limiterPool;
+
+function getLimiterPool() {
+  const connectionString = String(process.env.DATABASE_URL || '').trim();
+  if (!connectionString) throw new Error('DATABASE_URL is required for shared authentication rate limiting');
+  if (!limiterPool) {
+    limiterPool = new Pool({
+      connectionString,
+      ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false,
+      max: 5,
+      idleTimeoutMillis: 30000,
+      connectionTimeoutMillis: 5000
+    });
+    // Do not log identifiers, SQL parameters, connection strings or authentication material.
+    limiterPool.on('error', () => {});
+  }
+  return limiterPool;
+}
 
 function getTrustedClientIp(req) {
   // Railway's public HTTP edge overwrites X-Real-IP for public requests.
@@ -72,8 +90,7 @@ async function consumeAuthRateLimit({ namespace, identifier, limit, windowMs, no
     return consumeMemoryBucket(bucketHash, limit, windowMs, now);
   }
 
-  const db = await getDb();
-  if (!db) throw new Error('Authentication rate-limit database is not configured');
+  const db = getLimiterPool();
 
   // One atomic upsert serializes concurrent requests across application replicas.
   const result = await db.query(
@@ -133,4 +150,18 @@ function resetMemoryRateLimitsForTests() {
   memoryBuckets.clear();
 }
 
-module.exports = { getTrustedClientIp, consumeAuthRateLimit, resetMemoryRateLimitsForTests, hashBucket };
+async function closeAuthRateLimitPool() {
+  if (limiterPool) {
+    const current = limiterPool;
+    limiterPool = undefined;
+    await current.end();
+  }
+}
+
+module.exports = {
+  getTrustedClientIp,
+  consumeAuthRateLimit,
+  resetMemoryRateLimitsForTests,
+  hashBucket,
+  closeAuthRateLimitPool
+};
