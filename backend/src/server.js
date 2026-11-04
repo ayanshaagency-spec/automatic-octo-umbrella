@@ -243,7 +243,8 @@ const server=http.createServer(async(req,res)=>{
     }
   });
   if(url.pathname==='/api/auth/verify-otp'&&req.method==='POST')return parseBody(req,async(err,data)=>{
-    if(err||!data.phone||!data.otp)return send(res,400,{error:'phone and otp are required'},req);
+    if(!await enforceAuthRateLimit(req,res,'otp-verify:ip',getTrustedClientIp(req),30))return;
+    if(err||!data?.phone||!data?.otp)return send(res,400,{error:'phone and otp are required'},req);
     try{
       if(!await verifyOtp(data.phone,String(data.otp)))return send(res,401,{error:'Invalid or expired OTP'},req);
       const db=await getDb();
@@ -276,7 +277,8 @@ const server=http.createServer(async(req,res)=>{
     }
   });
   if(url.pathname==='/api/doctor/auth/verify-otp'&&req.method==='POST')return parseBody(req,async(err,data)=>{
-    if(err||!data.phone||!data.otp)return send(res,400,{error:'phone and otp are required'},req);
+    if(!await enforceAuthRateLimit(req,res,'otp-verify:ip',getTrustedClientIp(req),30))return;
+    if(err||!data?.phone||!data?.otp)return send(res,400,{error:'phone and otp are required'},req);
     try{
       if(!await verifyOtp(data.phone,String(data.otp)))return send(res,401,{error:'Invalid or expired OTP'},req);
       const doctor=await getDoctorByPhone(data.phone);
