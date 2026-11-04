@@ -47,7 +47,9 @@ async function main() {
   try {
     const migrationPath = path.join(__dirname, '..', 'db', 'migrations', '009_shared_patient_otp_store.sql');
     await pool.query(fs.readFileSync(migrationPath, 'utf8'));
-    await pool.query('TRUNCATE patient_otp_challenges, patient_otp_request_events RESTART IDENTITY');
+    const limiterMigrationPath = path.join(__dirname, '..', 'db', 'migrations', '011_auth_rate_limit_buckets.sql');
+    await pool.query(fs.readFileSync(limiterMigrationPath, 'utf8'));
+    await pool.query('TRUNCATE patient_otp_challenges, patient_otp_request_events, auth_rate_limit_buckets RESTART IDENTITY');
 
     // Staging must use the shared database and provider adapter, never return a development OTP.
     const firstPhone = '+919100000001';
@@ -138,11 +140,68 @@ async function main() {
     assert.equal(failedState.rows[0].challenges, 0);
     assert.equal(failedState.rows[0].events, 1);
 
-    console.log('Shared OTP persistence E2E passed: hashed storage, single-use, rolling limit, concurrent limit, lockout, expiry and provider failure cleanup.');
+    // Shared IP/email buckets are stored as HMAC-only keys and remain atomic under concurrency.
+    const { consumeAuthRateLimit } = require('./auth_rate_limit');
+    const rateLimitIp = '203.0.113.200';
+    const rateLimitHash = crypto.createHmac('sha256', process.env.JWT_SECRET)
+      .update('ayansha-auth-rate-limit\\0')
+      .update('otp:ip')
+      .update('\\0')
+      .update(rateLimitIp)
+      .digest('hex');
+    const concurrentIpAttempts = await Promise.all(
+      Array.from({ length: 12 }, () => consumeAuthRateLimit({
+        namespace: 'otp:ip',
+        identifier: rateLimitIp,
+        limit: 5,
+        windowMs: 15 * 60 * 1000
+      }))
+    );
+    assert.equal(concurrentIpAttempts.filter(result => result.allowed).length, 5,
+      'only the configured number of concurrent requests may pass');
+    assert.equal(concurrentIpAttempts.filter(result => !result.allowed).length, 7,
+      'all requests beyond the shared limit must be rejected');
+    const persistedLimit = await pool.query(
+      'SELECT bucket_hash, request_count FROM auth_rate_limit_buckets WHERE bucket_hash = $1',
+      [rateLimitHash]
+    );
+    assert.equal(persistedLimit.rowCount, 1);
+    assert.equal(Number(persistedLimit.rows[0].request_count), 12);
+    assert.notEqual(persistedLimit.rows[0].bucket_hash, rateLimitIp,
+      'the database stores only an HMAC-derived key, never the raw IP');
+
+    // The same client IP has independent OTP and Admin namespaces.
+    assert.equal((await consumeAuthRateLimit({
+      namespace: 'admin:ip',
+      identifier: rateLimitIp,
+      limit: 2,
+      windowMs: 15 * 60 * 1000
+    })).allowed, true);
+
+    // Expired counters reset instead of causing a permanent lockout.
+    await pool.query(
+      `UPDATE auth_rate_limit_buckets
+          SET window_started_at = NOW() - INTERVAL '16 minutes',
+              expires_at = NOW() - INTERVAL '1 minute'
+        WHERE bucket_hash = $1`,
+      [rateLimitHash]
+    );
+    const afterExpiry = await consumeAuthRateLimit({
+      namespace: 'otp:ip',
+      identifier: rateLimitIp,
+      limit: 5,
+      windowMs: 15 * 60 * 1000
+    });
+    assert.equal(afterExpiry.allowed, true);
+
+    console.log('Shared auth E2E passed: OTP persistence, single-use, phone throttle, concurrent OTP consume, shared IP limiter, HMAC-only storage, concurrency and expiry.');
   } finally {
     globalThis.fetch = nativeFetch;
-    await pool.query('TRUNCATE patient_otp_challenges, patient_otp_request_events RESTART IDENTITY').catch(() => {});
+    await pool.query('TRUNCATE patient_otp_challenges, patient_otp_request_events, auth_rate_limit_buckets RESTART IDENTITY').catch(() => {});
     await closeOtpStore();
+    const { getDb } = require('./db');
+    const sharedDb = await getDb().catch(() => null);
+    if (sharedDb) await sharedDb.end().catch(() => {});
     await pool.end();
   }
 }
