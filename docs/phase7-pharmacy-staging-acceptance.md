@@ -120,3 +120,37 @@ This review is documentation-only. It did not connect to, change or migrate the 
 - Production backend remains on the Phase 6 line with latest deployment metadata commit `27704fc9085bc23c0352ac076e756a40f2ff18cb`; Production and its database remain Online with no pending changes.
 
 PR #8 remains Draft and unmerged. No Production variables, source, deployment, schema or data were changed.
+
+
+## Staging acceptance refresh — 5 November 2026 (supersedes earlier deployment snapshot)
+
+### Exact live deployment
+
+- Railway Staging backend deployment: `da669bc6-38cd-483e-9b50-54b8b5bc67e4`, status SUCCESS.
+- Branch/commit: `staging/auth-abuse-protection-with-role-portal` / `c7b9983ed5be2e1c884889abdcac1ae8268808c9`.
+- The deployment log explicitly reports `schema and migrations applied`; the health check on `/health` succeeded. The deployed integration includes migrations 009, 010 and 011 along with the earlier ordered migration set.
+- Staging backend and PostgreSQL are Online, one replica each, with zero active warnings/criticals, no recent failures and no pending Railway work.
+
+### Live read-only checks
+
+- `/health`: HTTP 200; `/api/db/health`: HTTP 200 with database connected.
+- `/portal`, `/doctor`, `/admin`, `/web/portal.css` and `/web/pharmacy.js`: load successfully.
+- `/api/pharmacy/stores`, `/api/pharmacy/hospitals` and `/api/doctors`: each returns an empty array. Do not create synthetic live records.
+- Anonymous requests to Pharmacy Admin stores/orders, Patient Pharmacy orders, Doctor appointments, Admin appointments and patient/admin insurance policies return HTTP 401.
+- The latest 24-hour Railway aggregate shows 147 requests: 103 2xx, 44 4xx and 0 5xx. It is not authenticated journey evidence.
+
+### Current blocker-by-blocker result
+
+- **Admin sign-in BLOCKED:** Staging variable inventory does not include `ADMIN_EMAIL` or `ADMIN_PASSWORD`. Configure a separate Staging-only account directly in Railway. Never copy Production credentials or send them through chat.
+- **Patient/Doctor SMS OTP BLOCKED:** Staging has no OTP provider variables. Public environment fails closed; do not enable dev OTP bypass. MSG91 account/DLT/template/SMS activation remains deferred to the final step.
+- **Live Pharmacy checkout BLOCKED:** The approved store and hospital directories are empty. CI Runtime E2E covers the whole pharmacy workflow on disposable PostgreSQL, but live order/fulfilment must wait for verified real partner data and authenticated Staging sessions.
+- **Public ingress HTTP 429 test PENDING:** Unit tests validate source-IP parsing and CI tests cover shared limiter persistence/concurrency. A live burst from the shared public IP was intentionally not run because it could throttle other Staging users. Use an isolated test IP or dedicated service.
+- **Insurance upload BLOCKED:** `/api/insurance/status` returns `storageConfigured=false`, `scannerConfigured=false`, `uploadsEnabled=false`. The Insurance CI workflow passed against disposable storage and ClamAV services, not the live Railway environment.
+
+### Current CI evidence
+
+All reported workflows on the relevant PR heads are successful: PR #8 6/6 (including Insurance private-storage/malware E2E); PR #12 4/4; PR #13 4/4; PR #14 4/4. The PRs remain Draft/Unmerged. Exact workflow run links are recorded in the current module closure matrix.
+
+### Acceptance decision
+
+**STAGING PARTIALLY VERIFIED — NOT READY FOR FULL HUMAN ACCEPTANCE.** Route serving, database connectivity, role-page entry points, anonymous authorization guards and isolated CI runtime flows pass. Authenticated Admin/Patient/Doctor journeys, real pharmacy checkout, public-ingress 429 validation and live private-document upload remain blocked by the prerequisites above. No Production source/configuration/database/deployment changes occurred.
