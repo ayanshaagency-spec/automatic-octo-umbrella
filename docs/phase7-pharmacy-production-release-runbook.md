@@ -133,3 +133,37 @@ Both edits preserve the declared schema shape and do not modify existing patient
 - Production database URLs, passwords, Auth Keys, patient identifiers, OTPs, prescriptions, medical records and backup archives must never be committed to this repository or pasted into chat.
 - No Production command in this document has been run.
 - Do not merge PR #8, deploy, run a Production migration, change Production variables, or restore a Production backup without explicit approval for that exact action.
+
+
+## Release-readiness refresh — 5 November 2026
+
+This section supersedes older deployment identifiers above where they differ. It is an audit update only and is not approval to change Production.
+
+### Current environment evidence
+
+- Production Railway service is still on branch `feat/phase6-emergency-hospitals`. Service configuration reports source commit `de561ee377f460903e42e328a4a15586b62c436d`; latest successful backend deployment is `34586c86-9dbe-4b32-a75e-47cf0f5a74d1`, with deployment metadata commit `27704fc9085bc23c0352ac076e756a40f2ff18cb`.
+- GitHub compare confirms the configured source SHA `de561ee` is an ancestor of the deployment metadata SHA `27704fc` (7 commits ahead, 0 behind). This is not a divergent source line. Do not change the Railway source pin based on this difference alone.
+- Production backend and PostgreSQL are Online, one replica each, zero active warnings/criticals, zero recent failures and no pending Railway changes.
+- Staging deployment `da669bc6-38cd-483e-9b50-54b8b5bc67e4` is SUCCESS on branch `staging/auth-abuse-protection-with-role-portal`, commit `c7b9983ed5be2e1c884889abdcac1ae8268808c9`. Its pre-deploy log reports `schema and migrations applied`; the Railway `/health` check succeeded. This is Staging-only.
+- All four Draft PRs (#8, #12, #13, #14) remain open/unmerged and mergeable. Their available CI suites on current heads are green (PR #8 6/6; PR #12 4/4; PR #13 4/4; PR #14 4/4). CI is not a substitute for live authenticated acceptance.
+
+### Static review of migration set 004 / 008 / 009 / 010 / 011
+
+- **004 — Insurance metadata:** creates policy/document metadata tables and indexes; file bytes are stored in private object storage, not PostgreSQL. It is transaction-wrapped.
+- **008 — Pharmacy:** creates the four Pharmacy tables and indexes; foreign-key ID types were reviewed against the Phase 6 integer patient/hospital/prescription identifiers. It is transaction-wrapped.
+- **009 — Shared OTP storage:** creates HMAC-hash-only OTP challenge and request-event tables and expiry/time indexes; raw phone and OTP values are not stored. It is transaction-wrapped.
+- **010 — Family Profiles / Doctor Availability:** creates family-member and availability-slot tables, adds nullable `slot_id` and `family_member_id` foreign-key columns to the existing appointments table, and adds partial unique/supporting indexes. It is transaction-wrapped and additive; existing appointment rows are not rewritten by the migration source.
+- **011 — Authentication abuse protection:** creates the HMAC bucket table and expiry index; raw IP/email identifiers are not stored. It is transaction-wrapped.
+
+**Lock-impact limitation:** Migration 010 modifies the existing `appointments` table and creates an index on it. The source uses ordinary `CREATE INDEX` (not `CREATE INDEX CONCURRENTLY`), within a transaction. This can hold locks while the table is scanned/indexed and must be measured on a representative restored copy with production-like row counts and concurrent read/write load. No lock-duration measurement has been performed against Production or a representative clone during this audit. Review execution time and lock behavior before any release. The other migration files are primarily new-table/index creation, but their full ordered execution must also be rehearsed.
+
+### Remaining Production gates
+
+- No Production backup, restore rehearsal or migration has been performed in this session. The runbook commands are preparation only.
+- Complete a secure backup archive check and repeated restore to a fresh isolated PostgreSQL target; record duration and operator sign-off.
+- Measure ordered migrations against a representative copy, especially the appointments-table DDL/index work in 010.
+- Complete Admin/Patient/Doctor authenticated Staging acceptance, real verified store onboarding, SMS provider acceptance (MSG91 at the final step), and live Insurance provider acceptance if Insurance is included in release scope.
+- Review all 66 changed files in PR #8 intentionally; it is broader than Pharmacy alone. Confirm dependency order across #8 → #12/#13 → #14 and required maintainers/status gates before any merge.
+- Obtain explicit written approval for the exact Production commit, migration and deployment window before any Production action.
+
+**Decision remains NOT READY FOR PRODUCTION.** Phase 6 Production remains healthy and unchanged. No Production branch, variable, deployment, schema, data, backup or restore action was performed.
