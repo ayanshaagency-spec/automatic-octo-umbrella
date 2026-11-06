@@ -3,15 +3,13 @@ const assert = require('node:assert/strict');
 const {
   PaymentGatewayError,
   getConfiguredProvider,
-  getPaymentProviderStatus,
   createPaymentGatewayOrder
 } = require('./payment_gateway');
 
 const originalEnv = {
   PAYMENT_PROVIDER: process.env.PAYMENT_PROVIDER,
   RAZORPAY_KEY_ID: process.env.RAZORPAY_KEY_ID,
-  RAZORPAY_KEY_SECRET: process.env.RAZORPAY_KEY_SECRET,
-  PAYMENT_WEBHOOK_SECRET: process.env.PAYMENT_WEBHOOK_SECRET
+  RAZORPAY_KEY_SECRET: process.env.RAZORPAY_KEY_SECRET
 };
 const originalFetch = global.fetch;
 
@@ -113,34 +111,3 @@ test('reports the configured provider without exposing credentials', () => {
 });
 
 console.log('Phase 5 payment gateway tests loaded');
-
-
-test('payment readiness reports provider, credentials and webhook without exposing secrets', () => {
-  delete process.env.PAYMENT_PROVIDER;
-  delete process.env.RAZORPAY_KEY_ID;
-  delete process.env.RAZORPAY_KEY_SECRET;
-  delete process.env.PAYMENT_WEBHOOK_SECRET;
-  assert.deepEqual(getPaymentProviderStatus(), {
-    provider: null,
-    providerSupported: false,
-    credentialsConfigured: false,
-    webhookConfigured: false,
-    configured: false
-  });
-
-  process.env.PAYMENT_PROVIDER = 'razorpay';
-  process.env.RAZORPAY_KEY_ID = 'rzp_test_key_id';
-  process.env.RAZORPAY_KEY_SECRET = 'test-only-razorpay-secret';
-  process.env.PAYMENT_WEBHOOK_SECRET = 'test-only-webhook-secret';
-  const ready = getPaymentProviderStatus();
-  assert.deepEqual(ready, {
-    provider: 'razorpay',
-    providerSupported: true,
-    credentialsConfigured: true,
-    webhookConfigured: true,
-    configured: true
-  });
-  const serialized = JSON.stringify(ready);
-  assert.equal(serialized.includes('test-only-razorpay-secret'), false);
-  assert.equal(serialized.includes('test-only-webhook-secret'), false);
-});

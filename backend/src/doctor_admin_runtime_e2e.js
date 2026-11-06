@@ -46,6 +46,27 @@ async function main() {
   const adminToken = login.body.token;
   assert.ok(adminToken, 'admin token should be returned');
 
+  const anonymousPaymentStatus = await request('/api/admin/payment/status');
+  assert.equal(anonymousPaymentStatus.status, 401,
+    'payment readiness must require admin authentication');
+  const paymentStatus = await request('/api/admin/payment/status', {
+    headers: jsonHeaders(adminToken)
+  });
+  assert.equal(paymentStatus.status, 200,
+    'authenticated admin should read payment readiness');
+  assert.deepEqual(Object.keys(paymentStatus.body).sort(), [
+    'provider', 'providerSupported', 'credentialsConfigured', 'webhookConfigured', 'configured'
+  ].sort(), 'payment readiness response must be limited to non-secret status fields');
+  assert.equal(typeof paymentStatus.body.providerSupported, 'boolean');
+  assert.equal(typeof paymentStatus.body.credentialsConfigured, 'boolean');
+  assert.equal(typeof paymentStatus.body.webhookConfigured, 'boolean');
+  assert.equal(typeof paymentStatus.body.configured, 'boolean');
+  assert.equal(
+    JSON.stringify(paymentStatus.body).includes('secret'),
+    false,
+    'payment readiness must never disclose credential values'
+  );
+
   const timestamp = String(Date.now()).slice(-5);
   const phone = `+9199999${timestamp}`;
   const doctorInput = {

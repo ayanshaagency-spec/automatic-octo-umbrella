@@ -10,23 +10,6 @@ function getConfiguredProvider() {
   return (process.env.PAYMENT_PROVIDER || '').trim().toLowerCase() || null;
 }
 
-function getPaymentProviderStatus() {
-  const provider = getConfiguredProvider();
-  const providerSupported = provider === 'razorpay';
-  const credentialsConfigured = providerSupported && Boolean(
-    (process.env.RAZORPAY_KEY_ID || '').trim() &&
-    (process.env.RAZORPAY_KEY_SECRET || '').trim()
-  );
-  const webhookConfigured = Boolean(require('./payment_webhook').getWebhookSecret());
-  return {
-    provider: provider || null,
-    providerSupported,
-    credentialsConfigured,
-    webhookConfigured,
-    configured: providerSupported && credentialsConfigured && webhookConfigured
-  };
-}
-
 function getRazorpayCredentials() {
   const keyId = (process.env.RAZORPAY_KEY_ID || '').trim();
   const keySecret = (process.env.RAZORPAY_KEY_SECRET || '').trim();
@@ -76,7 +59,6 @@ function createPaymentGateway() {
 module.exports = {
   PaymentGatewayError,
   getConfiguredProvider,
-  getPaymentProviderStatus,
   createPaymentGateway,
   createPaymentGatewayOrder
 };
