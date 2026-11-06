@@ -64,7 +64,7 @@ test('creates a Razorpay order with rupee-to-paise conversion', async () => {
     request = { url, options };
     return {
       ok: true,
-      json: async () => ({ id: 'order_test_123', amount: 12550, currency: 'INR' })
+      json: async () => ({ id: 'order_test123', amount: 12550, currency: 'INR' })
     };
   };
 
@@ -77,7 +77,7 @@ test('creates a Razorpay order with rupee-to-paise conversion', async () => {
   assert.deepEqual(result, {
     provider: 'razorpay',
     keyId: 'rzp_test_key',
-    orderId: 'order_test_123',
+    orderId: 'order_test123',
     amount: 12550,
     currency: 'INR'
   });
@@ -153,7 +153,7 @@ test('verifies Razorpay Checkout signature and confirms captured status with the
   const crypto = require('crypto');
   process.env.RAZORPAY_KEY_ID = 'rzp_test_key';
   process.env.RAZORPAY_KEY_SECRET = 'checkout_test_secret';
-  const orderId = 'order_test_123', paymentId = 'pay_test_123';
+  const orderId = 'order_test123', paymentId = 'pay_test123';
   const signature = crypto.createHmac('sha256', 'checkout_test_secret').update(orderId + '|' + paymentId).digest('hex');
   let request;
   const verified = await verifyRazorpayCheckout({
@@ -177,7 +177,7 @@ test('rejects invalid Checkout signature before contacting Razorpay', async () =
   let called = false;
   await assert.rejects(
     () => verifyRazorpayCheckout({
-      orderId: 'order_test_123', paymentId: 'pay_test_123', signature: '0'.repeat(64),
+      orderId: 'order_test123', paymentId: 'pay_test123', signature: '0'.repeat(64),
       expectedAmount: 125.5, fetchImpl: async () => { called = true; }
     }),
     error => error.statusCode === 401
@@ -189,7 +189,7 @@ test('rejects amount, order and currency mismatches in the payment lookup', asyn
   const crypto = require('crypto');
   process.env.RAZORPAY_KEY_ID = 'rzp_test_key';
   process.env.RAZORPAY_KEY_SECRET = 'checkout_test_secret';
-  const orderId = 'order_test_123', paymentId = 'pay_test_123';
+  const orderId = 'order_test123', paymentId = 'pay_test123';
   const signature = crypto.createHmac('sha256', 'checkout_test_secret').update(orderId + '|' + paymentId).digest('hex');
   await assert.rejects(
     () => verifyRazorpayCheckout({
@@ -206,7 +206,7 @@ test('an authorised but uncaptured payment is not treated as paid', async () => 
   const crypto = require('crypto');
   process.env.RAZORPAY_KEY_ID = 'rzp_test_key';
   process.env.RAZORPAY_KEY_SECRET = 'checkout_test_secret';
-  const orderId = 'order_test_123', paymentId = 'pay_test_123';
+  const orderId = 'order_test123', paymentId = 'pay_test123';
   const signature = crypto.createHmac('sha256', 'checkout_test_secret').update(orderId + '|' + paymentId).digest('hex');
   const verified = await verifyRazorpayCheckout({
     orderId, paymentId, signature, expectedAmount: 125.5, expectedCurrency: 'INR',
