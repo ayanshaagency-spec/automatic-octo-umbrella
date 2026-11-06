@@ -4,7 +4,9 @@ const {
   PaymentGatewayError,
   getConfiguredProvider,
   getPaymentProviderStatus,
-  createPaymentGatewayOrder
+  createPaymentGatewayOrder,
+  verifyRazorpayCheckoutSignature,
+  verifyRazorpayCheckout
 } = require('./payment_gateway');
 
 const originalEnv = {
@@ -74,6 +76,7 @@ test('creates a Razorpay order with rupee-to-paise conversion', async () => {
 
   assert.deepEqual(result, {
     provider: 'razorpay',
+    keyId: 'rzp_test_key',
     orderId: 'order_test_123',
     amount: 12550,
     currency: 'INR'
@@ -143,4 +146,73 @@ test('payment readiness reports provider, credentials and webhook without exposi
   const serialized = JSON.stringify(ready);
   assert.equal(serialized.includes('test-only-razorpay-secret'), false);
   assert.equal(serialized.includes('test-only-webhook-secret'), false);
+});
+
+
+test('verifies Razorpay Checkout signature and confirms captured status with the API', async () => {
+  const crypto = require('crypto');
+  process.env.RAZORPAY_KEY_ID = 'rzp_test_key';
+  process.env.RAZORPAY_KEY_SECRET = 'checkout_test_secret';
+  const orderId = 'order_test_123', paymentId = 'pay_test_123';
+  const signature = crypto.createHmac('sha256', 'checkout_test_secret').update(orderId + '|' + paymentId).digest('hex');
+  let request;
+  const verified = await verifyRazorpayCheckout({
+    orderId, paymentId, signature, expectedAmount: 125.5, expectedCurrency: 'INR',
+    fetchImpl: async (url, options) => {
+      request = { url, options };
+      return { ok: true, json: async () => ({
+        id: paymentId, order_id: orderId, amount: 12550, currency: 'INR', status: 'captured', captured: true
+      }) };
+    }
+  });
+  assert.deepEqual(verified, { status: 'paid', providerPaymentId: paymentId });
+  assert.equal(request.url, 'https://api.razorpay.com/v1/payments/' + paymentId);
+  assert.equal(request.options.method, 'GET');
+  assert.match(request.options.headers.Authorization, /^Basic /);
+});
+
+test('rejects invalid Checkout signature before contacting Razorpay', async () => {
+  process.env.RAZORPAY_KEY_ID = 'rzp_test_key';
+  process.env.RAZORPAY_KEY_SECRET = 'checkout_test_secret';
+  let called = false;
+  await assert.rejects(
+    () => verifyRazorpayCheckout({
+      orderId: 'order_test_123', paymentId: 'pay_test_123', signature: '0'.repeat(64),
+      expectedAmount: 125.5, fetchImpl: async () => { called = true; }
+    }),
+    error => error.statusCode === 401
+  );
+  assert.equal(called, false);
+});
+
+test('rejects amount, order and currency mismatches in the payment lookup', async () => {
+  const crypto = require('crypto');
+  process.env.RAZORPAY_KEY_ID = 'rzp_test_key';
+  process.env.RAZORPAY_KEY_SECRET = 'checkout_test_secret';
+  const orderId = 'order_test_123', paymentId = 'pay_test_123';
+  const signature = crypto.createHmac('sha256', 'checkout_test_secret').update(orderId + '|' + paymentId).digest('hex');
+  await assert.rejects(
+    () => verifyRazorpayCheckout({
+      orderId, paymentId, signature, expectedAmount: 125.5, expectedCurrency: 'INR',
+      fetchImpl: async () => ({ ok: true, json: async () => ({
+        id: paymentId, order_id: orderId, amount: 10000, currency: 'INR', status: 'captured', captured: true
+      }) })
+    }),
+    error => error.statusCode === 422
+  );
+});
+
+test('an authorised but uncaptured payment is not treated as paid', async () => {
+  const crypto = require('crypto');
+  process.env.RAZORPAY_KEY_ID = 'rzp_test_key';
+  process.env.RAZORPAY_KEY_SECRET = 'checkout_test_secret';
+  const orderId = 'order_test_123', paymentId = 'pay_test_123';
+  const signature = crypto.createHmac('sha256', 'checkout_test_secret').update(orderId + '|' + paymentId).digest('hex');
+  const verified = await verifyRazorpayCheckout({
+    orderId, paymentId, signature, expectedAmount: 125.5, expectedCurrency: 'INR',
+    fetchImpl: async () => ({ ok: true, json: async () => ({
+      id: paymentId, order_id: orderId, amount: 12550, currency: 'INR', status: 'authorized', captured: false
+    }) })
+  });
+  assert.deepEqual(verified, { status: 'pending', providerPaymentId: paymentId });
 });

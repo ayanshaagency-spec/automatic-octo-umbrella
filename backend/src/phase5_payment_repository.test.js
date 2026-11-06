@@ -86,7 +86,7 @@ function createPaymentDb() {
 
       if (sql.includes('UPDATE payments') && sql.includes('SET status = $1')) {
         const payment = findPayment(params[2]);
-        if (!payment) return { rowCount: 0, rows: [] };
+        if (!payment || !params[3]?.includes(payment.status)) return { rowCount: 0, rows: [] };
         payment.status = params[0];
         if (params[1]) payment.provider_payment_id = params[1];
         return { rowCount: 1, rows: [payment] };

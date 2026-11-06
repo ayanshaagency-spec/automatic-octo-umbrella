@@ -9,7 +9,7 @@ const { listFamilyMembers, createFamilyMember, revokeFamilyMember, listFamilyCon
 const { listPrescriptions, createPrescription, listHealthRecords, createHealthRecord } = require('./phase3_repository');
 const { listLabOrders, createLabOrder, updateLabOrderStatus } = require('./phase4_repository');
 const { listPayments, getPaymentById, findPaymentByProviderOrderId, setProviderOrderId, createPayment, updatePaymentStatus } = require('./phase5_payment_repository');
-const { createPaymentGatewayOrder, getPaymentProviderStatus } = require('./payment_gateway');
+const { createPaymentGatewayOrder, getPaymentProviderStatus, verifyRazorpayCheckout } = require('./payment_gateway');
 const { getWebhookSecret, verifyWebhookSignature, parseWebhookEvent, normalizeRazorpayPaymentEvent } = require('./payment_webhook');
 const { isAuthorizedPaymentStatusUpdate } = require('./payment_status_authorization');
 const isAuthorizedAdmin = req => isAuthorizedPaymentStatusUpdate(req.headers, process.env.ADMIN_API_TOKEN || process.env.PAYMENT_STATUS_ADMIN_TOKEN);
@@ -353,7 +353,40 @@ const server=http.createServer(async(req,res)=>{
   if(url.pathname==='/api/payments'&&req.method==='GET'){const auth=requireAuth(req,res);if(!auth)return;const phone=url.searchParams.get('phone');if(!phone)return send(res,422,{error:'phone is required'},req);if(phone!==auth.sub)return send(res,403,{error:'Patient access denied'},req);try{const rows=await listPayments(phone);if(rows===null)return send(res,503,{error:'DATABASE_URL not configured'},req);return send(res,200,rows,req);}catch(e){return send(res,503,{error:'Unable to load payments'},req);}}
   if(url.pathname==='/api/payments'&&req.method==='POST')return parseBody(req,async(err,data)=>{const auth=requireAuth(req,res);if(!auth)return;if(err)return send(res,400,{error:'Invalid JSON'},req);if(data.phone!==auth.sub)return send(res,403,{error:'Patient access denied'},req);try{const saved=await createPayment(data);if(saved)return send(res,201,saved,req);return send(res,503,{error:'DATABASE_URL not configured'},req);}catch(e){if(e.statusCode)return send(res,e.statusCode,{error:e.message},req);return send(res,503,{error:'Unable to create payment'},req);}});
   const paymentOrderMatch=url.pathname.match(/^\/api\/payments\/(\d+)\/order$/);
-  if(paymentOrderMatch&&req.method==='POST')return parseBody(req,async(err,data)=>{const auth=requireAuth(req,res);if(!auth)return;if(err)return send(res,400,{error:'Invalid JSON'},req);if(!data.phone)return send(res,422,{error:'phone is required'},req);try{const db=await getDb();if(!db)return send(res,503,{error:'DATABASE_URL not configured'},req);const payment=await getPaymentById(Number(paymentOrderMatch[1]));if(!payment)return send(res,404,{error:'Payment not found'},req);if(payment.phone!==auth.sub||payment.phone!==data.phone)return send(res,403,{error:'Payment does not belong to patient'},req);if(payment.provider_order_id)return send(res,200,{payment,order:{provider:payment.provider,orderId:payment.provider_order_id,amount:Math.round(Number(payment.amount)*100),currency:payment.currency}},req);const order=await createPaymentGatewayOrder({amount:payment.amount,currency:payment.currency,receipt:`payment_${payment.id}`});const saved=await setProviderOrderId(payment.id,order.provider,order.orderId);return send(res,200,{payment:saved,order:{provider:order.provider,orderId:order.orderId,amount:order.amount,currency:order.currency}},req);}catch(e){if(e.statusCode)return send(res,e.statusCode,{error:e.message},req);return send(res,502,{error:'Unable to create payment gateway order'},req);}});
+  if(paymentOrderMatch&&req.method==='POST')return parseBody(req,async(err,data)=>{const auth=requireAuth(req,res);if(!auth)return;if(err)return send(res,400,{error:'Invalid JSON'},req);if(!data.phone)return send(res,422,{error:'phone is required'},req);try{const db=await getDb();if(!db)return send(res,503,{error:'DATABASE_URL not configured'},req);const payment=await getPaymentById(Number(paymentOrderMatch[1]));if(!payment)return send(res,404,{error:'Payment not found'},req);if(payment.phone!==auth.sub||payment.phone!==data.phone)return send(res,403,{error:'Payment does not belong to patient'},req);if(payment.provider_order_id)return send(res,200,{payment,order:{provider:payment.provider,keyId:(process.env.RAZORPAY_KEY_ID||'').trim(),orderId:payment.provider_order_id,amount:Math.round(Number(payment.amount)*100),currency:payment.currency}},req);const order=await createPaymentGatewayOrder({amount:payment.amount,currency:payment.currency,receipt:`payment_${payment.id}`});const saved=await setProviderOrderId(payment.id,order.provider,order.orderId);return send(res,200,{payment:saved,order:{provider:order.provider,keyId:order.keyId,orderId:order.orderId,amount:order.amount,currency:order.currency}},req);}catch(e){if(e.statusCode)return send(res,e.statusCode,{error:e.message},req);return send(res,502,{error:'Unable to create payment gateway order'},req);}});
+  const paymentVerifyMatch=url.pathname.match(/^\/api\/payments\/(\d+)\/verify$/);
+  if(paymentVerifyMatch&&req.method==='POST')return parseBody(req,async(err,data)=>{
+    const auth=requireAuth(req,res);
+    if(!auth)return;
+    if(err)return send(res,400,{error:'Invalid JSON'},req);
+    try{
+      const db=await getDb();
+      if(!db)return send(res,503,{error:'DATABASE_URL not configured'},req);
+      const payment=await getPaymentById(Number(paymentVerifyMatch[1]));
+      if(!payment)return send(res,404,{error:'Payment not found'},req);
+      if(payment.phone!==auth.sub)return send(res,403,{error:'Payment does not belong to patient'},req);
+      if(payment.provider!=='razorpay'||!payment.provider_order_id)return send(res,409,{error:'Razorpay order has not been created'},req);
+      if(data.razorpay_order_id!==payment.provider_order_id)return send(res,422,{error:'Razorpay order does not match this payment'},req);
+
+      const verified=await verifyRazorpayCheckout({
+        orderId:payment.provider_order_id,
+        paymentId:data.razorpay_payment_id,
+        signature:data.razorpay_signature,
+        expectedAmount:payment.amount,
+        expectedCurrency:payment.currency
+      });
+      if(verified.status==='pending')return send(res,202,{ok:false,status:'pending',message:'Payment is not captured yet. Refresh status; do not create another order.'},req);
+      if(payment.status==='paid'){
+        if(payment.provider_payment_id===verified.providerPaymentId)return send(res,200,{ok:true,duplicate:true,status:'paid'},req);
+        return send(res,409,{ok:false,needsReconciliation:true},req);
+      }
+      const saved=await updatePaymentStatus(payment.id,verified.status,verified.providerPaymentId);
+      return send(res,200,{ok:verified.status==='paid',payment:saved},req);
+    }catch(e){
+      if(e.statusCode)return send(res,e.statusCode,{error:e.message},req);
+      return send(res,502,{error:'Unable to verify Razorpay payment'},req);
+    }
+  });
   if(url.pathname==='/api/payments/webhook'&&req.method==='POST')return parseRawBody(req,async(err,rawBody)=>{
     if(err)return send(res,400,{error:'Unable to read webhook body'},req);
     const signature=req.headers['x-razorpay-signature'];
