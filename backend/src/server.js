@@ -7,8 +7,8 @@ const { getDb } = require('./db');
 const { listDoctors, listAdminDoctors, createDoctor, listAppointments, updateAppointmentStatus, getDoctorByPhone, listDoctorAppointments, updateDoctorAppointmentStatus } = require('./repository');
 const { listFamilyMembers, createFamilyMember, revokeFamilyMember, listFamilyConsentRequests, verifyAdultFamilyMemberConsent, createDoctorAvailabilitySlot, listDoctorAvailabilitySlots, listPublicDoctorAvailability, cancelDoctorAvailabilitySlot, createAppointment } = require('./family_availability_repository');
 const { listPrescriptions, createPrescription, listHealthRecords, createHealthRecord } = require('./phase3_repository');
-const { listLabOrders, createLabOrder, updateLabOrderStatus } = require('./phase4_repository');
-const { listPayments, getPaymentById, findPaymentByProviderOrderId, setProviderOrderId, createPayment, updatePaymentStatus } = require('./phase5_payment_repository');
+const { listLabOrders, listAdminLabOrders, createLabOrder, updateLabOrderAmount, updateLabOrderStatus } = require('./phase4_repository');
+const { listPayments, getPaymentById, findPaymentByProviderOrderId, setProviderOrderId, createPayment, createPaymentForLabOrder, updatePaymentStatus } = require('./phase5_payment_repository');
 const { createPaymentGatewayOrder, getPaymentProviderStatus, verifyRazorpayCheckout } = require('./payment_gateway');
 const { getWebhookSecret, verifyWebhookSignature, parseWebhookEvent, normalizeRazorpayPaymentEvent } = require('./payment_webhook');
 const { isAuthorizedPaymentStatusUpdate } = require('./payment_status_authorization');
@@ -346,8 +346,45 @@ const server=http.createServer(async(req,res)=>{
   if(url.pathname==='/api/prescriptions'&&req.method==='POST')return parseBody(req,async(err,data)=>{if(err)return send(res,400,{error:'Invalid JSON'},req);const doctor=verifyRoleToken(getAuthToken(req),'doctor');if(doctor){data.doctorPhone=doctor.sub;}else{const auth=requireAuth(req,res);if(!auth)return;if(!data.phone||data.phone!==auth.sub)return send(res,403,{error:'Patient access denied'},req);}try{const saved=await createPrescription(data);if(saved)return send(res,201,saved,req);return send(res,503,{error:'DATABASE_URL not configured'},req);}catch(e){if(e.statusCode)return send(res,e.statusCode,{error:e.message},req);return send(res,503,{error:'Unable to save prescription'},req);}});
   if(url.pathname==='/api/health-records'&&req.method==='GET'){const auth=requireAuth(req,res);if(!auth)return;const phone=url.searchParams.get('phone');if(!phone)return send(res,422,{error:'phone is required'},req);if(phone!==auth.sub)return send(res,403,{error:'Patient access denied'},req);try{const rows=await listHealthRecords(phone);if(rows===null)return send(res,503,{error:'DATABASE_URL not configured'},req);return send(res,200,rows,req);}catch(e){return send(res,503,{error:'Unable to load health records'},req);}}
   if(url.pathname==='/api/health-records'&&req.method==='POST')return parseBody(req,async(err,data)=>{if(err)return send(res,400,{error:'Invalid JSON'},req);const doctor=verifyRoleToken(getAuthToken(req),'doctor');if(doctor){data.doctorPhone=doctor.sub;}else{const auth=requireAuth(req,res);if(!auth)return;if(!data.phone||data.phone!==auth.sub)return send(res,403,{error:'Patient access denied'},req);}try{const saved=await createHealthRecord(data);if(saved)return send(res,201,saved,req);return send(res,503,{error:'DATABASE_URL not configured'},req);}catch(e){if(e.statusCode)return send(res,e.statusCode,{error:e.message},req);return send(res,503,{error:'Unable to save health record'},req);}});
+  if(url.pathname==='/api/admin/lab-orders'&&req.method==='GET'){
+    if(!requireAdmin(req,res))return;
+    try{
+      const rows=await listAdminLabOrders();
+      if(rows===null)return send(res,503,{error:'DATABASE_URL not configured'},req);
+      return send(res,200,rows,req);
+    }catch(e){
+      return send(res,503,{error:'Unable to load admin lab orders'},req);
+    }
+  }
+  const labPriceMatch=url.pathname.match(/^\/api\/admin\/lab-orders\/(\d+)\/amount$/);
+  if(labPriceMatch&&req.method==='PATCH')return parseBody(req,async(err,data)=>{
+    if(!requireAdmin(req,res))return;
+    if(err)return send(res,400,{error:'Invalid JSON'},req);
+    try{
+      const saved=await updateLabOrderAmount(Number(labPriceMatch[1]),data.amount);
+      if(saved)return send(res,200,saved,req);
+      return send(res,503,{error:'DATABASE_URL not configured'},req);
+    }catch(e){
+      if(e.statusCode)return send(res,e.statusCode,{error:e.message},req);
+      return send(res,503,{error:'Unable to update lab price'},req);
+    }
+  });
   if(url.pathname==='/api/lab-orders'&&req.method==='GET'){const auth=requireAuth(req,res);if(!auth)return;const phone=url.searchParams.get('phone');if(!phone)return send(res,422,{error:'phone is required'},req);if(phone!==auth.sub)return send(res,403,{error:'Patient access denied'},req);try{const rows=await listLabOrders(phone);if(rows===null)return send(res,503,{error:'DATABASE_URL not configured'},req);return send(res,200,rows,req);}catch(e){return send(res,503,{error:'Unable to load lab orders'},req);}}
   if(url.pathname==='/api/lab-orders'&&req.method==='POST')return parseBody(req,async(err,data)=>{const auth=requireAuth(req,res);if(!auth)return;if(err)return send(res,400,{error:'Invalid JSON'},req);if(data.phone!==auth.sub)return send(res,403,{error:'Patient access denied'},req);try{const saved=await createLabOrder(data);if(saved)return send(res,201,saved,req);return send(res,503,{error:'DATABASE_URL not configured'},req);}catch(e){if(e.statusCode)return send(res,e.statusCode,{error:e.message},req);return send(res,503,{error:'Unable to save lab order'},req);}});
+  const labPaymentMatch=url.pathname.match(/^\/api\/lab-orders\/(\d+)\/payment$/);
+  if(labPaymentMatch&&req.method==='POST')return parseBody(req,async(err,_data)=>{
+    const auth=requireAuth(req,res);
+    if(!auth)return;
+    if(err)return send(res,400,{error:'Invalid JSON'},req);
+    try{
+      const saved=await createPaymentForLabOrder(auth.sub,Number(labPaymentMatch[1]));
+      if(saved)return send(res,200,saved,req);
+      return send(res,503,{error:'DATABASE_URL not configured'},req);
+    }catch(e){
+      if(e.statusCode)return send(res,e.statusCode,{error:e.message},req);
+      return send(res,503,{error:'Unable to create lab payment'},req);
+    }
+  });
   const labStatusMatch=url.pathname.match(/^\/api\/lab-orders\/(\d+)\/status$/);
   if(labStatusMatch&&req.method==='PATCH')return parseBody(req,async(err,data)=>{if(!isAuthorizedAdmin(req))return send(res,403,{error:'Admin authorization required'},req);if(err)return send(res,400,{error:'Invalid JSON'},req);try{const saved=await updateLabOrderStatus(Number(labStatusMatch[1]),data.status);if(saved)return send(res,200,saved,req);return send(res,503,{error:'DATABASE_URL not configured'},req);}catch(e){if(e.statusCode)return send(res,e.statusCode,{error:e.message},req);return send(res,503,{error:'Unable to update lab order status'},req);}});
   if(url.pathname==='/api/payments'&&req.method==='GET'){const auth=requireAuth(req,res);if(!auth)return;const phone=url.searchParams.get('phone');if(!phone)return send(res,422,{error:'phone is required'},req);if(phone!==auth.sub)return send(res,403,{error:'Patient access denied'},req);try{const rows=await listPayments(phone);if(rows===null)return send(res,503,{error:'DATABASE_URL not configured'},req);return send(res,200,rows,req);}catch(e){return send(res,503,{error:'Unable to load payments'},req);}}
