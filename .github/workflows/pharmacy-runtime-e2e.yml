@@ -50,6 +50,12 @@ jobs:
           psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f db/schema.sql
           npm run db:migrate
 
+      - name: Verify pooled PostgreSQL concurrency against disposable database
+        working-directory: backend
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/ayansha_healthcare
+        run: node --test src/db_pool.test.js
+
       - name: Start backend against real PostgreSQL
         working-directory: backend
         env:
