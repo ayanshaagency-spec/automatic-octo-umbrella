@@ -10,6 +10,7 @@ const {
   POLICY_STATUSES
 } = require('./insurance_validation');
 const repository = require('./insurance_repository');
+const { publicPolicy } = require('./insurance_serialization');
 const storage = require('./insurance_storage');
 const scanner = require('./insurance_scanner');
 
@@ -47,20 +48,6 @@ function parseBody(req) {
   });
 }
 
-function publicPolicy(row) {
-  return {
-    id: row.id,
-    insurerName: row.insurerName,
-    policyType: row.policyType,
-    policyNumberLast4: row.policyNumberLast4,
-    policyExpiry: row.policyExpiry,
-    status: row.status,
-    reviewNote: row.reviewNote,
-    createdAt: row.createdAt,
-    updatedAt: row.updatedAt,
-    documents: row.documents || []
-  };
-}
 
 function errorStatus(error) {
   return Number.isInteger(error?.statusCode) ? error.statusCode : 503;
