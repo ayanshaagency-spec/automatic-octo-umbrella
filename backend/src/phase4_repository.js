@@ -41,12 +41,8 @@ async function createLabOrder(data) {
     scheduledAt = parsed.toISOString();
   }
 
-  const amount = data.amount == null || data.amount === '' ? null : Number(data.amount);
-  if (amount !== null && (!Number.isFinite(amount) || amount < 0)) {
-    const error = new Error('amount must be a non-negative number');
-    error.statusCode = 422;
-    throw error;
-  }
+  // Patients must not determine their own lab charges. Admin applies a verified quote later.
+  const amount = null;
 
   const { rows } = await db.query(`
     INSERT INTO lab_orders
@@ -58,6 +54,56 @@ async function createLabOrder(data) {
   return rows[0];
 }
 
+async function listAdminLabOrders() {
+  const db = await getDb();
+  if (!db) return null;
+  const sql = `SELECT lo.id, lo.patient_id, p.name AS patient_name, p.phone,
+                      lo.test_name, lo.lab_name, lo.scheduled_at, lo.status,
+                      lo.amount, lo.notes, lo.created_at,
+                      pay.id AS payment_id, pay.status AS payment_status
+                 FROM lab_orders lo
+                 JOIN patients p ON p.id = lo.patient_id
+                 LEFT JOIN LATERAL (
+                   SELECT id, status FROM payments
+                    WHERE lab_order_id = lo.id
+                    ORDER BY created_at DESC, id DESC LIMIT 1
+                 ) pay ON TRUE
+                ORDER BY lo.created_at DESC, lo.id DESC`;
+  const { rows } = await db.query(sql);
+  return rows;
+}
+
+async function updateLabOrderAmount(id, amountValue) {
+  const amount = Number(amountValue);
+  if (!Number.isFinite(amount) || amount <= 0 || amount > 10000000) {
+    const error = new Error('amount must be greater than zero and no more than 10000000 INR');
+    error.statusCode = 422;
+    throw error;
+  }
+  const db = await getDb();
+  if (!db) return null;
+  const sql = `UPDATE lab_orders lo
+                  SET amount = $1
+                WHERE lo.id = $2
+                  AND lo.status NOT IN ('cancelled', 'completed')
+                  AND NOT EXISTS (
+                    SELECT 1 FROM payments pay
+                     WHERE pay.lab_order_id = lo.id
+                       AND pay.status IN ('pending', 'paid', 'refunded')
+                  )
+             RETURNING lo.id, lo.patient_id, lo.test_name, lo.lab_name, lo.status, lo.amount`;
+  const { rows } = await db.query(sql, [amount, id]);
+  if (rows[0]) return rows[0];
+  const existing = await db.query('SELECT id FROM lab_orders WHERE id = $1', [id]);
+  if (!existing.rowCount) {
+    const error = new Error('Lab order not found');
+    error.statusCode = 404;
+    throw error;
+  }
+  const error = new Error('This lab order is closed or has an active/completed payment; its price cannot be changed');
+  error.statusCode = 409;
+  throw error;
+}
 async function updateLabOrderStatus(id, status) {
   const db = await getDb();
   if (!db) return null;
@@ -79,4 +125,4 @@ async function updateLabOrderStatus(id, status) {
   return rows[0];
 }
 
-module.exports = { listLabOrders, createLabOrder, updateLabOrderStatus };
+module.exports = { listLabOrders, listAdminLabOrders, createLabOrder, updateLabOrderAmount, updateLabOrderStatus };
