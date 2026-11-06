@@ -48,17 +48,40 @@ async function main() {
 
   const labOrder = await request('/api/lab-orders', {
     method: 'POST', headers: auth,
-    body: { phone, testName: 'CI Payment Webhook Test', amount: 125.5 }
+    body: { phone, testName: 'CI Payment Webhook Test', amount: 99999 }
   });
   assert.equal(labOrder.status, 201);
-  const createdPayment = await request('/api/payments', {
-    method: 'POST', headers: auth,
-    body: {
-      phone, labOrderId: labOrder.body.id, amount: 125.5, currency: 'INR',
-      idempotencyKey: 'ci-razorpay-webhook-001'
-    }
+  assert.equal(labOrder.body.amount, null, 'patient-supplied price must be ignored');
+
+  const anonymousLabQueue = await request('/api/admin/lab-orders');
+  assert.equal(anonymousLabQueue.status, 401, 'admin lab billing queue must be protected');
+  const patientCannotSetPrice = await request('/api/admin/lab-orders/' + labOrder.body.id + '/amount', {
+    method: 'PATCH', headers: auth, body: { amount: 1 }
   });
-  assert.equal(createdPayment.status, 201);
+  assert.equal(patientCannotSetPrice.status, 401, 'a patient session must not set lab pricing');
+
+  const adminLogin = await request('/api/admin/login', {
+    method: 'POST',
+    body: { email: process.env.ADMIN_EMAIL, password: process.env.ADMIN_PASSWORD }
+  });
+  assert.equal(adminLogin.status, 200, 'CI admin login should succeed');
+  const adminAuth = { Authorization: 'Bearer ' + adminLogin.body.token };
+  const quote = await request('/api/admin/lab-orders/' + labOrder.body.id + '/amount', {
+    method: 'PATCH', headers: adminAuth, body: { amount: 125.5 }
+  });
+  assert.equal(quote.status, 200, 'Admin should set a verified lab quote');
+  assert.equal(Number(quote.body.amount), 125.5);
+
+  const createdPayment = await request('/api/lab-orders/' + labOrder.body.id + '/payment', {
+    method: 'POST', headers: auth, body: { amount: 1 }
+  });
+  assert.equal(createdPayment.status, 200, 'patient payment should be created from saved lab quote');
+  assert.equal(Number(createdPayment.body.amount), 125.5, 'payment must use Admin-set price, never client amount');
+  const priceLock = await request('/api/admin/lab-orders/' + labOrder.body.id + '/amount', {
+    method: 'PATCH', headers: adminAuth, body: { amount: 200 }
+  });
+  assert.equal(priceLock.status, 409, 'price must lock after a payment record exists');
+
   const internalPaymentId = createdPayment.body.id;
 
   const db = new Client({ connectionString: process.env.DATABASE_URL });

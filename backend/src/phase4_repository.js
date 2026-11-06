@@ -89,7 +89,7 @@ async function updateLabOrderAmount(id, amountValue) {
                   AND NOT EXISTS (
                     SELECT 1 FROM payments pay
                      WHERE pay.lab_order_id = lo.id
-                       AND pay.status IN ('pending', 'paid', 'refunded')
+
                   )
              RETURNING lo.id, lo.patient_id, lo.test_name, lo.lab_name, lo.status, lo.amount`;
   const { rows } = await db.query(sql, [amount, id]);
@@ -100,7 +100,7 @@ async function updateLabOrderAmount(id, amountValue) {
     error.statusCode = 404;
     throw error;
   }
-  const error = new Error('This lab order is closed or has an active/completed payment; its price cannot be changed');
+  const error = new Error('This lab order is closed or a payment record already exists; its price cannot be changed');
   error.statusCode = 409;
   throw error;
 }
