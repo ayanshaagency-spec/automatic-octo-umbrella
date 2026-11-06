@@ -27,6 +27,17 @@ input:focus,select:focus,button:focus-visible{outline:3px solid #5fc3ce66;outlin
 .insurance-admin-policy select,.insurance-admin-policy textarea{width:100%;box-sizing:border-box;padding:10px;border-radius:8px;border:1px solid #bfd1d6;margin:6px 0 10px}
 .insurance-admin-policy textarea{min-height:68px}
 .insurance-admin-policy button{margin:6px 6px 6px 0}
+.health-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;margin:14px 0}
+.health-card{min-width:0;padding:15px;border:1px solid var(--line);border-radius:12px;background:#f8fbfc}
+.health-card-head{display:flex;align-items:center;justify-content:space-between;gap:8px}
+.health-card strong{font-size:13px;color:var(--navy)}
+.health-card p{margin:9px 0 0;color:var(--muted);font-size:12px;line-height:1.5}
+.health-badge{display:inline-block;padding:4px 8px;border-radius:999px;font-size:10px;font-weight:800;white-space:nowrap}
+.health-badge.pending{background:#fff4dc;color:#885d05}
+.health-badge.active{background:#e4f5eb;color:#17643c}
+.health-badge.inactive{background:#fdebea;color:#a12d26}
+@media(max-width:780px){.health-grid{grid-template-columns:1fr 1fr}}
+@media(max-width:520px){.health-grid{grid-template-columns:1fr}}
 </style>
 </head>
 <body>
@@ -50,7 +61,19 @@ input:focus,select:focus,button:focus-visible{outline:3px solid #5fc3ce66;outlin
 <button type="button" data-tab="cataloguePanel" aria-selected="false">Catalogue & stock</button>
 <button type="button" data-tab="ordersPanel" aria-selected="false">Pharmacy orders</button>
 <button type="button" data-tab="insurancePanel" aria-selected="false">Health insurance</button>
+<button type="button" data-tab="healthPanel" aria-selected="false">System health</button>
 </nav>
+<section id="healthPanel" class="card panel hidden">
+<div class="section-head"><div><p class="eyebrow">Platform monitoring</p><h2>System health</h2><p class="muted">Read-only checks against this deployed Ayansha Health Care service.</p></div><button type="button" class="secondary" id="refreshSystemHealth">Refresh checks</button></div>
+<p id="systemHealthUpdated" class="muted" role="status" aria-live="polite">Checks will run after secure admin sign-in.</p>
+<div class="health-grid">
+<div class="health-card"><div class="health-card-head"><strong>Backend API</strong><span id="healthApiBadge" class="health-badge pending">Waiting</span></div><p id="healthApiDetail">Waiting for check.</p></div>
+<div class="health-card"><div class="health-card-head"><strong>Database</strong><span id="healthDbBadge" class="health-badge pending">Waiting</span></div><p id="healthDbDetail">Waiting for check.</p></div>
+<div class="health-card"><div class="health-card-head"><strong>Pharmacy directory</strong><span id="healthPharmacyBadge" class="health-badge pending">Waiting</span></div><p id="healthPharmacyDetail">Waiting for check.</p></div>
+<div class="health-card"><div class="health-card-head"><strong>Hospital directory</strong><span id="healthHospitalsBadge" class="health-badge pending">Waiting</span></div><p id="healthHospitalsDetail">Waiting for check.</p></div>
+</div>
+<p class="notice">Data coverage note: Patient totals, admin-wide Lab orders and Payment totals are not shown because the current backend does not expose dedicated admin-wide summary APIs for them. No sample counts are fabricated.</p>
+</section>
 <section id="appointmentsPanel" class="card panel">
 <div class="section-head"><div><p class="eyebrow">Care operations</p><h2>Appointments</h2></div><button type="button" class="secondary" id="reloadAppointments">Refresh</button></div>
 <p id="appointmentStatus" class="muted" aria-live="polite">Loading appointments…</p><div id="appointments"></div>
@@ -183,6 +206,34 @@ async function downloadInsuranceDocument(id){
 }
 $('insuranceRefresh').addEventListener('click',loadInsurancePolicies);
 $('insuranceStatusFilter').addEventListener('change',loadInsurancePolicies);
+async function refreshSystemHealth(){
+ const button=$('refreshSystemHealth');
+ if(button)button.disabled=true;
+ const jobs=[
+  {path:'/health',badge:'healthApiBadge',detail:'healthApiDetail',format:()=>({ok:true,message:'Backend health endpoint responded successfully.'})},
+  {path:'/api/db/health',badge:'healthDbBadge',detail:'healthDbDetail',format:data=>({ok:data?.ok===true,message:data?.database==='connected'?'Database connection is healthy.':'Database did not confirm a healthy connection.'})},
+  {path:'/api/pharmacy/stores',badge:'healthPharmacyBadge',detail:'healthPharmacyDetail',format:rows=>({ok:Array.isArray(rows),message:Array.isArray(rows)?(rows.length?rows.length+' active store(s) returned.':'No active stores are listed yet.'):'Unexpected pharmacy directory response.'})},
+  {path:'/api/pharmacy/hospitals',badge:'healthHospitalsBadge',detail:'healthHospitalsDetail',format:rows=>({ok:Array.isArray(rows),message:Array.isArray(rows)?(rows.length?rows.length+' delivery hospital(s) returned.':'No delivery hospitals are listed yet.'):'Unexpected hospital directory response.'})}
+ ];
+ try{
+  await Promise.all(jobs.map(async job=>{
+   const badge=$(job.badge),detail=$(job.detail);
+   try{
+    const data=await api(job.path),result=job.format(data);
+    badge.textContent=result.ok?'Online':'Check response';
+    badge.className='health-badge '+(result.ok?'active':'inactive');
+    detail.textContent=result.message;
+   }catch(error){
+    badge.textContent='Unavailable';
+    badge.className='health-badge inactive';
+    detail.textContent=error.message||'Health check failed.';
+   }
+  }));
+  $('systemHealthUpdated').textContent='Last checked: '+new Date().toLocaleString();
+ }finally{
+  if(button)button.disabled=false;
+ }
+}
 function setTab(id){
  currentTab=id;
  document.querySelectorAll('[data-tab]').forEach(button=>button.setAttribute('aria-selected',String(button.dataset.tab===id)));
@@ -191,6 +242,7 @@ function setTab(id){
  if(id==='cataloguePanel'){populateStorePicker();if($('catalogueStore').value)loadProducts();}
  if(id==='ordersPanel')loadOrders();
   if(id==='insurancePanel')loadInsurancePolicies();
+  if(id==='healthPanel')refreshSystemHealth();
 }
 document.querySelectorAll('[data-tab]').forEach(button=>button.addEventListener('click',()=>setTab(button.dataset.tab)));
 async function loadDoctors(){
@@ -321,9 +373,10 @@ $('reloadDoctors').onclick=loadDoctors;
 $('reloadStores').onclick=loadStores;
 $('reloadProducts').onclick=loadProducts;
 $('reloadOrders').onclick=loadOrders;
+$('refreshSystemHealth').onclick=refreshSystemHealth;
 async function openDashboard(){
  $('login').classList.add('hidden');$('dashboard').classList.remove('hidden');$('logout').classList.remove('hidden');$('sessionLabel').textContent='Admin session active';
- await Promise.all([loadAppointments(),loadDoctors(),loadStores(),loadOrders()]);
+ await Promise.all([loadAppointments(),loadDoctors(),loadStores(),loadOrders(),refreshSystemHealth()]);
 }
 $('loginBtn').onclick=async()=>{
  $('loginError').textContent='';
