@@ -107,6 +107,17 @@ jobs:
           DOCTOR_ADMIN_E2E_CI: '1'
         run: node src/doctor_admin_runtime_e2e.js
 
+      - name: Verify Razorpay webhook against isolated PostgreSQL
+        working-directory: backend
+        env:
+          NODE_ENV: test
+          DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/ayansha_healthcare
+          JWT_SECRET: pharmacy-ci-jwt-secret-long-enough-for-hs256
+          PAYMENT_WEBHOOK_SECRET: runtime-webhook-secret
+          PAYMENT_WEBHOOK_E2E_CI: '1'
+          PHARMACY_E2E_BASE_URL: http://127.0.0.1:3918
+        run: node src/payment_webhook_runtime_e2e.js
+
       - name: Verify family profiles and doctor availability against isolated PostgreSQL
         working-directory: backend
         env:

@@ -65,7 +65,12 @@ function createPaymentDb() {
         return { rowCount: 1, rows: [payment] };
       }
 
-      if (sql.includes('SELECT status FROM payments WHERE id = $1')) {
+      if (sql.includes("WHERE provider = 'razorpay' AND provider_order_id = $1")) {
+        const payment = payments.find(item => item.provider === 'razorpay' && item.provider_order_id === params[0]);
+        return { rowCount: payment ? 1 : 0, rows: payment ? [payment] : [] };
+      }
+
+      if (sql.includes('SELECT status FROM payments WHERE id = $1')) {      if (sql.includes('SELECT status FROM payments WHERE id = $1')) {
         const payment = findPayment(params[0]);
         return { rowCount: payment ? 1 : 0, rows: payment ? [{ status: payment.status }] : [] };
       }
@@ -124,6 +129,19 @@ test('Phase 5 payment repository: create, idempotency and gateway order lifecycl
   const fetched = await getPaymentById(first.id);
   assert.equal(fetched.phone, '9999999999');
   assert.equal(fetched.provider_order_id, 'order_smoke_123');
+});
+
+test('Phase 5 payment repository: find payment by Razorpay provider order id', async () => {
+  const fakeDb = createPaymentDb();
+  const { createPayment, setProviderOrderId, findPaymentByProviderOrderId } = installFakeDb(fakeDb);
+  const payment = await createPayment({ phone: '9999999999', appointmentId: 42, amount: 125.5, currency: 'INR' });
+  await setProviderOrderId(payment.id, 'razorpay', 'order_webhook_lookup');
+  const found = await findPaymentByProviderOrderId('order_webhook_lookup');
+  assert.equal(found.id, payment.id);
+  assert.equal(Number(found.amount), 125.5);
+  assert.equal(found.currency, 'INR');
+  assert.equal(found.provider, 'razorpay');
+  assert.equal(await findPaymentByProviderOrderId('order_missing'), null);
 });
 
 test('Phase 5 payment repository: status lifecycle and invalid transition protection', async () => {
