@@ -53,6 +53,9 @@ async function main() {
   assert.equal(labOrder.status, 201);
   assert.equal(labOrder.body.amount, null, 'patient-supplied price must be ignored');
 
+  const anonymousIntegrationStatus = await request('/api/admin/integrations/status');
+  assert.equal(anonymousIntegrationStatus.status, 401, 'integration readiness must be admin-only');
+
   const anonymousLabQueue = await request('/api/admin/lab-orders');
   assert.equal(anonymousLabQueue.status, 401, 'admin lab billing queue must be protected');
   const patientCannotSetPrice = await request('/api/admin/lab-orders/' + labOrder.body.id + '/amount', {
@@ -66,6 +69,16 @@ async function main() {
   });
   assert.equal(adminLogin.status, 200, 'CI admin login should succeed');
   const adminAuth = { Authorization: 'Bearer ' + adminLogin.body.token };
+  const integrations = await request('/api/admin/integrations/status', { headers: adminAuth });
+  assert.equal(integrations.status, 200);
+  assert.deepEqual(Object.keys(integrations.body).sort(), ['ai', 'insurance', 'whatsapp']);
+  assert.equal(typeof integrations.body.ai.configured, 'boolean');
+  assert.equal(typeof integrations.body.whatsapp.configured, 'boolean');
+  assert.equal(integrations.body.whatsapp.deliveryVerified, false);
+  assert.equal(typeof integrations.body.insurance.privateStorageConfigured, 'boolean');
+  assert.equal(typeof integrations.body.insurance.malwareScannerConfigured, 'boolean');
+  assert.equal(typeof integrations.body.insurance.uploadPrerequisitesConfigured, 'boolean');
+  assert.equal(JSON.stringify(integrations.body).includes('secret'), false);
   const quote = await request('/api/admin/lab-orders/' + labOrder.body.id + '/amount', {
     method: 'PATCH', headers: adminAuth, body: { amount: 125.5 }
   });

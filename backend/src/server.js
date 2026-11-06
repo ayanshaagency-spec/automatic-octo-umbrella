@@ -20,6 +20,7 @@ const { getAiStatus, generateSymptomGuidance } = require('./ai');
 const { verifyAdminCredentials, createAdminToken, createDoctorToken, verifyRoleToken } = require('./roles');
 const { handlePharmacyRoute } = require('./pharmacy_routes');
 const { handleInsuranceRoute } = require('./insurance_routes');
+const { getIntegrationReadiness } = require('./integration_readiness');
 const { consumeAuthRateLimit, getTrustedClientIp } = require('./auth_rate_limit');
 
 const configuredOrigins = (process.env.CORS_ALLOWED_ORIGINS || '').split(',').map(v => v.trim()).filter(Boolean);
@@ -308,6 +309,10 @@ const server=http.createServer(async(req,res)=>{
   if(url.pathname==='/api/admin/otp/status'&&req.method==='GET'){
     if(!requireAdmin(req,res))return;
     return send(res,200,getOtpProviderStatus(),req);
+  }
+  if(url.pathname==='/api/admin/integrations/status'&&req.method==='GET'){
+    if(!requireAdmin(req,res))return;
+    return send(res,200,getIntegrationReadiness(),req);
   }
   if(url.pathname==='/api/admin/doctors'&&req.method==='GET'){
     if(!requireAdmin(req,res))return;
