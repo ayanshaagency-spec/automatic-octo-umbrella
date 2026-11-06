@@ -4,9 +4,9 @@ const ALLOWED_TRANSITIONS = {
   created: ['pending', 'cancelled'],
   pending: ['paid', 'failed', 'cancelled'],
   paid: ['refunded'],
-  failed: ['pending', 'cancelled'],
+  failed: ['pending', 'paid', 'cancelled'],
   refunded: [],
-  cancelled: []
+  cancelled: ['paid']
 };
 
 function validatePaymentInput(data) {

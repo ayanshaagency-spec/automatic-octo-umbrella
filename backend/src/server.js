@@ -8,9 +8,9 @@ const { listDoctors, listAdminDoctors, createDoctor, listAppointments, updateApp
 const { listFamilyMembers, createFamilyMember, revokeFamilyMember, listFamilyConsentRequests, verifyAdultFamilyMemberConsent, createDoctorAvailabilitySlot, listDoctorAvailabilitySlots, listPublicDoctorAvailability, cancelDoctorAvailabilitySlot, createAppointment } = require('./family_availability_repository');
 const { listPrescriptions, createPrescription, listHealthRecords, createHealthRecord } = require('./phase3_repository');
 const { listLabOrders, createLabOrder, updateLabOrderStatus } = require('./phase4_repository');
-const { listPayments, getPaymentById, setProviderOrderId, createPayment, updatePaymentStatus } = require('./phase5_payment_repository');
+const { listPayments, getPaymentById, findPaymentByProviderOrderId, setProviderOrderId, createPayment, updatePaymentStatus } = require('./phase5_payment_repository');
 const { createPaymentGatewayOrder, getPaymentProviderStatus } = require('./payment_gateway');
-const { getWebhookSecret, verifyWebhookSignature, parseWebhookEvent } = require('./payment_webhook');
+const { getWebhookSecret, verifyWebhookSignature, parseWebhookEvent, normalizeRazorpayPaymentEvent } = require('./payment_webhook');
 const { isAuthorizedPaymentStatusUpdate } = require('./payment_status_authorization');
 const isAuthorizedAdmin = req => isAuthorizedPaymentStatusUpdate(req.headers, process.env.ADMIN_API_TOKEN || process.env.PAYMENT_STATUS_ADMIN_TOKEN);
 const { validateCoordinates, emergencyResponse } = require('./phase6_emergency');
@@ -24,9 +24,9 @@ const { consumeAuthRateLimit, getTrustedClientIp } = require('./auth_rate_limit'
 
 const configuredOrigins = (process.env.CORS_ALLOWED_ORIGINS || '').split(',').map(v => v.trim()).filter(Boolean);
 const isAllowedOrigin = origin => !origin || configuredOrigins.includes(origin) || (['development','test'].includes(process.env.NODE_ENV) && (configuredOrigins.includes('*') || /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin)));
-const send=(res,code,data,req)=>{const origin=req?.headers?.origin;if(isAllowedOrigin(origin)){res.setHeader('Access-Control-Allow-Origin',origin||'*');if(origin)res.setHeader('Vary','Origin');}res.setHeader('Access-Control-Allow-Methods','GET,POST,PATCH,OPTIONS');res.setHeader('Access-Control-Allow-Headers','Content-Type,Authorization,X-Payment-Signature');res.writeHead(code,{'Content-Type':'application/json'});res.end(JSON.stringify(data));};
+const send=(res,code,data,req)=>{const origin=req?.headers?.origin;if(isAllowedOrigin(origin)){res.setHeader('Access-Control-Allow-Origin',origin||'*');if(origin)res.setHeader('Vary','Origin');}res.setHeader('Access-Control-Allow-Methods','GET,POST,PATCH,OPTIONS');res.setHeader('Access-Control-Allow-Headers','Content-Type,Authorization,X-Razorpay-Signature');res.writeHead(code,{'Content-Type':'application/json'});res.end(JSON.stringify(data));};
 const parseBody=(req,done)=>{let body='';req.on('data',c=>body+=c);req.on('end',()=>{try{done(null,JSON.parse(body||'{}'));}catch(e){done(e);}});};
-const parseRawBody=(req,done)=>{let body='';req.setEncoding('utf8');req.on('data',c=>body+=c);req.on('end',()=>done(null,body));req.on('error',done);};
+const parseRawBody=(req,done)=>{const chunks=[];req.on('data',c=>chunks.push(Buffer.isBuffer(c)?c:Buffer.from(c)));req.on('end',()=>done(null,Buffer.concat(chunks)));req.on('error',done);};
 const getAuthToken=(req)=>{const header=req.headers.authorization||'';return header.startsWith('Bearer ')?header.slice(7):null;};
 const requireAdmin=(req,res)=>{const payload=verifyRoleToken(getAuthToken(req),'admin');if(!payload){send(res,401,{error:'Admin authentication required'},req);return null;}return payload;};
 const requireAuth=(req,res)=>{const payload=verifyToken(getAuthToken(req));if(!payload){send(res,401,{error:'Authentication required'},req);return null;}return payload;};
@@ -354,7 +354,35 @@ const server=http.createServer(async(req,res)=>{
   if(url.pathname==='/api/payments'&&req.method==='POST')return parseBody(req,async(err,data)=>{const auth=requireAuth(req,res);if(!auth)return;if(err)return send(res,400,{error:'Invalid JSON'},req);if(data.phone!==auth.sub)return send(res,403,{error:'Patient access denied'},req);try{const saved=await createPayment(data);if(saved)return send(res,201,saved,req);return send(res,503,{error:'DATABASE_URL not configured'},req);}catch(e){if(e.statusCode)return send(res,e.statusCode,{error:e.message},req);return send(res,503,{error:'Unable to create payment'},req);}});
   const paymentOrderMatch=url.pathname.match(/^\/api\/payments\/(\d+)\/order$/);
   if(paymentOrderMatch&&req.method==='POST')return parseBody(req,async(err,data)=>{const auth=requireAuth(req,res);if(!auth)return;if(err)return send(res,400,{error:'Invalid JSON'},req);if(!data.phone)return send(res,422,{error:'phone is required'},req);try{const db=await getDb();if(!db)return send(res,503,{error:'DATABASE_URL not configured'},req);const payment=await getPaymentById(Number(paymentOrderMatch[1]));if(!payment)return send(res,404,{error:'Payment not found'},req);if(payment.phone!==auth.sub||payment.phone!==data.phone)return send(res,403,{error:'Payment does not belong to patient'},req);if(payment.provider_order_id)return send(res,200,{payment,order:{provider:payment.provider,orderId:payment.provider_order_id,amount:Math.round(Number(payment.amount)*100),currency:payment.currency}},req);const order=await createPaymentGatewayOrder({amount:payment.amount,currency:payment.currency,receipt:`payment_${payment.id}`});const saved=await setProviderOrderId(payment.id,order.provider,order.orderId);return send(res,200,{payment:saved,order:{provider:order.provider,orderId:order.orderId,amount:order.amount,currency:order.currency}},req);}catch(e){if(e.statusCode)return send(res,e.statusCode,{error:e.message},req);return send(res,502,{error:'Unable to create payment gateway order'},req);}});
-  if(url.pathname==='/api/payments/webhook'&&req.method==='POST')return parseRawBody(req,async(err,rawBody)=>{if(err)return send(res,400,{error:'Unable to read webhook body'},req);const signature=req.headers['x-payment-signature'];if(!getWebhookSecret())return send(res,503,{error:'Payment webhook is not configured'},req);if(!verifyWebhookSignature(rawBody,signature))return send(res,401,{error:'Invalid webhook signature'},req);try{const event=parseWebhookEvent(rawBody);const paymentId=Number(event.paymentId);const status=event.status;if(!Number.isInteger(paymentId)||paymentId<1||typeof status!=='string')return send(res,422,{error:'paymentId and status are required'},req);const saved=await updatePaymentStatus(paymentId,status,event.providerPaymentId);if(saved)return send(res,200,{ok:true,payment:saved},req);return send(res,503,{error:'DATABASE_URL not configured'},req);}catch(e){if(e.statusCode)return send(res,e.statusCode,{error:e.message},req);return send(res,503,{error:'Unable to process payment webhook'},req);}});
+  if(url.pathname==='/api/payments/webhook'&&req.method==='POST')return parseRawBody(req,async(err,rawBody)=>{
+    if(err)return send(res,400,{error:'Unable to read webhook body'},req);
+    const signature=req.headers['x-razorpay-signature'];
+    if(!getWebhookSecret())return send(res,503,{error:'Payment webhook is not configured'},req);
+    if(!verifyWebhookSignature(rawBody,signature))return send(res,401,{error:'Invalid webhook signature'},req);
+    try{
+      const normalized=normalizeRazorpayPaymentEvent(parseWebhookEvent(rawBody));
+      if(!normalized)return send(res,200,{ok:true,ignored:true},req);
+      const payment=await findPaymentByProviderOrderId(normalized.orderId);
+      if(!payment)return send(res,404,{error:'Payment order not found'},req);
+      if(payment.provider!=='razorpay' || Math.round(Number(payment.amount)*100)!==normalized.amount || payment.currency!==normalized.currency){
+        return send(res,422,{error:'Razorpay payment does not match the stored order'},req);
+      }
+      if(payment.status==='refunded' ||
+         (payment.status==='paid' && normalized.status==='failed') ||
+         (payment.status==='cancelled' && normalized.status==='failed')){
+        return send(res,200,{ok:true,ignored:true},req);
+      }
+      if(payment.status==='paid' && normalized.status==='paid'){
+        if(payment.provider_payment_id===normalized.providerPaymentId) return send(res,200,{ok:true,duplicate:true},req);
+        return send(res,200,{ok:true,needsReconciliation:true},req);
+      }
+      const saved=await updatePaymentStatus(payment.id,normalized.status,normalized.providerPaymentId);
+      return send(res,200,{ok:true,payment:saved},req);
+    }catch(e){
+      if(e.statusCode)return send(res,e.statusCode,{error:e.message},req);
+      return send(res,503,{error:'Unable to process payment webhook'},req);
+    }
+  });
   const paymentStatusMatch=url.pathname.match(/^\/api\/payments\/(\d+)\/status$/);
   if(paymentStatusMatch&&req.method==='PATCH')return parseBody(req,async(err,data)=>{if(err)return send(res,400,{error:'Invalid JSON'},req);if(!isAuthorizedPaymentStatusUpdate(req.headers))return send(res,403,{error:'Payment status update is restricted'},req);try{const saved=await updatePaymentStatus(Number(paymentStatusMatch[1]),data.status,data.providerPaymentId);if(saved)return send(res,200,saved,req);return send(res,503,{error:'DATABASE_URL not configured'},req);}catch(e){if(e.statusCode)return send(res,e.statusCode,{error:e.message},req);return send(res,503,{error:'Unable to update payment status'},req);}});
   if (url.pathname.startsWith('/api/pharmacy/')) {

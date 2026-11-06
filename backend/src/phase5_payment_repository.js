@@ -30,6 +30,17 @@ async function getPaymentById(id) {
   return rows[0] || null;
 }
 
+async function findPaymentByProviderOrderId(providerOrderId) {
+  const db = await getDb();
+  if (!db) return null;
+  const { rows } = await db.query(`
+    SELECT id, amount, currency, provider, provider_order_id, provider_payment_id, status
+      FROM payments
+     WHERE provider = 'razorpay' AND provider_order_id = $1
+  `, [providerOrderId]);
+  return rows[0] || null;
+}
+
 async function setProviderOrderId(id, provider, providerOrderId) {
   const db = await getDb();
   if (!db) return null;
@@ -154,4 +165,4 @@ async function updatePaymentStatus(id, status, providerPaymentId) {
   return rows[0];
 }
 
-module.exports = { listPayments, getPaymentById, setProviderOrderId, createPayment, updatePaymentStatus };
+module.exports = { listPayments, getPaymentById, findPaymentByProviderOrderId, setProviderOrderId, createPayment, updatePaymentStatus };
