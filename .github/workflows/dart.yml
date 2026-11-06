@@ -38,3 +38,10 @@ jobs:
           fi
       - name: Build debug APK
         run: flutter build apk --debug
+      - name: Upload debug APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: ayansha-health-care-debug-apk
+          path: mobile-app/build/app/outputs/flutter-apk/app-debug.apk
+          if-no-files-found: error
+          retention-days: 7

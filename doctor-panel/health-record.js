@@ -1,4 +1,4 @@
-const API = (window.AYAN_SHA_API_URL || 'http://localhost:3000').replace(/\/$/, '');
+const API = (window.AYAN_SHA_API_URL || window.location.origin).replace(/\/$/, '');
 const form = document.getElementById('healthRecordForm');
 const message = document.getElementById('recordMessage');
 const token = () => sessionStorage.getItem('ayansha_doctor_token');

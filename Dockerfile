@@ -10,6 +10,8 @@ COPY backend/ ./
 COPY web/ /web/
 # Include only the existing admin entry page; backend files are not copied to a public path.
 COPY admin-panel/index.html /admin-panel/index.html
+# Include only the existing Doctor Panel's fixed static assets; API authorization remains server-side.
+COPY doctor-panel/ /doctor-panel/
 
 ENV NODE_ENV=production
 ENV PORT=3000

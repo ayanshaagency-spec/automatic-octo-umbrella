@@ -60,6 +60,9 @@ test('Phase 5 API smoke/E2E contract', async t => {
   const health = await fetch(`${BASE_URL}/health`);
   assert.equal(health.status, 200);
   assert.deepEqual(await health.json(), { ok: true, service: 'Ayansha Health Care' });
+  const doctorsUnavailable = await fetch(`${BASE_URL}/api/doctors`);
+  assert.equal(doctorsUnavailable.status, 503);
+  assert.equal((await doctorsUnavailable.json()).error, 'DATABASE_URL not configured');
 
   const home = await fetch(`${BASE_URL}/`);
   assert.equal(home.status, 200);
@@ -72,6 +75,19 @@ test('Phase 5 API smoke/E2E contract', async t => {
   assert.match(adminPage.headers.get('content-type'), /text\/html/);
   assert.equal(adminPage.headers.get('cache-control'), 'no-store');
   assert.match(await adminPage.text(), /Ayansha Health Care Admin/);
+  const doctorPage = await fetch(`${BASE_URL}/doctor`);
+  assert.equal(doctorPage.status, 200);
+  assert.match(doctorPage.headers.get('content-type'), /text\/html/);
+  assert.match(await doctorPage.text(), /Doctor Sign In/);
+  const doctorScript = await fetch(`${BASE_URL}/doctor/app.js`);
+  assert.equal(doctorScript.status, 200);
+  assert.match(await doctorScript.text(), /api\/doctor\/appointments/);
+  const doctorStyles = await fetch(`${BASE_URL}/doctor/styles.css`);
+  assert.equal(doctorStyles.status, 200);
+  const anonymousDoctorQueue = await fetch(`${BASE_URL}/api/doctor/appointments`);
+  assert.equal(anonymousDoctorQueue.status, 401);
+  const unknownDoctorAsset = await fetch(`${BASE_URL}/doctor/server.js`);
+  assert.equal(unknownDoctorAsset.status, 404);
   const traversal = await fetch(`${BASE_URL}/admin/..%2Fbackend%2Fpackage.json`);
   assert.equal(traversal.status, 404);
 
@@ -99,6 +115,26 @@ test('Phase 5 API smoke/E2E contract', async t => {
   const adminSession = await adminLogin.json();
   assert.equal(adminSession.user.role, 'admin');
   assert.ok(adminSession.token);
+  const anonymousDoctorDirectory = await fetch(`${BASE_URL}/api/admin/doctors`);
+  assert.equal(anonymousDoctorDirectory.status, 401);
+  const adminDoctorDirectory = await fetch(`${BASE_URL}/api/admin/doctors`, {
+    headers: { Authorization: `Bearer ${adminSession.token}` }
+  });
+  assert.equal(adminDoctorDirectory.status, 503);
+  assert.equal((await adminDoctorDirectory.json()).error, 'DATABASE_URL not configured');
+  const invalidDoctor = await fetch(`${BASE_URL}/api/admin/doctors`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${adminSession.token}` },
+    body: JSON.stringify({ name: 'A', specialty: '', phone: '123' })
+  });
+  assert.equal(invalidDoctor.status, 422);
+  const validDoctorWithoutDatabase = await fetch(`${BASE_URL}/api/admin/doctors`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${adminSession.token}` },
+    body: JSON.stringify({ name: 'Dr Test', specialty: 'General Medicine', phone: '+919876543210' })
+  });
+  assert.equal(validDoctorWithoutDatabase.status, 503);
+  assert.equal((await validDoctorWithoutDatabase.json()).error, 'DATABASE_URL not configured');
   const noAdminAuth = await fetch(`${BASE_URL}/api/admin/appointments`);
   assert.equal(noAdminAuth.status, 401);
   assert.equal((await noAdminAuth.json()).error, 'Admin authentication required');
@@ -285,4 +321,40 @@ test('authenticated patient access and ownership contract', async t => {
 
   const invalidHospitalCoordinates = await fetch(`${BASE_URL}/api/hospitals/nearby?latitude=999&longitude=0`);
   assert.equal(invalidHospitalCoordinates.status, 422);
+});
+
+test('production CORS ignores wildcard origins and allows exact configured origins only', async t => {
+  const port = 3921;
+  const base = `http://127.0.0.1:${port}`;
+  const child = spawn(process.execPath, ['src/server.js'], {
+    cwd: __dirname + '/..',
+    env: {
+      ...process.env,
+      PORT: String(port),
+      NODE_ENV: 'production',
+      DATABASE_URL: '',
+      JWT_SECRET: 'production-cors-test-secret-long-enough-for-hs256',
+      CORS_ALLOWED_ORIGINS: 'https://safe.example,*'
+    },
+    stdio: ['ignore', 'pipe', 'pipe']
+  });
+  t.after(() => child.kill());
+  let output = '';
+  child.stdout.on('data', chunk => { output += chunk.toString(); });
+  child.stderr.on('data', chunk => { output += chunk.toString(); });
+  let ready = false;
+  for (let attempt = 0; attempt < 30; attempt += 1) {
+    if (child.exitCode !== null) throw new Error(`Production CORS API exited early: ${output}`);
+    try { const response = await fetch(`${base}/health`); if (response.ok) { ready = true; break; } } catch (_) {}
+    await new Promise(resolve => setTimeout(resolve, 100));
+  }
+  assert.equal(ready, true, 'Production-mode API should start');
+
+  const safe = await fetch(`${base}/health`, { headers: { Origin: 'https://safe.example' } });
+  assert.equal(safe.status, 200);
+  assert.equal(safe.headers.get('access-control-allow-origin'), 'https://safe.example');
+
+  const evil = await fetch(`${base}/health`, { headers: { Origin: 'https://evil.example' } });
+  assert.equal(evil.status, 200);
+  assert.equal(evil.headers.get('access-control-allow-origin'), null);
 });

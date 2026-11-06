@@ -5,10 +5,13 @@ on:
     branches:
       - feat/phase5-payment-mvp
       - feat/phase6-emergency-hospitals
+      - feat/phase7-pharmacy-railway-aligned
+      - feat/phase7-pharmacy-shared-otp
   pull_request:
     branches:
       - feat/phase5-payment-mvp
       - feat/phase6-emergency-hospitals
+      - feat/phase7-pharmacy-railway-aligned
 
 jobs:
   test:

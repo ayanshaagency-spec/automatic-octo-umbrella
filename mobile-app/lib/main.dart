@@ -28,13 +28,9 @@ class AyanshaHealthCareApp extends StatelessWidget {
 class Doctor {
   final int id; final String name; final String specialty; final String experience; final List<String> slots;
   const Doctor({required this.id, required this.name, required this.specialty, required this.experience, required this.slots});
-  factory Doctor.fromJson(Map<String, dynamic> j) => Doctor(id: j['id'] as int, name: '${j['name'] ?? ''}', specialty: '${j['specialty'] ?? ''}', experience: '${j['experience'] ?? ''}', slots: const ['09:00 AM', '10:30 AM', '02:00 PM', '04:00 PM', '06:00 PM']);
+  factory Doctor.fromJson(Map<String, dynamic> j) => Doctor(id: j['id'] as int, name: '${j['name'] ?? ''}', specialty: '${j['specialty'] ?? ''}', experience: '${j['experience'] ?? ''}', slots: const []);
 }
-const fallbackDoctors = <Doctor>[
-  Doctor(id: 1, name: 'Dr. Ananya Sharma', specialty: 'Cardiology', experience: '12 years experience', slots: ['09:00 AM', '10:30 AM', '04:00 PM']),
-  Doctor(id: 2, name: 'Dr. Rahul Mehta', specialty: 'General Medicine', experience: '9 years experience', slots: ['10:00 AM', '12:00 PM', '06:00 PM']),
-  Doctor(id: 3, name: 'Dr. Priya Kapoor', specialty: 'Dermatology', experience: '8 years experience', slots: ['11:30 AM', '02:00 PM', '05:30 PM']),
-];
+const fallbackDoctors = <Doctor>[];
 
 class Appointment {
   final int? id; final Doctor doctor; final DateTime date; final String slot; final String mode; final String status;
@@ -43,7 +39,7 @@ class Appointment {
 final api = ApiClient();
 final ValueNotifier<List<Appointment>> appointments = ValueNotifier(const []);
 String patientName = const String.fromEnvironment('AYANSHA_PATIENT_NAME', defaultValue: 'Patient');
-String patientPhone = const String.fromEnvironment('AYANSHA_PATIENT_PHONE', defaultValue: '9999999999');
+String patientPhone = const String.fromEnvironment('AYANSHA_PATIENT_PHONE', defaultValue: '');
 
 class HomePage extends StatefulWidget { const HomePage({super.key}); @override State<HomePage> createState() => _HomePageState(); }
 class _HomePageState extends State<HomePage> {
@@ -68,19 +64,167 @@ class _DoctorsTabState extends State<DoctorsTab> {
   late Future<List<Doctor>> future;
   @override void initState() { super.initState(); future = _load(); }
   Future<List<Doctor>> _load() async { try { return (await api.getDoctors()).map(Doctor.fromJson).toList(); } catch (_) { return fallbackDoctors; } }
-  @override Widget build(BuildContext c) => SimplePage(title: 'Find a Doctor', children: [FutureBuilder<List<Doctor>>(future: future, builder: (context, snap) { if (snap.connectionState == ConnectionState.waiting) return const Center(child: Padding(padding: EdgeInsets.all(30), child: CircularProgressIndicator())); final list = snap.data ?? fallbackDoctors; return Column(children: list.map<Widget>((doctor) { return Card(child: ListTile(leading: const CircleAvatar(child: Icon(Icons.person)), title: Text(doctor.name), subtitle: Text(doctor.specialty), trailing: FilledButton(onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => BookingPage(doctor: doctor))), child: const Text('Book')))); }).toList()); })]);
+  @override Widget build(BuildContext c) => SimplePage(title: 'Find a Doctor', children: [FutureBuilder<List<Doctor>>(future: future, builder: (context, snap) { if (snap.connectionState == ConnectionState.waiting) return const Center(child: Padding(padding: EdgeInsets.all(30), child: CircularProgressIndicator())); final list = snap.data ?? fallbackDoctors; if (list.isEmpty) return const Center(child: Padding(padding: EdgeInsets.all(24), child: Text('No verified doctors are currently listed. Please check with the clinic.'))); return Column(children: list.map<Widget>((doctor) { return Card(child: ListTile(leading: const CircleAvatar(child: Icon(Icons.person)), title: Text(doctor.name), subtitle: Text(doctor.specialty), trailing: FilledButton(onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => BookingPage(doctor: doctor))), child: const Text('Book')))); }).toList()); })]);
 }
 
-class BookingPage extends StatefulWidget { final Doctor? doctor; const BookingPage({super.key, this.doctor}); @override State<BookingPage> createState() => _BookingPageState(); }
+class BookingPage extends StatefulWidget {
+  final Doctor? doctor;
+  const BookingPage({super.key, this.doctor});
+  @override State<BookingPage> createState() => _BookingPageState();
+}
 class _BookingPageState extends State<BookingPage> {
-  DateTime selectedDate = DateTime.now(); String? selectedSlot; String mode = 'Video'; bool saving = false;
-  List<String> get slots => widget.doctor?.slots ?? const ['09:00 AM', '10:30 AM', '02:00 PM', '04:00 PM', '06:00 PM'];
-  Future<void> chooseDate() async { final picked = await showDatePicker(context: context, initialDate: selectedDate, firstDate: DateTime.now(), lastDate: DateTime.now().add(const Duration(days: 30))); if (picked != null) setState(() { selectedDate = picked; selectedSlot = null; }); }
-  DateTime _dateTimeForSlot(String slot) { final parts = slot.replaceAll(' ', '').split(':'); var hour = int.parse(parts[0]); final minute = int.parse(parts[1]); final isPm = slot.toUpperCase().contains('PM'); if (isPm && hour != 12) hour += 12; if (!isPm && hour == 12) hour = 0; return DateTime(selectedDate.year, selectedDate.month, selectedDate.day, hour, minute); }
-  bool isPastSlot(String slot) => !_dateTimeForSlot(slot).isAfter(DateTime.now());
-  DateTime appointmentDateTime() => _dateTimeForSlot(selectedSlot!);
-  Future<void> confirm() async { final doctor = widget.doctor ?? fallbackDoctors.first; if (selectedSlot == null || saving) return; setState(() => saving = true); try { final dt = appointmentDateTime(); final saved = await api.createAppointment(patientName: patientName, phone: patientPhone, doctorId: doctor.id, appointmentAt: dt, mode: mode); appointments.value = [...appointments.value, Appointment(id: saved['id'] as int?, doctor: doctor, date: dt, slot: selectedSlot!, mode: mode, status: '${saved['status'] ?? 'confirmed'}')]; if (!mounted) return; await showDialog(context: context, builder: (_) => AlertDialog(title: const Text('Appointment Confirmed'), content: Text('${doctor.name}\n${selectedDate.day}/${selectedDate.month}/${selectedDate.year} • $selectedSlot\nMode: $mode'), actions: [TextButton(onPressed: () => Navigator.pop(context), child: const Text('Done'))])); } catch (e) { if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Booking failed: $e'))); } finally { if (mounted) setState(() => saving = false); } }
-  @override Widget build(BuildContext c) => SimplePage(title: 'Book Appointment', children: [Text(widget.doctor?.name ?? 'Select your doctor', style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold)), if (widget.doctor != null) Text(widget.doctor!.specialty), OutlinedButton.icon(onPressed: chooseDate, icon: const Icon(Icons.calendar_month), label: Text(selectedDate.toString().split(' ')[0])), const Text('Available time slots', style: TextStyle(fontWeight: FontWeight.bold)), Wrap(spacing: 8, children: slots.map<Widget>((slot) => ChoiceChip(label: Text(slot), selected: selectedSlot == slot, onSelected: isPastSlot(slot) ? null : (_) => setState(() => selectedSlot = slot))).toList()), DropdownButtonFormField<String>(initialValue: mode, items: ['Video', 'In-clinic'].map((x) => DropdownMenuItem<String>(value: x, child: Text(x))).toList(), onChanged: (x) => setState(() => mode = x ?? 'Video')), FilledButton(onPressed: selectedSlot == null || saving ? null : confirm, child: Text(saving ? 'Booking...' : 'Confirm Appointment'))]);
+  DateTime selectedDate = DateTime.now();
+  int? selectedSlotId;
+  String selectedFamilyMember = 'self';
+  String mode = 'In-clinic';
+  bool loadingSlots = false, loadingFamily = false, saving = false;
+  String? slotError;
+  List<Map<String, dynamic>> slots = [];
+  List<Map<String, dynamic>> familyMembers = [];
+
+  @override
+  void initState() { super.initState(); loadSlots(); loadFamilyMembers(); }
+
+  String dateLabel(DateTime value) =>
+      '${value.year.toString().padLeft(4, '0')}-${value.month.toString().padLeft(2, '0')}-${value.day.toString().padLeft(2, '0')}';
+
+  String slotLabel(Map<String, dynamic> slot) =>
+      TimeOfDay.fromDateTime(DateTime.parse('${slot['slot_start']}').toLocal()).format(context);
+
+  Future<void> loadSlots() async {
+    final doctor = widget.doctor;
+    if (doctor == null) return;
+    setState(() { loadingSlots = true; slotError = null; selectedSlotId = null; });
+    try {
+      final rows = await api.getDoctorAvailability(doctorId: doctor.id, date: selectedDate);
+      if (mounted) setState(() => slots = rows);
+    } catch (e) {
+      if (mounted) setState(() { slots = []; slotError = e.toString(); });
+    } finally {
+      if (mounted) setState(() => loadingSlots = false);
+    }
+  }
+
+  Future<void> loadFamilyMembers() async {
+    setState(() => loadingFamily = true);
+    try {
+      final rows = await api.getFamilyMembers();
+      if (!mounted) return;
+      setState(() => familyMembers = rows.where((member) {
+        final scopes = (member['access_scopes'] as List? ?? const [])
+            .map((v) => v.toString()).toList();
+        return ['guardian_managed', 'member_verified'].contains(member['consent_status']) &&
+            scopes.contains('appointments');
+      }).toList());
+    } catch (_) {
+      if (mounted) setState(() => familyMembers = []);
+    } finally {
+      if (mounted) setState(() => loadingFamily = false);
+    }
+  }
+
+  Future<void> chooseDate() async {
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: selectedDate.isBefore(today) ? today : selectedDate,
+      firstDate: today,
+      lastDate: today.add(const Duration(days: 30)),
+    );
+    if (picked != null) {
+      setState(() => selectedDate = DateTime(picked.year, picked.month, picked.day));
+      await loadSlots();
+    }
+  }
+
+  Future<void> confirm() async {
+    final doctor = widget.doctor;
+    final slotId = selectedSlotId;
+    if (doctor == null || slotId == null || saving) return;
+    final selected = slots.firstWhere((slot) => int.tryParse('${slot['id']}') == slotId);
+    final appointmentDate = DateTime.parse('${selected['slot_start']}').toLocal();
+    final familyId = selectedFamilyMember == 'self' ? null : selectedFamilyMember;
+    setState(() => saving = true);
+    try {
+      final saved = await api.createAppointment(
+        patientName: patientName, phone: patientPhone, doctorId: doctor.id,
+        slotId: slotId, familyMemberId: familyId, mode: mode,
+      );
+      appointments.value = [...appointments.value, Appointment(
+        id: saved['id'] as int?, doctor: doctor, date: appointmentDate,
+        slot: slotLabel(selected), mode: mode, status: '${saved['status'] ?? 'confirmed'}',
+      )];
+      if (!mounted) return;
+      await showDialog(context: context, builder: (_) => AlertDialog(
+        title: const Text('Appointment Confirmed'),
+        content: Text('${doctor.name}\\n${dateLabel(selectedDate)} • ${slotLabel(selected)}\\nMode: $mode'),
+        actions: [TextButton(onPressed: () => Navigator.pop(context), child: const Text('Done'))],
+      ));
+      await loadSlots();
+    } catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Booking failed: $e')),
+      );
+      await loadSlots();
+    } finally {
+      if (mounted) setState(() => saving = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) => SimplePage(title: 'Book Appointment', children: [
+    Text(widget.doctor?.name ?? 'Select a doctor first',
+        style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+    if (widget.doctor != null) Text(widget.doctor!.specialty),
+    if (widget.doctor == null) const Text('Choose a verified doctor before booking.'),
+    OutlinedButton.icon(
+      onPressed: widget.doctor == null || loadingSlots ? null : chooseDate,
+      icon: const Icon(Icons.calendar_month), label: Text(dateLabel(selectedDate)),
+    ),
+    const Text('Published appointment slots', style: TextStyle(fontWeight: FontWeight.bold)),
+    if (loadingSlots) const Center(child: Padding(
+      padding: EdgeInsets.all(18), child: CircularProgressIndicator())),
+    if (!loadingSlots && slotError != null) Text('Availability could not be loaded: $slotError'),
+    if (!loadingSlots && slotError == null && slots.isEmpty)
+      const Text('No doctor-published slots are available on this date. Choose another date or contact the clinic.'),
+    if (!loadingSlots && slots.isNotEmpty)
+      Wrap(spacing: 8, runSpacing: 8, children: slots.map<Widget>((slot) {
+        final id = int.tryParse('${slot['id']}');
+        return ChoiceChip(
+          label: Text(slotLabel(slot)), selected: selectedSlotId == id,
+          onSelected: id == null ? null : (_) => setState(() => selectedSlotId = id),
+        );
+      }).toList()),
+    const SizedBox(height: 10),
+    const Text('Appointment for', style: TextStyle(fontWeight: FontWeight.bold)),
+    DropdownButtonFormField<String>(
+      initialValue: selectedFamilyMember,
+      items: [
+        const DropdownMenuItem(value: 'self', child: Text('Myself')),
+        ...familyMembers.map((member) => DropdownMenuItem<String>(
+          value: '${member['id']}',
+          child: Text('${member['full_name']} • ${member['relationship']}'),
+        )),
+      ],
+      onChanged: (value) => setState(() => selectedFamilyMember = value ?? 'self'),
+    ),
+    if (loadingFamily) const LinearProgressIndicator(),
+    if (familyMembers.isEmpty)
+      const Text('Add a family profile and complete required consent in My Profile to book for a dependant.'),
+    DropdownButtonFormField<String>(
+      initialValue: mode,
+      items: const [
+        DropdownMenuItem(value: 'In-clinic', child: Text('In-clinic')),
+        DropdownMenuItem(value: 'Video', child: Text('Video (room setup pending)')),
+      ],
+      onChanged: (value) => setState(() => mode = value ?? 'In-clinic'),
+    ),
+    FilledButton(
+      onPressed: selectedSlotId == null || saving || widget.doctor == null ? null : confirm,
+      child: Text(saving ? 'Booking...' : 'Confirm Appointment'),
+    ),
+  ]);
 }
 
 class BookingsTab extends StatefulWidget { const BookingsTab({super.key}); @override State<BookingsTab> createState() => _BookingsTabState(); }
@@ -113,7 +257,254 @@ void showRecord(BuildContext c, Map<String, dynamic> r) { showModalBottomSheet(c
 
 class ConsultationPage extends StatelessWidget { const ConsultationPage({super.key}); @override Widget build(BuildContext c) => SimplePage(title: 'Video Consultation', children: [const Card(child: ListTile(leading: Icon(Icons.videocam_outlined), title: Text('Video provider setup required'), subtitle: Text('The appointment mode is available, but a live video-room provider and secure join-link workflow have not been configured yet.'))), const ListTile(leading: Icon(Icons.receipt_long), title: Text('Digital Prescription'), subtitle: Text('Available prescriptions appear in Health Records after your doctor creates them.'))]); }
 
-class ProfileTab extends StatelessWidget { const ProfileTab({super.key}); @override Widget build(BuildContext c) => SimplePage(title: 'My Profile', children: [const CircleAvatar(radius: 38, child: Icon(Icons.person, size: 40)), Center(child: Text(patientName, style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold))), ListTile(title: const Text('Phone'), subtitle: Text(patientPhone)), const Divider(), ...['Personal Information', 'Family Members', 'Notifications', 'Privacy & Security'].map((x) => ListTile(title: Text(x), trailing: const Icon(Icons.chevron_right)))]); }
+class ProfileTab extends StatelessWidget {
+  const ProfileTab({super.key});
+  @override
+  Widget build(BuildContext context) => SimplePage(title: 'My Profile', children: [
+    const CircleAvatar(radius: 38, child: Icon(Icons.person, size: 40)),
+    Center(child: Text(patientName, style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold))),
+    ListTile(title: const Text('Phone'), subtitle: Text(patientPhone)),
+    const Divider(),
+    ...['Personal Information', 'Notifications', 'Privacy & Security']
+        .map((value) => ListTile(title: Text(value), trailing: const Icon(Icons.chevron_right))),
+    ListTile(
+      leading: const Icon(Icons.family_restroom),
+      title: const Text('Family Profiles'),
+      subtitle: const Text('Add dependants and manage appointment access.'),
+      trailing: const Icon(Icons.chevron_right),
+      onTap: () => Navigator.push(context,
+          MaterialPageRoute(builder: (_) => const FamilyProfilesPage())),
+    ),
+    ListTile(
+      leading: const Icon(Icons.verified_user_outlined),
+      title: const Text('Family consent requests'),
+      subtitle: const Text('Review requests addressed to your own phone.'),
+      trailing: const Icon(Icons.chevron_right),
+      onTap: () => Navigator.push(context,
+          MaterialPageRoute(builder: (_) => const FamilyConsentRequestsPage())),
+    ),
+  ]);
+}
+
+class FamilyProfilesPage extends StatefulWidget {
+  const FamilyProfilesPage({super.key});
+  @override State<FamilyProfilesPage> createState() => _FamilyProfilesPageState();
+}
+
+class _FamilyProfilesPageState extends State<FamilyProfilesPage> {
+  final nameController = TextEditingController();
+  final phoneController = TextEditingController();
+  String relationship = 'child';
+  DateTime? dateOfBirth;
+  bool loading = true, saving = false;
+  String? error;
+  List<Map<String, dynamic>> members = [];
+
+  @override
+  void initState() { super.initState(); load(); }
+  @override
+  void dispose() { nameController.dispose(); phoneController.dispose(); super.dispose(); }
+
+  Future<void> load() async {
+    setState(() { loading = true; error = null; });
+    try { members = await api.getFamilyMembers(); }
+    catch (e) { error = e.toString(); }
+    finally { if (mounted) setState(() => loading = false); }
+  }
+
+  Future<void> pickDob() async {
+    final now = DateTime.now();
+    final picked = await showDatePicker(
+      context: context, initialDate: DateTime(2015, 1, 1),
+      firstDate: DateTime(1900, 1, 1), lastDate: DateTime(now.year, now.month, now.day),
+    );
+    if (picked != null) setState(() => dateOfBirth = picked);
+  }
+
+  Future<void> addMember() async {
+    if (nameController.text.trim().length < 2 || dateOfBirth == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Enter the full name and date of birth.')),
+      );
+      return;
+    }
+    setState(() => saving = true);
+    try {
+      await api.createFamilyMember(
+        fullName: nameController.text.trim(), relationship: relationship,
+        dateOfBirth: dateOfBirth!,
+        phone: phoneController.text.trim().isEmpty ? null : phoneController.text.trim(),
+      );
+      nameController.clear(); phoneController.clear();
+      setState(() => dateOfBirth = null);
+      await load();
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Family profile added.')),
+      );
+    } catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Could not add family profile: $e')),
+      );
+    } finally { if (mounted) setState(() => saving = false); }
+  }
+
+  Future<void> revoke(Map<String, dynamic> member) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (_) => AlertDialog(
+        title: const Text('Revoke family access?'),
+        content: Text('Revoke appointment access for ${member['full_name']}? Existing medical records will not be deleted.'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Keep access')),
+          FilledButton(onPressed: () => Navigator.pop(context, true), child: const Text('Revoke')),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+    try {
+      await api.revokeFamilyMember(int.parse('${member['id']}'));
+      await load();
+    } catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Revoke failed: $e')),
+      );
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) => Scaffold(
+    appBar: AppBar(title: const Text('Family Profiles')),
+    body: RefreshIndicator(
+      onRefresh: load,
+      child: ListView(padding: const EdgeInsets.all(16), children: [
+        const Text('Add a family member',
+          style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+        const Text('Children are guardian-managed for appointment booking. Adults must sign in on their own phone and grant consent before you can book for them.'),
+        const SizedBox(height: 12),
+        TextField(controller: nameController,
+          decoration: const InputDecoration(labelText: 'Full name', border: OutlineInputBorder())),
+        const SizedBox(height: 10),
+        DropdownButtonFormField<String>(
+          initialValue: relationship,
+          decoration: const InputDecoration(labelText: 'Relationship', border: OutlineInputBorder()),
+          items: const [
+            DropdownMenuItem(value: 'child', child: Text('Child')),
+            DropdownMenuItem(value: 'parent', child: Text('Parent')),
+            DropdownMenuItem(value: 'spouse', child: Text('Spouse')),
+            DropdownMenuItem(value: 'sibling', child: Text('Sibling')),
+            DropdownMenuItem(value: 'other', child: Text('Other')),
+          ],
+          onChanged: (value) => setState(() => relationship = value ?? 'child'),
+        ),
+        const SizedBox(height: 10),
+        OutlinedButton.icon(
+          onPressed: pickDob, icon: const Icon(Icons.calendar_month),
+          label: Text(dateOfBirth == null ? 'Select date of birth' :
+            dateOfBirth!.toIso8601String().substring(0, 10)),
+        ),
+        const SizedBox(height: 10),
+        TextField(controller: phoneController, keyboardType: TextInputType.phone,
+          decoration: const InputDecoration(labelText: 'Member phone (required for adults)', border: OutlineInputBorder())),
+        const SizedBox(height: 10),
+        FilledButton(onPressed: saving ? null : addMember,
+          child: Text(saving ? 'Saving...' : 'Add family member')),
+        const Divider(height: 32),
+        const Text('Your family members',
+          style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+        if (loading) const Center(child: Padding(
+          padding: EdgeInsets.all(20), child: CircularProgressIndicator())),
+        if (error != null) Text('Unable to load family profiles: $error'),
+        if (!loading && error == null && members.isEmpty)
+          const Text('No family profiles added yet.'),
+        ...members.map((member) {
+          final scopes = (member['access_scopes'] as List? ?? const [])
+              .map((value) => value.toString()).join(', ');
+          final consent = member['consent_status']?.toString() ?? 'unknown';
+          return Card(child: ListTile(
+            leading: const CircleAvatar(child: Icon(Icons.person_outline)),
+            title: Text('${member['full_name']}'),
+            subtitle: Text('${member['relationship']} • DOB ${member['date_of_birth']}\nConsent: $consent • Access: ${scopes.isEmpty ? 'none' : scopes}'),
+            isThreeLine: true,
+            trailing: IconButton(onPressed: () => revoke(member),
+              icon: const Icon(Icons.remove_circle_outline)),
+          ));
+        }),
+      ]),
+    ),
+  );
+}
+
+class FamilyConsentRequestsPage extends StatefulWidget {
+  const FamilyConsentRequestsPage({super.key});
+  @override State<FamilyConsentRequestsPage> createState() => _FamilyConsentRequestsPageState();
+}
+
+class _FamilyConsentRequestsPageState extends State<FamilyConsentRequestsPage> {
+  bool loading = true;
+  final Set<int> saving = {};
+  List<Map<String, dynamic>> requests = [];
+  String? error;
+
+  @override
+  void initState() { super.initState(); load(); }
+  Future<void> load() async {
+    setState(() { loading = true; error = null; });
+    try { requests = await api.getFamilyConsentRequests(); }
+    catch (e) { error = e.toString(); }
+    finally { if (mounted) setState(() => loading = false); }
+  }
+
+  Future<void> respond(Map<String, dynamic> item, bool allow) async {
+    final id = int.parse('${item['id']}');
+    setState(() => saving.add(id));
+    try {
+      await api.respondToFamilyConsent(id, allowAppointments: allow);
+      await load();
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text(allow ? 'Appointment access approved.' :
+          'Identity verified; no family access granted.'),
+      ));
+    } catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Could not save consent: $e')),
+      );
+    } finally { if (mounted) setState(() => saving.remove(id)); }
+  }
+
+  @override
+  Widget build(BuildContext context) => Scaffold(
+    appBar: AppBar(title: const Text('Family Access Requests')),
+    body: RefreshIndicator(
+      onRefresh: load,
+      child: ListView(padding: const EdgeInsets.all(16), children: [
+        const Text('Only requests matching your signed-in phone number appear here. You decide whether the family owner may book appointments for you.'),
+        if (loading) const Center(child: Padding(
+          padding: EdgeInsets.all(20), child: CircularProgressIndicator())),
+        if (error != null) Text('Unable to load requests: $error'),
+        if (!loading && error == null && requests.isEmpty)
+          const Text('No pending family access requests.'),
+        ...requests.map((item) {
+          final id = int.parse('${item['id']}');
+          return Card(child: Padding(
+            padding: const EdgeInsets.all(12),
+            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Text('${item['owner_name']} is requesting to manage ${item['full_name']}',
+                  style: const TextStyle(fontWeight: FontWeight.bold)),
+              Text('Relationship: ${item['relationship']}'),
+              const SizedBox(height: 10),
+              Wrap(spacing: 8, children: [
+                OutlinedButton(onPressed: saving.contains(id) ? null : () => respond(item, false),
+                  child: const Text('Verify, no access')),
+                FilledButton(onPressed: saving.contains(id) ? null : () => respond(item, true),
+                  child: const Text('Allow appointments')),
+              ]),
+            ]),
+          ));
+        }),
+      ]),
+    ),
+  );
+}
 class EmergencyPage extends StatefulWidget { const EmergencyPage({super.key}); @override State<EmergencyPage> createState() => _EmergencyPageState(); }
 class _EmergencyPageState extends State<EmergencyPage> {
   Map<String, dynamic>? data; bool loading = true; String? error;
@@ -135,7 +526,7 @@ class _EmergencyPageState extends State<EmergencyPage> {
 
 class NearbyHospitalsPage extends StatefulWidget { const NearbyHospitalsPage({super.key}); @override State<NearbyHospitalsPage> createState() => _NearbyHospitalsPageState(); }
 class _NearbyHospitalsPageState extends State<NearbyHospitalsPage> {
-  final lat = TextEditingController(text: '28.6139'); final lon = TextEditingController(text: '77.2090');
+  final lat = TextEditingController(); final lon = TextEditingController();
   bool loading = false; String? error; List<Map<String, dynamic>> hospitals = [];
   Future<void> search() async {
     final latitude = double.tryParse(lat.text.trim()); final longitude = double.tryParse(lon.text.trim());
@@ -145,7 +536,7 @@ class _NearbyHospitalsPageState extends State<NearbyHospitalsPage> {
   }
   @override Widget build(BuildContext c) => Scaffold(appBar: AppBar(title: const Text('Nearby Hospitals')), body: ListView(padding: const EdgeInsets.all(16), children: [
     const Text('Find hospitals near a location', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
-    const SizedBox(height: 8), const Text('For this demo, enter latitude and longitude.', style: TextStyle(color: Colors.black54)),
+    const SizedBox(height: 8), const Text('Enter the location coordinates to search the hospital directory.', style: TextStyle(color: Colors.black54)),
     const SizedBox(height: 12),
     Row(children: [Expanded(child: TextField(controller: lat, keyboardType: const TextInputType.numberWithOptions(decimal: true, signed: true), decoration: const InputDecoration(labelText: 'Latitude', border: OutlineInputBorder()))), const SizedBox(width: 10), Expanded(child: TextField(controller: lon, keyboardType: const TextInputType.numberWithOptions(decimal: true, signed: true), decoration: const InputDecoration(labelText: 'Longitude', border: OutlineInputBorder())))]),
     const SizedBox(height: 12), SizedBox(width: double.infinity, child: FilledButton.icon(onPressed: loading ? null : search, icon: const Icon(Icons.search), label: Text(loading ? 'Searching...' : 'Find Nearby Hospitals'))),

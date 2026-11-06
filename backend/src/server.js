@@ -2,10 +2,10 @@ const http = require('http');
 const fs = require('fs');
 const path = require('path');
 const PORT = process.env.PORT || 3000;
-const doctorsFallback = [{id:1,name:'Dr. Ananya Sharma',specialty:'Cardiology'},{id:2,name:'Dr. Rahul Mehta',specialty:'General Medicine'},{id:3,name:'Dr. Priya Kapoor',specialty:'Dermatology'}];
 const { issueOtp, verifyOtp, createToken, verifyToken, AuthError } = require('./auth');
 const { getDb } = require('./db');
-const { listDoctors, listAppointments, updateAppointmentStatus, createAppointment, getDoctorByPhone, listDoctorAppointments, updateDoctorAppointmentStatus } = require('./repository');
+const { listDoctors, listAdminDoctors, createDoctor, listAppointments, updateAppointmentStatus, getDoctorByPhone, listDoctorAppointments, updateDoctorAppointmentStatus } = require('./repository');
+const { listFamilyMembers, createFamilyMember, revokeFamilyMember, listFamilyConsentRequests, verifyAdultFamilyMemberConsent, createDoctorAvailabilitySlot, listDoctorAvailabilitySlots, listPublicDoctorAvailability, cancelDoctorAvailabilitySlot, createAppointment } = require('./family_availability_repository');
 const { listPrescriptions, createPrescription, listHealthRecords, createHealthRecord } = require('./phase3_repository');
 const { listLabOrders, createLabOrder, updateLabOrderStatus } = require('./phase4_repository');
 const { listPayments, getPaymentById, setProviderOrderId, createPayment, updatePaymentStatus } = require('./phase5_payment_repository');
@@ -18,9 +18,11 @@ const { listNearbyHospitals } = require('./phase6_hospital_repository');
 const { status: whatsappStatus, sendWhatsApp } = require('./whatsapp');
 const { getAiStatus, generateSymptomGuidance } = require('./ai');
 const { verifyAdminCredentials, createAdminToken, createDoctorToken, verifyRoleToken } = require('./roles');
+const { handlePharmacyRoute } = require('./pharmacy_routes');
+const { handleInsuranceRoute } = require('./insurance_routes');
 
 const configuredOrigins = (process.env.CORS_ALLOWED_ORIGINS || '').split(',').map(v => v.trim()).filter(Boolean);
-const isAllowedOrigin = origin => !origin || configuredOrigins.includes('*') || configuredOrigins.includes(origin) || (process.env.NODE_ENV !== 'production' && /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin));
+const isAllowedOrigin = origin => !origin || configuredOrigins.includes(origin) || (['development','test'].includes(process.env.NODE_ENV) && (configuredOrigins.includes('*') || /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin)));
 const send=(res,code,data,req)=>{const origin=req?.headers?.origin;if(isAllowedOrigin(origin)){res.setHeader('Access-Control-Allow-Origin',origin||'*');if(origin)res.setHeader('Vary','Origin');}res.setHeader('Access-Control-Allow-Methods','GET,POST,PATCH,OPTIONS');res.setHeader('Access-Control-Allow-Headers','Content-Type,Authorization,X-Payment-Signature');res.writeHead(code,{'Content-Type':'application/json'});res.end(JSON.stringify(data));};
 const parseBody=(req,done)=>{let body='';req.on('data',c=>body+=c);req.on('end',()=>{try{done(null,JSON.parse(body||'{}'));}catch(e){done(e);}});};
 const parseRawBody=(req,done)=>{let body='';req.setEncoding('utf8');req.on('data',c=>body+=c);req.on('end',()=>done(null,body));req.on('error',done);};
@@ -30,6 +32,8 @@ const requireAuth=(req,res)=>{const payload=verifyToken(getAuthToken(req));if(!p
 const server=http.createServer(async(req,res)=>{
   if(req.method==='OPTIONS') return send(res,204,{},req);
   const url = new URL(req.url, `http://${req.headers.host || 'localhost'}`);
+  const insuranceHandled = await handleInsuranceRoute(req, res, url, { send: (status, body) => send(res, status, body, req) });
+  if (insuranceHandled || res.writableEnded) return;
   // Serve only the existing, fixed admin entry point. No user-controlled file path is accepted.
   if(req.method==='GET' && url.pathname==='/admin'){
     const adminFile=path.resolve(__dirname,'../../admin-panel/index.html');
@@ -38,6 +42,28 @@ const server=http.createServer(async(req,res)=>{
       return fs.createReadStream(adminFile).pipe(res);
     }
     return send(res,503,{error:'Admin panel unavailable'},req);
+  }
+  if(req.method==='GET' && (url.pathname==='/doctor' || url.pathname==='/doctor/')){
+    const doctorFile=path.resolve(__dirname,'../../doctor-panel/index.html');
+    if(fs.existsSync(doctorFile) && fs.statSync(doctorFile).isFile()){
+      res.writeHead(200,{'Content-Type':'text/html; charset=utf-8','X-Content-Type-Options':'nosniff','Cache-Control':'no-store'});
+      return fs.createReadStream(doctorFile).pipe(res);
+    }
+    return send(res,503,{error:'Doctor panel unavailable'},req);
+  }
+  if(req.method==='GET' && url.pathname.startsWith('/doctor/')){
+    const assetName=url.pathname.slice('/doctor/'.length);
+    const doctorAssets={
+      'app.js':{file:'app.js',type:'text/javascript; charset=utf-8'},
+      'health-record.js':{file:'health-record.js',type:'text/javascript; charset=utf-8'},
+      'styles.css':{file:'styles.css',type:'text/css; charset=utf-8'}
+    };
+    const asset=doctorAssets[assetName];
+    if(!asset) return send(res,404,{error:'Not found'},req);
+    const assetFile=path.resolve(__dirname,'../../doctor-panel',asset.file);
+    if(!fs.existsSync(assetFile) || !fs.statSync(assetFile).isFile()) return send(res,404,{error:'Not found'},req);
+    res.writeHead(200,{'Content-Type':asset.type,'X-Content-Type-Options':'nosniff','Cache-Control':'no-cache'});
+    return fs.createReadStream(assetFile).pipe(res);
   }
   if(req.method==='GET' && (url.pathname==='/' || url.pathname.startsWith('/web/'))){
     const relative=url.pathname==='/'?'index.html':url.pathname.replace(/^\/web\//,'');
@@ -58,13 +84,134 @@ const server=http.createServer(async(req,res)=>{
     return send(res,whatsappStatus().configured?200:503,await sendWhatsApp({to:data.to,text:data.text,event:data.event}),req);
   });
   if(url.pathname==='/health') return send(res,200,{ok:true,service:'Ayansha Health Care'},req);
-  if(url.pathname==='/api/doctors'&&req.method==='GET'){try{const rows=await listDoctors();return send(res,200,rows||doctorsFallback,req);}catch(e){return send(res,503,{error:'Unable to load doctors'},req);}}
+
+  if(url.pathname==='/api/family-members'&&req.method==='GET'){
+    const auth=requireAuth(req,res);if(!auth)return;
+    try{
+      const rows=await listFamilyMembers(auth.sub);
+      if(rows===null)return send(res,503,{error:'DATABASE_URL not configured'},req);
+      return send(res,200,rows,req);
+    }catch(e){return send(res,503,{error:'Unable to load family profiles'},req);}
+  }
+  if(url.pathname==='/api/family-members'&&req.method==='POST')return parseBody(req,async(err,data)=>{
+    const auth=requireAuth(req,res);if(!auth)return;
+    if(err)return send(res,400,{error:'Invalid JSON'},req);
+    try{
+      const saved=await createFamilyMember(auth.sub,data);
+      if(!saved)return send(res,503,{error:'DATABASE_URL not configured'},req);
+      return send(res,201,saved,req);
+    }catch(e){
+      if(e.statusCode)return send(res,e.statusCode,{error:e.message},req);
+      return send(res,503,{error:'Unable to create family profile'},req);
+    }
+  });
+  const familyRevokeMatch=url.pathname.match(/^\/api\/family-members\/(\d+)$/);
+  if(familyRevokeMatch&&req.method==='DELETE'){
+    const auth=requireAuth(req,res);if(!auth)return;
+    try{
+      const saved=await revokeFamilyMember(auth.sub,Number(familyRevokeMatch[1]));
+      return send(res,200,saved,req);
+    }catch(e){
+      if(e.statusCode)return send(res,e.statusCode,{error:e.message},req);
+      return send(res,503,{error:'Unable to revoke family profile'},req);
+    }
+  }
+  if(url.pathname==='/api/family-consent-requests'&&req.method==='GET'){
+    const auth=requireAuth(req,res);if(!auth)return;
+    try{
+      const rows=await listFamilyConsentRequests(auth.sub);
+      if(rows===null)return send(res,503,{error:'DATABASE_URL not configured'},req);
+      return send(res,200,rows,req);
+    }catch(e){return send(res,503,{error:'Unable to load consent requests'},req);}
+  }
+  const familyConsentMatch=url.pathname.match(/^\/api\/family-members\/(\d+)\/verify-consent$/);
+  if(familyConsentMatch&&req.method==='POST')return parseBody(req,async(err,data)=>{
+    const auth=requireAuth(req,res);if(!auth)return;
+    if(err)return send(res,400,{error:'Invalid JSON'},req);
+    try{
+      const saved=await verifyAdultFamilyMemberConsent(Number(familyConsentMatch[1]),auth.sub,data.scopes||[]);
+      return send(res,200,saved,req);
+    }catch(e){
+      if(e.statusCode)return send(res,e.statusCode,{error:e.message},req);
+      return send(res,503,{error:'Unable to record family-member consent'},req);
+    }
+  });
+
+
+  const publicAvailabilityMatch=url.pathname.match(/^\/api\/doctors\/(\d+)\/availability$/);
+  if(publicAvailabilityMatch&&req.method==='GET'){
+    const doctorId=Number(publicAvailabilityMatch[1]);
+    if(!Number.isSafeInteger(doctorId)||doctorId<=0)return send(res,422,{error:'doctorId must be a positive integer'},req);
+    const fromRaw=url.searchParams.get('from');
+    const toRaw=url.searchParams.get('to');
+    const validDate=value=>typeof value==='string'&&/^\d{4}-\d{2}-\d{2}$/.test(value)&&!Number.isNaN(Date.parse(value+'T00:00:00Z'))&&new Date(value+'T00:00:00Z').toISOString().slice(0,10)===value;
+    if(!validDate(fromRaw)||!validDate(toRaw))return send(res,422,{error:'from and to are required YYYY-MM-DD dates'},req);
+    const from=new Date(fromRaw+'T00:00:00.000Z');
+    const to=new Date(toRaw+'T00:00:00.000Z');
+    if(to<=from||(to-from)>31*24*60*60*1000)return send(res,422,{error:'Date range must be 1 to 31 days'},req);
+    try{
+      const rows=await listPublicDoctorAvailability(doctorId,from.toISOString(),to.toISOString());
+      if(rows===null)return send(res,503,{error:'DATABASE_URL not configured'},req);
+      return send(res,200,rows,req);
+    }catch(e){return send(res,503,{error:'Unable to load doctor availability'},req);}
+  }
+  if(url.pathname==='/api/doctor/availability-slots'&&req.method==='GET'){
+    const doctor=verifyRoleToken(getAuthToken(req),'doctor');
+    if(!doctor)return send(res,401,{error:'Doctor authentication required'},req);
+    const fromRaw=url.searchParams.get('from');
+    const toRaw=url.searchParams.get('to');
+    const validFilter=value=>value===null||(
+      typeof value==='string'&&!Number.isNaN(Date.parse(value))&&
+      value.length<=40
+    );
+    if(!validFilter(fromRaw)||!validFilter(toRaw))return send(res,422,{error:'from and to must be valid date/time filters'},req);
+    const from=fromRaw===null?null:new Date(fromRaw);
+    const to=toRaw===null?null:new Date(toRaw);
+    if((from&&Number.isNaN(from.getTime()))||(to&&Number.isNaN(to.getTime()))||
+       (from&&to&&(to<=from||(to-from)>90*24*60*60*1000))){
+      return send(res,422,{error:'Availability query range must be positive and no longer than 90 days'},req);
+    }
+    try{
+      const rows=await listDoctorAvailabilitySlots(
+        doctor.sub,from?from.toISOString():null,to?to.toISOString():null
+      );
+      if(rows===null)return send(res,503,{error:'DATABASE_URL not configured'},req);
+      return send(res,200,rows,req);
+    }catch(e){return send(res,503,{error:'Unable to load doctor availability'},req);}
+  }
+  if(url.pathname==='/api/doctor/availability-slots'&&req.method==='POST')return parseBody(req,async(err,data)=>{
+    const doctor=verifyRoleToken(getAuthToken(req),'doctor');
+    if(!doctor)return send(res,401,{error:'Doctor authentication required'},req);
+    if(err)return send(res,400,{error:'Invalid JSON'},req);
+    try{
+      const saved=await createDoctorAvailabilitySlot(doctor.sub,data);
+      if(!saved)return send(res,503,{error:'DATABASE_URL not configured'},req);
+      return send(res,201,saved,req);
+    }catch(e){
+      if(e.statusCode)return send(res,e.statusCode,{error:e.message},req);
+      return send(res,503,{error:'Unable to publish availability slot'},req);
+    }
+  });
+  const availabilityCancelMatch=url.pathname.match(/^\/api\/doctor\/availability-slots\/(\d+)$/);
+  if(availabilityCancelMatch&&req.method==='DELETE'){
+    const doctor=verifyRoleToken(getAuthToken(req),'doctor');
+    if(!doctor)return send(res,401,{error:'Doctor authentication required'},req);
+    try{
+      const saved=await cancelDoctorAvailabilitySlot(doctor.sub,Number(availabilityCancelMatch[1]));
+      return send(res,200,saved,req);
+    }catch(e){
+      if(e.statusCode)return send(res,e.statusCode,{error:e.message},req);
+      return send(res,503,{error:'Unable to cancel availability slot'},req);
+    }
+  }
+
+  if(url.pathname==='/api/doctors'&&req.method==='GET'){try{const rows=await listDoctors();if(rows===null)return send(res,503,{error:'DATABASE_URL not configured'},req);return send(res,200,rows,req);}catch(e){return send(res,503,{error:'Unable to load doctors'},req);}}
   if(url.pathname==='/api/db/health'&&req.method==='GET'){try{const db=await getDb();if(!db)return send(res,503,{ok:false,error:'DATABASE_URL not configured'},req);await db.query('SELECT 1');return send(res,200,{ok:true,database:'connected'},req);}catch(e){return send(res,503,{ok:false,error:'Database unavailable'},req);}}
   if(url.pathname==='/api/auth/request-otp'&&req.method==='POST')return parseBody(req,async(err,data)=>{if(err||!data.phone)return send(res,400,{error:'phone is required'},req);try{const result=await issueOtp(data.phone);return send(res,200,{message:'OTP sent',...result},req);}catch(e){if(e instanceof AuthError)return send(res,e.statusCode,{error:e.message},req);return send(res,502,{error:'Unable to send OTP'},req);}});
   if(url.pathname==='/api/auth/verify-otp'&&req.method==='POST')return parseBody(req,async(err,data)=>{
     if(err||!data.phone||!data.otp)return send(res,400,{error:'phone and otp are required'},req);
-    if(!verifyOtp(data.phone,String(data.otp)))return send(res,401,{error:'Invalid or expired OTP'},req);
     try{
+      if(!await verifyOtp(data.phone,String(data.otp)))return send(res,401,{error:'Invalid or expired OTP'},req);
       const db=await getDb();
       if(db){
         const name=typeof data.name==='string'&&data.name.trim()?data.name.trim().slice(0,120):'Patient';
@@ -81,10 +228,34 @@ const server=http.createServer(async(req,res)=>{
     }
   });
   if(url.pathname==='/api/doctor/auth/request-otp'&&req.method==='POST')return parseBody(req,async(err,data)=>{if(err||!data.phone)return send(res,400,{error:'phone is required'},req);try{const doctor=await getDoctorByPhone(data.phone);if(doctor===null)return send(res,503,{error:'DATABASE_URL not configured'},req);if(!doctor)return send(res,404,{error:'Doctor identity is not provisioned'},req);const result=await issueOtp(data.phone);return send(res,200,{message:'OTP sent',...result,doctor:{id:doctor.id,name:doctor.name,specialty:doctor.specialty}},req);}catch(e){if(e instanceof AuthError)return send(res,e.statusCode,{error:e.message},req);return send(res,502,{error:'Unable to send doctor OTP'},req);}});
-  if(url.pathname==='/api/doctor/auth/verify-otp'&&req.method==='POST')return parseBody(req,(err,data)=>{if(err||!data.phone||!data.otp)return send(res,400,{error:'phone and otp are required'},req);if(!verifyOtp(data.phone,String(data.otp)))return send(res,401,{error:'Invalid or expired OTP'},req);try{return getDoctorByPhone(data.phone).then(doctor=>{if(!doctor)return send(res,404,{error:'Doctor identity is not provisioned'},req);return send(res,200,{token:createDoctorToken(data.phone),user:{id:doctor.id,name:doctor.name,specialty:doctor.specialty,phone:doctor.phone,role:'doctor'}},req);});}catch(e){if(e instanceof AuthError)return send(res,e.statusCode,{error:e.message},req);return send(res,503,{error:'Unable to create doctor session'},req);}});
+  if(url.pathname==='/api/doctor/auth/verify-otp'&&req.method==='POST')return parseBody(req,async(err,data)=>{
+    if(err||!data.phone||!data.otp)return send(res,400,{error:'phone and otp are required'},req);
+    try{
+      if(!await verifyOtp(data.phone,String(data.otp)))return send(res,401,{error:'Invalid or expired OTP'},req);
+      const doctor=await getDoctorByPhone(data.phone);
+      if(!doctor)return send(res,404,{error:'Doctor identity is not provisioned'},req);
+      return send(res,200,{token:createDoctorToken(data.phone),user:{id:doctor.id,name:doctor.name,specialty:doctor.specialty,phone:doctor.phone,role:'doctor'}},req);
+    }catch(e){
+      if(e instanceof AuthError)return send(res,e.statusCode,{error:e.message},req);
+      return send(res,503,{error:'Unable to create doctor session'},req);
+    }
+  });
   if(url.pathname==='/api/doctor/appointments'&&req.method==='GET'){const doctor=verifyRoleToken(getAuthToken(req),'doctor');if(!doctor)return send(res,401,{error:'Doctor authentication required'},req);try{const rows=await listDoctorAppointments(doctor.sub);if(rows===null)return send(res,503,{error:'DATABASE_URL not configured'},req);return send(res,200,rows,req);}catch(e){return send(res,503,{error:'Unable to load doctor appointments'},req);}}
   const doctorStatusMatch=url.pathname.match(/^\/api\/doctor\/appointments\/(\d+)\/status$/);
   if(doctorStatusMatch&&req.method==='PATCH')return parseBody(req,async(err,data)=>{const doctor=verifyRoleToken(getAuthToken(req),'doctor');if(!doctor)return send(res,401,{error:'Doctor authentication required'},req);if(err)return send(res,400,{error:'Invalid JSON'},req);try{const saved=await updateDoctorAppointmentStatus(Number(doctorStatusMatch[1]),doctor.sub,data.status);return send(res,200,saved,req);}catch(e){if(e.statusCode)return send(res,e.statusCode,{error:e.message},req);return send(res,503,{error:'Unable to update doctor appointment'},req);}});
+  if(url.pathname==='/api/admin/doctors'&&req.method==='GET'){
+    if(!requireAdmin(req,res))return;
+    try{const rows=await listAdminDoctors();if(rows===null)return send(res,503,{error:'DATABASE_URL not configured'},req);return send(res,200,rows,req);}
+    catch(e){return send(res,503,{error:'Unable to load doctors'},req);}
+  }
+  if(url.pathname==='/api/admin/doctors'&&req.method==='POST'){
+    if(!requireAdmin(req,res))return;
+    return parseBody(req,async(err,data)=>{
+      if(err)return send(res,400,{error:'Invalid JSON'},req);
+      try{const saved=await createDoctor(data);if(saved)return send(res,201,saved,req);return send(res,503,{error:'DATABASE_URL not configured'},req);}
+      catch(e){if(e.statusCode)return send(res,e.statusCode,{error:e.message},req);return send(res,503,{error:'Unable to register doctor'},req);}
+    });
+  }
   if(url.pathname==='/api/admin/login'&&req.method==='POST')return parseBody(req,(err,data)=>{if(err)return send(res,400,{error:'Invalid JSON'},req);try{if(!verifyAdminCredentials(data.email,data.password))return send(res,401,{error:'Invalid admin credentials'},req);return send(res,200,{token:createAdminToken(data.email),user:{email:String(data.email).trim().toLowerCase(),role:'admin'}},req);}catch(e){if(e instanceof AuthError)return send(res,e.statusCode,{error:e.message},req);return send(res,503,{error:'Unable to create admin session'},req);}});
   if(url.pathname==='/api/admin/appointments'&&req.method==='GET'){if(!requireAdmin(req,res))return;try{const rows=await listAppointments();if(rows===null)return send(res,503,{error:'DATABASE_URL not configured'},req);return send(res,200,rows,req);}catch(e){return send(res,503,{error:'Unable to load admin appointments'},req);}}
   if(url.pathname==='/api/emergency'&&req.method==='GET')return send(res,200,emergencyResponse(),req);
@@ -92,7 +263,7 @@ const server=http.createServer(async(req,res)=>{
   if(url.pathname==='/api/appointments'&&req.method==='GET'){const auth=requireAuth(req,res);if(!auth)return;const requestedPhone=url.searchParams.get('phone');if(requestedPhone&&requestedPhone!==auth.sub)return send(res,403,{error:'Patient access denied'},req);try{const rows=await listAppointments(auth.sub);if(rows===null)return send(res,503,{error:'DATABASE_URL not configured'},req);return send(res,200,rows,req);}catch(e){return send(res,503,{error:'Unable to load appointments'},req);}}
   const statusMatch=url.pathname.match(/^\/api\/appointments\/(\d+)\/status$/);
   if(statusMatch&&req.method==='PATCH')return parseBody(req,async(err,data)=>{if(!isAuthorizedAdmin(req))return send(res,403,{error:'Admin authorization required'},req);if(err)return send(res,400,{error:'Invalid JSON'},req);try{const saved=await updateAppointmentStatus(Number(statusMatch[1]),data.status);if(saved)return send(res,200,saved,req);return send(res,503,{error:'DATABASE_URL not configured'},req);}catch(e){if(e.statusCode)return send(res,e.statusCode,{error:e.message},req);return send(res,503,{error:'Unable to update appointment status'},req);}});
-  if(url.pathname==='/api/appointments'&&req.method==='POST')return parseBody(req,async(err,data)=>{const auth=requireAuth(req,res);if(!auth)return;if(err)return send(res,400,{error:'Invalid JSON'},req);if(!data.patientName||!data.phone||!data.doctorId||!data.appointmentAt)return send(res,422,{error:'patientName, phone, doctorId and appointmentAt are required'},req);if(data.phone!==auth.sub)return send(res,403,{error:'Patient access denied'},req);try{const saved=await createAppointment(data);if(saved)return send(res,201,saved,req);}catch(e){if(e.statusCode)return send(res,e.statusCode,{error:e.message},req);return send(res,503,{error:'Unable to save appointment'},req);}return send(res,503,{error:'DATABASE_URL not configured'},req);});
+  if(url.pathname==='/api/appointments'&&req.method==='POST')return parseBody(req,async(err,data)=>{const auth=requireAuth(req,res);if(!auth)return;if(err)return send(res,400,{error:'Invalid JSON'},req);if(!data.patientName||!data.phone||!data.doctorId||(!data.slotId&&!data.appointmentAt))return send(res,422,{error:'patientName, phone, doctorId and a published availability slot are required'},req);if(data.phone!==auth.sub)return send(res,403,{error:'Patient access denied'},req);try{const saved=await createAppointment(data);if(saved)return send(res,201,saved,req);}catch(e){if(e.statusCode)return send(res,e.statusCode,{error:e.message},req);return send(res,503,{error:'Unable to save appointment'},req);}return send(res,503,{error:'DATABASE_URL not configured'},req);});
   if(url.pathname==='/api/prescriptions'&&req.method==='GET'){const auth=requireAuth(req,res);if(!auth)return;const phone=url.searchParams.get('phone');if(!phone)return send(res,422,{error:'phone is required'},req);if(phone!==auth.sub)return send(res,403,{error:'Patient access denied'},req);try{const rows=await listPrescriptions(phone);if(rows===null)return send(res,503,{error:'DATABASE_URL not configured'},req);return send(res,200,rows,req);}catch(e){return send(res,503,{error:'Unable to load prescriptions'},req);}}
   if(url.pathname==='/api/prescriptions'&&req.method==='POST')return parseBody(req,async(err,data)=>{if(err)return send(res,400,{error:'Invalid JSON'},req);const doctor=verifyRoleToken(getAuthToken(req),'doctor');if(doctor){data.doctorPhone=doctor.sub;}else{const auth=requireAuth(req,res);if(!auth)return;if(!data.phone||data.phone!==auth.sub)return send(res,403,{error:'Patient access denied'},req);}try{const saved=await createPrescription(data);if(saved)return send(res,201,saved,req);return send(res,503,{error:'DATABASE_URL not configured'},req);}catch(e){if(e.statusCode)return send(res,e.statusCode,{error:e.message},req);return send(res,503,{error:'Unable to save prescription'},req);}});
   if(url.pathname==='/api/health-records'&&req.method==='GET'){const auth=requireAuth(req,res);if(!auth)return;const phone=url.searchParams.get('phone');if(!phone)return send(res,422,{error:'phone is required'},req);if(phone!==auth.sub)return send(res,403,{error:'Patient access denied'},req);try{const rows=await listHealthRecords(phone);if(rows===null)return send(res,503,{error:'DATABASE_URL not configured'},req);return send(res,200,rows,req);}catch(e){return send(res,503,{error:'Unable to load health records'},req);}}
@@ -108,6 +279,30 @@ const server=http.createServer(async(req,res)=>{
   if(url.pathname==='/api/payments/webhook'&&req.method==='POST')return parseRawBody(req,async(err,rawBody)=>{if(err)return send(res,400,{error:'Unable to read webhook body'},req);const signature=req.headers['x-payment-signature'];if(!getWebhookSecret())return send(res,503,{error:'Payment webhook is not configured'},req);if(!verifyWebhookSignature(rawBody,signature))return send(res,401,{error:'Invalid webhook signature'},req);try{const event=parseWebhookEvent(rawBody);const paymentId=Number(event.paymentId);const status=event.status;if(!Number.isInteger(paymentId)||paymentId<1||typeof status!=='string')return send(res,422,{error:'paymentId and status are required'},req);const saved=await updatePaymentStatus(paymentId,status,event.providerPaymentId);if(saved)return send(res,200,{ok:true,payment:saved},req);return send(res,503,{error:'DATABASE_URL not configured'},req);}catch(e){if(e.statusCode)return send(res,e.statusCode,{error:e.message},req);return send(res,503,{error:'Unable to process payment webhook'},req);}});
   const paymentStatusMatch=url.pathname.match(/^\/api\/payments\/(\d+)\/status$/);
   if(paymentStatusMatch&&req.method==='PATCH')return parseBody(req,async(err,data)=>{if(err)return send(res,400,{error:'Invalid JSON'},req);if(!isAuthorizedPaymentStatusUpdate(req.headers))return send(res,403,{error:'Payment status update is restricted'},req);try{const saved=await updatePaymentStatus(Number(paymentStatusMatch[1]),data.status,data.providerPaymentId);if(saved)return send(res,200,saved,req);return send(res,503,{error:'DATABASE_URL not configured'},req);}catch(e){if(e.statusCode)return send(res,e.statusCode,{error:e.message},req);return send(res,503,{error:'Unable to update payment status'},req);}});
+  if (url.pathname.startsWith('/api/pharmacy/')) {
+    const isPharmacyAdminApi = url.pathname.startsWith('/api/pharmacy/admin/');
+    const isPharmacyOrderStatus = req.method === 'PATCH' && /^\/api\/pharmacy\/orders\/\d+\/status$/.test(url.pathname);
+    let adminClaims = null;
+    let patientClaims = null;
+
+    // Match the existing API security model: protected routes require role tokens in every environment.
+    if (isPharmacyAdminApi || isPharmacyOrderStatus) {
+      adminClaims = requireAdmin(req, res);
+      if (!adminClaims) return;
+    }
+    if (url.pathname === '/api/pharmacy/orders' && ['GET', 'POST'].includes(req.method)) {
+      patientClaims = requireAuth(req, res);
+      if (!patientClaims) return;
+    }
+
+    const handled = await handlePharmacyRoute(req, res, url, {
+      send: (code, data) => send(res, code, data, req),
+      parseBody,
+      auth: patientClaims ? { phone: patientClaims.sub } : null,
+      admin: Boolean(adminClaims)
+    });
+    if (handled !== false) return;
+  }
   send(res,404,{error:'Not found'},req);
 });
 server.listen(PORT,()=>console.log(`Ayansha API running on ${PORT}`));
