@@ -363,6 +363,7 @@ const server=http.createServer(async(req,res)=>{
       const normalized=normalizeRazorpayPaymentEvent(parseWebhookEvent(rawBody));
       if(!normalized)return send(res,200,{ok:true,ignored:true},req);
       const payment=await findPaymentByProviderOrderId(normalized.orderId);
+      if(payment===null)return send(res,503,{error:'DATABASE_URL not configured'},req);
       if(!payment)return send(res,404,{error:'Payment order not found'},req);
       if(payment.provider!=='razorpay' || Math.round(Number(payment.amount)*100)!==normalized.amount || payment.currency!==normalized.currency){
         return send(res,422,{error:'Razorpay payment does not match the stored order'},req);

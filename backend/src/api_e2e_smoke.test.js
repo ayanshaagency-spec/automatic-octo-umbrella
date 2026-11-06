@@ -213,20 +213,33 @@ test('Phase 5 API smoke/E2E contract', async t => {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      'X-Payment-Signature': 'invalid-signature'
+      'X-Razorpay-Signature': 'invalid-signature'
     },
-    body: JSON.stringify({ paymentId: 1, status: 'paid' })
+    body: JSON.stringify({
+      event: 'payment.captured',
+      payload: { payment: { entity: {
+        id: 'pay_invalid', order_id: 'order_invalid', amount: 10000, currency: 'INR', status: 'captured'
+      } } }
+    })
   });
   assert.equal(invalidSignature.status, 401);
   assert.equal((await invalidSignature.json()).error, 'Invalid webhook signature');
 
+  const unavailableEvent = JSON.stringify({
+    entity: 'event',
+    event: 'payment.captured',
+    payload: { payment: { entity: {
+      id: 'pay_unavailable', order_id: 'order_unavailable',
+      amount: 10000, currency: 'INR', status: 'captured'
+    } } }
+  });
   const validSignatureButUnavailable = await fetch(`${BASE_URL}/api/payments/webhook`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      'X-Payment-Signature': webhookSignature(JSON.stringify({ paymentId: 1, status: 'paid' }))
+      'X-Razorpay-Signature': webhookSignature(unavailableEvent)
     },
-    body: JSON.stringify({ paymentId: 1, status: 'paid' })
+    body: unavailableEvent
   });
   assert.equal(validSignatureButUnavailable.status, 503);
   assert.equal((await validSignatureButUnavailable.json()).error, 'DATABASE_URL not configured');

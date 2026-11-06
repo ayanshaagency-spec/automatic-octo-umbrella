@@ -70,7 +70,7 @@ function createPaymentDb() {
         return { rowCount: payment ? 1 : 0, rows: payment ? [payment] : [] };
       }
 
-      if (sql.includes('SELECT status FROM payments WHERE id = $1')) {      if (sql.includes('SELECT status FROM payments WHERE id = $1')) {
+      if (sql.includes('SELECT status FROM payments WHERE id = $1')) {
         const payment = findPayment(params[0]);
         return { rowCount: payment ? 1 : 0, rows: payment ? [{ status: payment.status }] : [] };
       }
