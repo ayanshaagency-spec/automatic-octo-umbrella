@@ -357,4 +357,91 @@ test('production CORS ignores wildcard origins and allows exact configured origi
   const evil = await fetch(`${base}/health`, { headers: { Origin: 'https://evil.example' } });
   assert.equal(evil.status, 200);
   assert.equal(evil.headers.get('access-control-allow-origin'), null);
+
+  const productionAdminLoginWithoutLimiterDatabase = await fetch(`${base}/api/admin/login`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'X-Real-IP': '203.0.113.240' },
+    body: JSON.stringify({ email: 'admin@example.test', password: 'not-used-without-limiter-db' })
+  });
+  assert.equal(productionAdminLoginWithoutLimiterDatabase.status, 503,
+    'Production Admin login must fail closed when the shared rate-limit database is unavailable');
+  assert.equal((await productionAdminLoginWithoutLimiterDatabase.json()).error,
+    'Authentication protection is temporarily unavailable');
+});
+
+
+test('OTP and Admin authentication endpoints enforce shared rate limits', async t => {
+  const server = startServer();
+  t.after(() => server.kill());
+  await waitForHealth(server);
+
+  const clientIp = '203.0.113.121';
+  for (let index = 0; index < 9; index += 1) {
+    const response = await fetch(`${BASE_URL}/api/auth/request-otp`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Real-IP': clientIp,
+        // Changing X-Forwarded-For must not evade the trusted client-IP bucket.
+        'X-Forwarded-For': `198.51.100.${index + 1}`
+      },
+      body: JSON.stringify({ phone: `+9191000010${String(index).padStart(2, '0')}` })
+    });
+    assert.equal(response.status, 200);
+  }
+
+  // Patient and Doctor OTP entry points share one source-IP bucket.
+  const doctorAttempt = await fetch(`${BASE_URL}/api/doctor/auth/request-otp`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'X-Real-IP': clientIp },
+    body: JSON.stringify({ phone: '+919100001099' })
+  });
+  assert.equal(doctorAttempt.status, 503, 'the local smoke environment has no database-backed doctor directory');
+  const otpBlocked = await fetch(`${BASE_URL}/api/auth/request-otp`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'X-Real-IP': clientIp,
+      'X-Forwarded-For': '192.0.2.250'
+    },
+    body: JSON.stringify({ phone: '+919100001100' })
+  });
+  assert.equal(otpBlocked.status, 429);
+  assert.ok((await otpBlocked.json()).retryAfterSeconds >= 1);
+
+  const verifyIp = '203.0.113.123';
+  for (let attempt = 0; attempt < 30; attempt += 1) {
+    const response = await fetch(`${BASE_URL}/api/auth/verify-otp`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-Real-IP': verifyIp },
+      body: JSON.stringify({ phone: `+9191000020${String(attempt).padStart(2, '0')}`, otp: '000000' })
+    });
+    assert.equal(response.status, 401);
+  }
+  const doctorVerifyBlocked = await fetch(`${BASE_URL}/api/doctor/auth/verify-otp`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'X-Real-IP': verifyIp },
+    body: JSON.stringify({ phone: '+919100002099', otp: '000000' })
+  });
+  assert.equal(doctorVerifyBlocked.status, 429, 'Patient and Doctor OTP verification share the source-IP throttle');
+
+  const adminIp = '203.0.113.122';
+  for (let attempt = 0; attempt < 8; attempt += 1) {
+    const response = await fetch(`${BASE_URL}/api/admin/login`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-Real-IP': adminIp },
+      body: JSON.stringify({
+        email: attempt % 2 ? 'ADMIN@example.test' : 'admin@example.test',
+        password: 'incorrect-password'
+      })
+    });
+    assert.equal(response.status, 401);
+    assert.equal((await response.json()).error, 'Invalid admin credentials');
+  }
+  const adminBlocked = await fetch(`${BASE_URL}/api/admin/login`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'X-Real-IP': adminIp },
+    body: JSON.stringify({ email: 'Admin@Example.Test', password: 'incorrect-password' })
+  });
+  assert.equal(adminBlocked.status, 429, 'email matching is case-insensitive for the shared bucket');
 });

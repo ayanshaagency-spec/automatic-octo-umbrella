@@ -40,6 +40,14 @@ jobs:
         working-directory: backend
         run: npm install
 
+      - name: Apply schema and migrations to disposable PostgreSQL
+        working-directory: backend
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/ayansha_healthcare
+        run: |
+          psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f db/schema.sql
+          npm run db:migrate
+
       - name: Start backend against real PostgreSQL
         working-directory: backend
         env:
