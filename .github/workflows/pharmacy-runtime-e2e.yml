@@ -3,10 +3,12 @@ name: Runtime E2E Verification
 on:
   push:
     branches:
+      - staging/auth-abuse-protection-with-role-portal
       - feat/phase7-pharmacy-railway-aligned
       - feat/phase7-pharmacy-shared-otp
   pull_request:
     branches:
+      - staging/auth-abuse-protection-with-role-portal
       - feat/phase6-emergency-hospitals
       - feat/phase7-pharmacy-railway-aligned
 
