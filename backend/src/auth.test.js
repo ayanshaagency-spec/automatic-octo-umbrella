@@ -1,6 +1,6 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { issueOtp, verifyOtp, createToken, verifyToken } = require('./auth');
+const { issueOtp, verifyOtp, createToken, verifyToken, getOtpProviderStatus } = require('./auth');
 
 async function issueDevelopmentOtp(phone) {
   process.env.NODE_ENV = 'test';
@@ -166,6 +166,33 @@ test('Staging MSG91 configuration fails closed when auth key or template ID is m
       () => issueOtp('+919122222222'),
       error => error.statusCode === 503 && /OTP provider is not configured/.test(error.message)
     );
+  } finally {
+    for (const key of keys) {
+      if (previous[key] === undefined) delete process.env[key];
+      else process.env[key] = previous[key];
+    }
+  }
+});
+
+test('OTP provider status exposes readiness only and never returns credentials', () => {
+  const keys = ['NODE_ENV', 'OTP_PROVIDER', 'OTP_PROVIDER_URL', 'OTP_PROVIDER_TOKEN', 'MSG91_AUTH_KEY', 'MSG91_TEMPLATE_ID', 'MSG91_OTP_VARIABLE'];
+  const previous = Object.fromEntries(keys.map(key => [key, process.env[key]]));
+  try {
+    process.env.NODE_ENV = 'production';
+    process.env.OTP_PROVIDER = 'msg91';
+    delete process.env.OTP_PROVIDER_URL;
+    delete process.env.OTP_PROVIDER_TOKEN;
+    delete process.env.MSG91_AUTH_KEY;
+    delete process.env.MSG91_TEMPLATE_ID;
+    delete process.env.MSG91_OTP_VARIABLE;
+    assert.deepEqual(getOtpProviderStatus(), {provider: 'msg91', configured: false});
+
+    process.env.OTP_PROVIDER = 'generic';
+    process.env.OTP_PROVIDER_URL = 'https://sms.example.test/send';
+    process.env.OTP_PROVIDER_TOKEN = 'test-only-secret-value';
+    const configured = getOtpProviderStatus();
+    assert.deepEqual(configured, {provider: 'generic', configured: true});
+    assert.equal(JSON.stringify(configured).includes('test-only-secret-value'), false);
   } finally {
     for (const key of keys) {
       if (previous[key] === undefined) delete process.env[key];

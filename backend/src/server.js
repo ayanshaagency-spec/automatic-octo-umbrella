@@ -2,7 +2,7 @@ const http = require('http');
 const fs = require('fs');
 const path = require('path');
 const PORT = process.env.PORT || 3000;
-const { issueOtp, verifyOtp, createToken, verifyToken, AuthError } = require('./auth');
+const { issueOtp, verifyOtp, createToken, verifyToken, getOtpProviderStatus, AuthError } = require('./auth');
 const { getDb } = require('./db');
 const { listDoctors, listAdminDoctors, createDoctor, listAppointments, updateAppointmentStatus, getDoctorByPhone, listDoctorAppointments, updateDoctorAppointmentStatus } = require('./repository');
 const { listFamilyMembers, createFamilyMember, revokeFamilyMember, listFamilyConsentRequests, verifyAdultFamilyMemberConsent, createDoctorAvailabilitySlot, listDoctorAvailabilitySlots, listPublicDoctorAvailability, cancelDoctorAvailabilitySlot, createAppointment } = require('./family_availability_repository');
@@ -301,6 +301,10 @@ const server=http.createServer(async(req,res)=>{
   if(url.pathname==='/api/doctor/appointments'&&req.method==='GET'){const doctor=verifyRoleToken(getAuthToken(req),'doctor');if(!doctor)return send(res,401,{error:'Doctor authentication required'},req);try{const rows=await listDoctorAppointments(doctor.sub);if(rows===null)return send(res,503,{error:'DATABASE_URL not configured'},req);return send(res,200,rows,req);}catch(e){return send(res,503,{error:'Unable to load doctor appointments'},req);}}
   const doctorStatusMatch=url.pathname.match(/^\/api\/doctor\/appointments\/(\d+)\/status$/);
   if(doctorStatusMatch&&req.method==='PATCH')return parseBody(req,async(err,data)=>{const doctor=verifyRoleToken(getAuthToken(req),'doctor');if(!doctor)return send(res,401,{error:'Doctor authentication required'},req);if(err)return send(res,400,{error:'Invalid JSON'},req);try{const saved=await updateDoctorAppointmentStatus(Number(doctorStatusMatch[1]),doctor.sub,data.status);return send(res,200,saved,req);}catch(e){if(e.statusCode)return send(res,e.statusCode,{error:e.message},req);return send(res,503,{error:'Unable to update doctor appointment'},req);}});
+  if(url.pathname==='/api/admin/otp/status'&&req.method==='GET'){
+    if(!requireAdmin(req,res))return;
+    return send(res,200,getOtpProviderStatus(),req);
+  }
   if(url.pathname==='/api/admin/doctors'&&req.method==='GET'){
     if(!requireAdmin(req,res))return;
     try{const rows=await listAdminDoctors();if(rows===null)return send(res,503,{error:'DATABASE_URL not configured'},req);return send(res,200,rows,req);}

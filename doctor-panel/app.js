@@ -112,6 +112,79 @@ form.addEventListener('submit', async event => {
 document.getElementById('addMedicine').onclick=()=>addMedicine();
 document.getElementById('refreshBtn').onclick=loadAppointments;
 document.getElementById('logoutBtn').onclick=()=>{sessionStorage.removeItem(TOKEN_KEY);location.reload();};
-document.getElementById('requestDoctorOtp').onclick=async()=>{const phone=document.getElementById('doctorPhone').value.trim();const m=document.getElementById('loginMessage');try{const res=await fetch(API+'/api/doctor/auth/request-otp',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({phone})});const data=await res.json().catch(()=>({}));if(!res.ok)throw new Error(data.error||'Unable to send OTP');document.getElementById('otpBox').hidden=false;m.className='message success';m.textContent=data.devOtp?'Development OTP: '+data.devOtp:'OTP sent. Check the registered channel.';}catch(e){m.className='message error';m.textContent=e.message;}};
-document.getElementById('verifyDoctorOtp').onclick=async()=>{const phone=document.getElementById('doctorPhone').value.trim(),otp=document.getElementById('doctorOtp').value.trim(),m=document.getElementById('loginMessage');try{const res=await fetch(API+'/api/doctor/auth/verify-otp',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({phone,otp})});const data=await res.json().catch(()=>({}));if(!res.ok)throw new Error(data.error||'Unable to verify OTP');sessionStorage.setItem(TOKEN_KEY,data.token);doctorLogin.hidden=true;workspace.hidden=false;addMedicine();loadAppointments();loadAvailability();}catch(e){m.className='message error';m.textContent=e.message;}};
+function doctorAuthErrorMessage(status, error) {
+  if (status === 404) return 'This phone number is not registered as a doctor. Ask the administrator to register the correct number under Admin → Doctors.';
+  if (status === 503 && /OTP provider is not configured/i.test(error || '')) return 'Doctor SMS OTP is not configured yet. Ask the administrator to complete the OTP provider setup in Railway Staging. No OTP was sent.';
+  if (status === 503) return 'Doctor sign-in is temporarily unavailable. Ask the administrator to check System health → Doctor SMS OTP.';
+  if (status === 502) return 'The SMS provider did not accept the OTP request. Ask the administrator to check the provider account and approved OTP template.';
+  if (status === 429) return 'Too many requests. Please wait before trying again.';
+  if (status === 401) return 'The OTP is invalid or expired. Request a new OTP and try again.';
+  return error || 'Unable to complete doctor sign-in.';
+}
+
+const requestDoctorOtpButton = document.getElementById('requestDoctorOtp');
+requestDoctorOtpButton.onclick = async () => {
+  const phone = document.getElementById('doctorPhone').value.trim();
+  const message = document.getElementById('loginMessage');
+  if (!phone) {
+    message.className = 'message error';
+    message.textContent = 'Enter the mobile number registered by the administrator.';
+    return;
+  }
+  requestDoctorOtpButton.disabled = true;
+  message.className = 'message';
+  message.textContent = 'Requesting OTP…';
+  try {
+    const res = await fetch(API + '/api/doctor/auth/request-otp', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({phone})
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(doctorAuthErrorMessage(res.status, data.error));
+    document.getElementById('otpBox').hidden = false;
+    message.className = 'message success';
+    message.textContent = data.devOtp ? 'Development OTP: ' + data.devOtp : 'OTP sent. Check the registered mobile number.';
+  } catch (error) {
+    message.className = 'message error';
+    message.textContent = error instanceof TypeError ? 'Unable to reach the sign-in service. Check your connection and try again.' : error.message;
+  } finally {
+    requestDoctorOtpButton.disabled = false;
+  }
+};
+
+const verifyDoctorOtpButton = document.getElementById('verifyDoctorOtp');
+verifyDoctorOtpButton.onclick = async () => {
+  const phone = document.getElementById('doctorPhone').value.trim();
+  const otp = document.getElementById('doctorOtp').value.trim();
+  const message = document.getElementById('loginMessage');
+  if (!phone || !otp) {
+    message.className = 'message error';
+    message.textContent = 'Enter the registered mobile number and the OTP.';
+    return;
+  }
+  verifyDoctorOtpButton.disabled = true;
+  message.className = 'message';
+  message.textContent = 'Verifying OTP…';
+  try {
+    const res = await fetch(API + '/api/doctor/auth/verify-otp', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({phone, otp})
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(doctorAuthErrorMessage(res.status, data.error));
+    sessionStorage.setItem(TOKEN_KEY, data.token);
+    doctorLogin.hidden = true;
+    workspace.hidden = false;
+    addMedicine();
+    loadAppointments();
+    loadAvailability();
+  } catch (error) {
+    message.className = 'message error';
+    message.textContent = error instanceof TypeError ? 'Unable to reach the sign-in service. Check your connection and try again.' : error.message;
+  } finally {
+    verifyDoctorOtpButton.disabled = false;
+  }
+};
 if(token()){doctorLogin.hidden=true;workspace.hidden=false;addMedicine();loadAppointments();loadAvailability();}

@@ -166,6 +166,12 @@ function isOtpProviderConfigured() {
   );
 }
 
+function getOtpProviderStatus() {
+  const configuredProvider = (process.env.OTP_PROVIDER || '').trim().toLowerCase() || 'generic';
+  const provider = configuredProvider === 'msg91' || configuredProvider === 'generic' ? configuredProvider : 'unsupported';
+  return { provider, configured: isOtpProviderConfigured() };
+}
+
 function hashPhone(phone) {
   return crypto.createHmac('sha256', getJwtSecret()).update(String(phone)).digest('hex');
 }
@@ -260,4 +266,4 @@ async function verifyOtp(phone, otp) {
   }
 }
 
-module.exports = { issueOtp, verifyOtp, createToken, verifyToken, AuthError };
+module.exports = { issueOtp, verifyOtp, createToken, verifyToken, getOtpProviderStatus, AuthError };
