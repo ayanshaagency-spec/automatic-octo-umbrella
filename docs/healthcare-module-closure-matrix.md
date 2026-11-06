@@ -18,7 +18,7 @@ This matrix distinguishes implementation and automated evidence from live provid
 | Prescriptions | Implemented | Protected doctor/patient routes; covered by automated tests. No patient/test prescription data was left in the persistent Staging database. |
 | Health records | Implemented | Protected patient and doctor APIs. Anonymous access is rejected. |
 | Lab orders | Implemented | Protected patient API and status workflow. Anonymous access is rejected. |
-| Payments | Razorpay webhook contract implemented; live provider acceptance pending | Razorpay order adapter, official `X-Razorpay-Signature` raw-body verification, nested `payment.captured`/`payment.failed` mapping, internal order/amount/currency matching, duplicate/out-of-order state handling and Admin readiness status are covered by automated tests. Staging Razorpay API keys/webhook secret are absent; live test-mode checkout remains blocked. |
+| Payments | Lab billing + Razorpay Checkout and webhook code deployed to Staging; live provider acceptance pending | Admin-only Lab Billing tab sets saved lab-order prices; patient-supplied amounts are ignored. Patient Dashboard shows Pay Now only for priced lab orders. Checkout callback HMAC is verified server-side, payment status is fetched from Razorpay, and only captured payments become paid. Signed webhook handling checks raw-body signature and order/amount/currency, with duplicate/out-of-order protection. Backend Tests, Docker Build and Runtime E2E pass. Staging Razorpay keys/webhook secret are absent; live Test Mode checkout remains blocked. |
 | Emergency information | Implemented | Emergency information endpoint responds. It is not an ambulance dispatch or booking service. |
 | Nearby hospitals | Implemented | Coordinate-based directory API exists; Staging hospital directory currently returns an empty array. |
 | Pharmacy integration | Implemented in the existing Staging code line; release review open | Isolated PostgreSQL Runtime E2E covers hospital/partner stores, catalogue, COD home/hospital orders, stock reservation, prescription matching, patient history, admin queue and fulfilment. Staging has no verified store/product/hospital onboarding data. Migration scripts are applied by the successful Staging pre-deploy step. PR #8 remains Draft and unmerged; no Production release is authorised. |
@@ -32,7 +32,7 @@ This matrix distinguishes implementation and automated evidence from live provid
 | AI assistant | Code exists; live status reports `configured:false` | Approved AI credentials, medical-safety configuration and clinical acceptance. |
 | WhatsApp notifications | Code exists; live status reports `configured:false` | WhatsApp Business account, approved template and secret configuration. |
 | Video consultation | No live room/session integration | Select provider or approve a secure WebRTC/signalling/TURN architecture; implement and test patient/doctor room lifecycle. |
-| Razorpay payment | Adapter and webhook security tests exist; provider credentials not configured | Add test-mode `PAYMENT_PROVIDER=razorpay`, `RAZORPAY_KEY_ID`, `RAZORPAY_KEY_SECRET` and `PAYMENT_WEBHOOK_SECRET` to Railway Staging secret variables; then test order creation, callback/signature verification and payment lifecycle end-to-end. |
+| Razorpay payment | Checkout signature verification, provider status lookup and webhook security covered by disposable CI Runtime E2E | Lab order price must first be set by Admin. Add Test Mode `PAYMENT_PROVIDER=razorpay`, `RAZORPAY_KEY_ID`, `RAZORPAY_KEY_SECRET` and `PAYMENT_WEBHOOK_SECRET` to Railway Staging secret variables; configure webhook endpoint `/api/payments/webhook` for `payment.captured` and `payment.failed`; then complete a real authorised test checkout/webhook delivery. |
 
 ## Not implemented in the current code line
 
@@ -43,8 +43,8 @@ This matrix distinguishes implementation and automated evidence from live provid
 ## Environment safety
 
 - Staging backend: https://health-care-backend-staging-staging.up.railway.app
-- Latest Staging deployment `2d980d6c-f0fb-4c3f-b54f-be18511eabdf` is `SUCCESS` for commit `be31ad41a954151501165b34d5a5974df2c443a8`; the pre-deploy log confirms schema and all migration scripts applied successfully.
-- This deployment includes the protected payment-readiness route and Admin System Health card. Public endpoint reachability was not independently verified from the current execution environment.
+- Latest Staging deployment `1e1f5b50-5eaf-4e11-b32e-2d0fabb5dc7c` is `SUCCESS` for commit `b405602bfbbf035e6b515edd2c730a793ceccb76`; Railway logs confirm schema/migrations applied, API started, and `/health` healthcheck succeeded.
+- This deployment includes protected payment readiness, Razorpay Checkout callback verification, official signed webhook processing, Admin Lab Billing and Patient Pay Now for admin-priced lab orders. Public human login/payment acceptance is not confirmed because provider credentials are not configured.
 - Staging directories for Pharmacy stores and delivery hospitals currently return empty arrays.
 - Production Backend and Postgres remain `SUCCESS`; no Production service, branch, database, migration or secret was changed during this MVP work.
 - Floot Operations Dashboard typecheck is clean and all five tests pass. Its proxy is pinned to the Staging backend; dedicated Staging admin sign-in is disabled until the environment has its own admin credentials. The preview is ready but unpublished.
