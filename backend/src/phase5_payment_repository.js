@@ -137,6 +137,38 @@ async function createPayment(data) {
   }
 }
 
+async function createPaymentForLabOrder(phone, labOrderId) {
+  const db = await getDb();
+  if (!db) return null;
+  const { rows } = await db.query(
+    'SELECT lo.id, lo.amount, lo.currency, lo.status, p.phone FROM lab_orders lo JOIN patients p ON p.id = lo.patient_id WHERE lo.id = $1 AND p.phone = $2',
+    [labOrderId, phone]
+  );
+  if (!rows.length) {
+    const error = new Error('Lab order not found');
+    error.statusCode = 404;
+    throw error;
+  }
+  const order = rows[0];
+  if (['cancelled', 'completed'].includes(order.status)) {
+    const error = new Error('This lab order is closed and cannot be paid');
+    error.statusCode = 409;
+    throw error;
+  }
+  const amount = Number(order.amount);
+  if (!Number.isFinite(amount) || amount <= 0) {
+    const error = new Error('Lab order price has not been set by the admin yet');
+    error.statusCode = 422;
+    throw error;
+  }
+  return createPayment({
+    phone,
+    labOrderId: Number(order.id),
+    amount,
+    currency: order.currency || 'INR',
+    idempotencyKey: 'lab-order-' + Number(order.id)
+  });
+}
 async function updatePaymentStatus(id, status, providerPaymentId) {
   const db = await getDb();
   if (!db) return null;
@@ -169,4 +201,4 @@ async function updatePaymentStatus(id, status, providerPaymentId) {
   throw error;
 }
 
-module.exports = { listPayments, getPaymentById, findPaymentByProviderOrderId, setProviderOrderId, createPayment, updatePaymentStatus };
+module.exports = { listPayments, getPaymentById, findPaymentByProviderOrderId, setProviderOrderId, createPayment, createPaymentForLabOrder, updatePaymentStatus };
