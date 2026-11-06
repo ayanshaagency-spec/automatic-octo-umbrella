@@ -141,7 +141,7 @@ async function createPaymentForLabOrder(phone, labOrderId) {
   const db = await getDb();
   if (!db) return null;
   const { rows } = await db.query(
-    'SELECT lo.id, lo.amount, lo.currency, lo.status, p.phone FROM lab_orders lo JOIN patients p ON p.id = lo.patient_id WHERE lo.id = $1 AND p.phone = $2',
+    'SELECT lo.id, lo.amount, lo.status, p.phone FROM lab_orders lo JOIN patients p ON p.id = lo.patient_id WHERE lo.id = $1 AND p.phone = $2',
     [labOrderId, phone]
   );
   if (!rows.length) {
@@ -165,7 +165,7 @@ async function createPaymentForLabOrder(phone, labOrderId) {
     phone,
     labOrderId: Number(order.id),
     amount,
-    currency: order.currency || 'INR',
+    currency: 'INR',
     idempotencyKey: 'lab-order-' + Number(order.id)
   });
 }
