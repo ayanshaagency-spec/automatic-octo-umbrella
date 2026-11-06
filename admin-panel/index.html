@@ -57,6 +57,7 @@ input:focus,select:focus,button:focus-visible{outline:3px solid #5fc3ce66;outlin
 <nav class="tabs" aria-label="Admin sections">
 <button type="button" data-tab="appointmentsPanel" aria-selected="true">Appointments</button>
 <button type="button" data-tab="doctorsPanel" aria-selected="false">Doctors</button>
+<button type="button" data-tab="labBillingPanel" aria-selected="false">Lab billing</button>
 <button type="button" data-tab="storesPanel" aria-selected="false">Pharmacy stores</button>
 <button type="button" data-tab="cataloguePanel" aria-selected="false">Catalogue & stock</button>
 <button type="button" data-tab="ordersPanel" aria-selected="false">Pharmacy orders</button>
@@ -80,6 +81,12 @@ input:focus,select:focus,button:focus-visible{outline:3px solid #5fc3ce66;outlin
 <section id="appointmentsPanel" class="card panel">
 <div class="section-head"><div><p class="eyebrow">Care operations</p><h2>Appointments</h2></div><button type="button" class="secondary" id="reloadAppointments">Refresh</button></div>
 <p id="appointmentStatus" class="muted" aria-live="polite">Loading appointments…</p><div id="appointments"></div>
+</section>
+<section id="labBillingPanel" class="card panel hidden">
+ <div class="section-head"><div><p class="eyebrow">Patient billing</p><h2>Lab order pricing</h2><p class="muted">Set the verified lab quote here. Patients cannot choose or change this amount.</p></div><button type="button" class="secondary" id="reloadLabBilling">Refresh lab orders</button></div>
+ <p class="notice">Enter only a price confirmed by the lab/clinic. A price locks when a payment record exists or the order is closed.</p>
+ <p id="labBillingStatus" class="muted" role="status"></p>
+ <div id="labBillingList"><div class="empty">Loading lab billing…</div></div>
 </section>
 <section id="doctorsPanel" class="card panel hidden">
 <div class="section-head"><div><p class="eyebrow">Clinical team</p><h2>Register a doctor</h2></div><button type="button" class="secondary" id="reloadDoctors">Refresh doctors</button></div>
