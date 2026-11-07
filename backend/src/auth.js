@@ -89,6 +89,8 @@ function verifyToken(token) {
   } catch {
     return null;
   }
+  // Patient sessions are the only tokens accepted by this verifier. Role-bound Doctor/Admin tokens use the same signing key but must never cross into patient APIs.
+  if (Object.prototype.hasOwnProperty.call(payload || {}, 'role')) return null;
   if (!payload?.sub || !Number.isFinite(payload.exp) || payload.exp <= Math.floor(Date.now() / 1000)) return null;
   let expected;
   try {

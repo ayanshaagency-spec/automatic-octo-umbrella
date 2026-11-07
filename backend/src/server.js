@@ -348,9 +348,35 @@ const server=http.createServer(async(req,res)=>{
   if(statusMatch&&req.method==='PATCH')return parseBody(req,async(err,data)=>{if(!isAuthorizedAdmin(req))return send(res,403,{error:'Admin authorization required'},req);if(err)return send(res,400,{error:'Invalid JSON'},req);try{const saved=await updateAppointmentStatus(Number(statusMatch[1]),data.status);if(saved)return send(res,200,saved,req);return send(res,503,{error:'DATABASE_URL not configured'},req);}catch(e){if(e.statusCode)return send(res,e.statusCode,{error:e.message},req);return send(res,503,{error:'Unable to update appointment status'},req);}});
   if(url.pathname==='/api/appointments'&&req.method==='POST')return parseBody(req,async(err,data)=>{const auth=requireAuth(req,res);if(!auth)return;if(err)return send(res,400,{error:'Invalid JSON'},req);if(!data.patientName||!data.phone||!data.doctorId||(!data.slotId&&!data.appointmentAt))return send(res,422,{error:'patientName, phone, doctorId and a published availability slot are required'},req);if(data.phone!==auth.sub)return send(res,403,{error:'Patient access denied'},req);try{const saved=await createAppointment(data);if(saved)return send(res,201,saved,req);}catch(e){if(e.statusCode)return send(res,e.statusCode,{error:e.message},req);return send(res,503,{error:'Unable to save appointment'},req);}return send(res,503,{error:'DATABASE_URL not configured'},req);});
   if(url.pathname==='/api/prescriptions'&&req.method==='GET'){const auth=requireAuth(req,res);if(!auth)return;const phone=url.searchParams.get('phone');if(!phone)return send(res,422,{error:'phone is required'},req);if(phone!==auth.sub)return send(res,403,{error:'Patient access denied'},req);try{const rows=await listPrescriptions(phone);if(rows===null)return send(res,503,{error:'DATABASE_URL not configured'},req);return send(res,200,rows,req);}catch(e){return send(res,503,{error:'Unable to load prescriptions'},req);}}
-  if(url.pathname==='/api/prescriptions'&&req.method==='POST')return parseBody(req,async(err,data)=>{if(err)return send(res,400,{error:'Invalid JSON'},req);const doctor=verifyRoleToken(getAuthToken(req),'doctor');if(doctor){data.doctorPhone=doctor.sub;}else{const auth=requireAuth(req,res);if(!auth)return;if(!data.phone||data.phone!==auth.sub)return send(res,403,{error:'Patient access denied'},req);}try{const saved=await createPrescription(data);if(saved)return send(res,201,saved,req);return send(res,503,{error:'DATABASE_URL not configured'},req);}catch(e){if(e.statusCode)return send(res,e.statusCode,{error:e.message},req);return send(res,503,{error:'Unable to save prescription'},req);}});
+  if(url.pathname==='/api/prescriptions'&&req.method==='POST')return parseBody(req,async(err,data)=>{
+    if(err)return send(res,400,{error:'Invalid JSON'},req);
+    const doctor=verifyRoleToken(getAuthToken(req),'doctor');
+    if(!doctor)return send(res,401,{error:'Doctor authentication required'},req);
+    data.doctorPhone=doctor.sub;
+    try{
+      const saved=await createPrescription(data);
+      if(saved)return send(res,201,saved,req);
+      return send(res,503,{error:'DATABASE_URL not configured'},req);
+    }catch(e){
+      if(e.statusCode)return send(res,e.statusCode,{error:e.message},req);
+      return send(res,503,{error:'Unable to save prescription'},req);
+    }
+  });
   if(url.pathname==='/api/health-records'&&req.method==='GET'){const auth=requireAuth(req,res);if(!auth)return;const phone=url.searchParams.get('phone');if(!phone)return send(res,422,{error:'phone is required'},req);if(phone!==auth.sub)return send(res,403,{error:'Patient access denied'},req);try{const rows=await listHealthRecords(phone);if(rows===null)return send(res,503,{error:'DATABASE_URL not configured'},req);return send(res,200,rows,req);}catch(e){return send(res,503,{error:'Unable to load health records'},req);}}
-  if(url.pathname==='/api/health-records'&&req.method==='POST')return parseBody(req,async(err,data)=>{if(err)return send(res,400,{error:'Invalid JSON'},req);const doctor=verifyRoleToken(getAuthToken(req),'doctor');if(doctor){data.doctorPhone=doctor.sub;}else{const auth=requireAuth(req,res);if(!auth)return;if(!data.phone||data.phone!==auth.sub)return send(res,403,{error:'Patient access denied'},req);}try{const saved=await createHealthRecord(data);if(saved)return send(res,201,saved,req);return send(res,503,{error:'DATABASE_URL not configured'},req);}catch(e){if(e.statusCode)return send(res,e.statusCode,{error:e.message},req);return send(res,503,{error:'Unable to save health record'},req);}});
+  if(url.pathname==='/api/health-records'&&req.method==='POST')return parseBody(req,async(err,data)=>{
+    if(err)return send(res,400,{error:'Invalid JSON'},req);
+    const doctor=verifyRoleToken(getAuthToken(req),'doctor');
+    if(!doctor)return send(res,401,{error:'Doctor authentication required'},req);
+    data.doctorPhone=doctor.sub;
+    try{
+      const saved=await createHealthRecord(data);
+      if(saved)return send(res,201,saved,req);
+      return send(res,503,{error:'DATABASE_URL not configured'},req);
+    }catch(e){
+      if(e.statusCode)return send(res,e.statusCode,{error:e.message},req);
+      return send(res,503,{error:'Unable to save health record'},req);
+    }
+  });
   if(url.pathname==='/api/admin/lab-orders'&&req.method==='GET'){
     if(!requireAdmin(req,res))return;
     try{

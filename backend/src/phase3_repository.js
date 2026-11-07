@@ -45,8 +45,8 @@ async function createPrescription(data) {
          FROM appointments a
          JOIN patients pt ON pt.id = a.patient_id
          JOIN doctors d ON d.id = a.doctor_id
-        WHERE a.id = $1 AND pt.phone = $2 AND d.phone = $3`,
-      [data.appointmentId, data.phone, data.doctorPhone]
+        WHERE a.id = $1 AND d.phone = $2`,
+      [data.appointmentId, data.doctorPhone]
     );
     if (appointment.rowCount === 0) {
       const error = new Error('Appointment not found');
