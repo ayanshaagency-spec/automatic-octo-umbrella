@@ -3,13 +3,17 @@ const assert = require('node:assert/strict');
 const {
   PaymentGatewayError,
   getConfiguredProvider,
-  createPaymentGatewayOrder
+  getPaymentProviderStatus,
+  createPaymentGatewayOrder,
+  verifyRazorpayCheckoutSignature,
+  verifyRazorpayCheckout
 } = require('./payment_gateway');
 
 const originalEnv = {
   PAYMENT_PROVIDER: process.env.PAYMENT_PROVIDER,
   RAZORPAY_KEY_ID: process.env.RAZORPAY_KEY_ID,
-  RAZORPAY_KEY_SECRET: process.env.RAZORPAY_KEY_SECRET
+  RAZORPAY_KEY_SECRET: process.env.RAZORPAY_KEY_SECRET,
+  PAYMENT_WEBHOOK_SECRET: process.env.PAYMENT_WEBHOOK_SECRET
 };
 const originalFetch = global.fetch;
 
@@ -60,7 +64,7 @@ test('creates a Razorpay order with rupee-to-paise conversion', async () => {
     request = { url, options };
     return {
       ok: true,
-      json: async () => ({ id: 'order_test_123', amount: 12550, currency: 'INR' })
+      json: async () => ({ id: 'order_test123', amount: 12550, currency: 'INR' })
     };
   };
 
@@ -72,7 +76,8 @@ test('creates a Razorpay order with rupee-to-paise conversion', async () => {
 
   assert.deepEqual(result, {
     provider: 'razorpay',
-    orderId: 'order_test_123',
+    keyId: 'rzp_test_key',
+    orderId: 'order_test123',
     amount: 12550,
     currency: 'INR'
   });
@@ -111,3 +116,103 @@ test('reports the configured provider without exposing credentials', () => {
 });
 
 console.log('Phase 5 payment gateway tests loaded');
+
+
+test('payment readiness reports provider, credentials and webhook without exposing secrets', () => {
+  delete process.env.PAYMENT_PROVIDER;
+  delete process.env.RAZORPAY_KEY_ID;
+  delete process.env.RAZORPAY_KEY_SECRET;
+  delete process.env.PAYMENT_WEBHOOK_SECRET;
+  assert.deepEqual(getPaymentProviderStatus(), {
+    provider: null,
+    providerSupported: false,
+    credentialsConfigured: false,
+    webhookConfigured: false,
+    configured: false
+  });
+
+  process.env.PAYMENT_PROVIDER = 'razorpay';
+  process.env.RAZORPAY_KEY_ID = 'rzp_test_key_id';
+  process.env.RAZORPAY_KEY_SECRET = 'test-only-razorpay-secret';
+  process.env.PAYMENT_WEBHOOK_SECRET = 'test-only-webhook-secret';
+  const ready = getPaymentProviderStatus();
+  assert.deepEqual(ready, {
+    provider: 'razorpay',
+    providerSupported: true,
+    credentialsConfigured: true,
+    webhookConfigured: true,
+    configured: true
+  });
+  const serialized = JSON.stringify(ready);
+  assert.equal(serialized.includes('test-only-razorpay-secret'), false);
+  assert.equal(serialized.includes('test-only-webhook-secret'), false);
+});
+
+
+test('verifies Razorpay Checkout signature and confirms captured status with the API', async () => {
+  const crypto = require('crypto');
+  process.env.RAZORPAY_KEY_ID = 'rzp_test_key';
+  process.env.RAZORPAY_KEY_SECRET = 'checkout_test_secret';
+  const orderId = 'order_test123', paymentId = 'pay_test123';
+  const signature = crypto.createHmac('sha256', 'checkout_test_secret').update(orderId + '|' + paymentId).digest('hex');
+  let request;
+  const verified = await verifyRazorpayCheckout({
+    orderId, paymentId, signature, expectedAmount: 125.5, expectedCurrency: 'INR',
+    fetchImpl: async (url, options) => {
+      request = { url, options };
+      return { ok: true, json: async () => ({
+        id: paymentId, order_id: orderId, amount: 12550, currency: 'INR', status: 'captured', captured: true
+      }) };
+    }
+  });
+  assert.deepEqual(verified, { status: 'paid', providerPaymentId: paymentId });
+  assert.equal(request.url, 'https://api.razorpay.com/v1/payments/' + paymentId);
+  assert.equal(request.options.method, 'GET');
+  assert.match(request.options.headers.Authorization, /^Basic /);
+});
+
+test('rejects invalid Checkout signature before contacting Razorpay', async () => {
+  process.env.RAZORPAY_KEY_ID = 'rzp_test_key';
+  process.env.RAZORPAY_KEY_SECRET = 'checkout_test_secret';
+  let called = false;
+  await assert.rejects(
+    () => verifyRazorpayCheckout({
+      orderId: 'order_test123', paymentId: 'pay_test123', signature: '0'.repeat(64),
+      expectedAmount: 125.5, fetchImpl: async () => { called = true; }
+    }),
+    error => error.statusCode === 401
+  );
+  assert.equal(called, false);
+});
+
+test('rejects amount, order and currency mismatches in the payment lookup', async () => {
+  const crypto = require('crypto');
+  process.env.RAZORPAY_KEY_ID = 'rzp_test_key';
+  process.env.RAZORPAY_KEY_SECRET = 'checkout_test_secret';
+  const orderId = 'order_test123', paymentId = 'pay_test123';
+  const signature = crypto.createHmac('sha256', 'checkout_test_secret').update(orderId + '|' + paymentId).digest('hex');
+  await assert.rejects(
+    () => verifyRazorpayCheckout({
+      orderId, paymentId, signature, expectedAmount: 125.5, expectedCurrency: 'INR',
+      fetchImpl: async () => ({ ok: true, json: async () => ({
+        id: paymentId, order_id: orderId, amount: 10000, currency: 'INR', status: 'captured', captured: true
+      }) })
+    }),
+    error => error.statusCode === 422
+  );
+});
+
+test('an authorised but uncaptured payment is not treated as paid', async () => {
+  const crypto = require('crypto');
+  process.env.RAZORPAY_KEY_ID = 'rzp_test_key';
+  process.env.RAZORPAY_KEY_SECRET = 'checkout_test_secret';
+  const orderId = 'order_test123', paymentId = 'pay_test123';
+  const signature = crypto.createHmac('sha256', 'checkout_test_secret').update(orderId + '|' + paymentId).digest('hex');
+  const verified = await verifyRazorpayCheckout({
+    orderId, paymentId, signature, expectedAmount: 125.5, expectedCurrency: 'INR',
+    fetchImpl: async () => ({ ok: true, json: async () => ({
+      id: paymentId, order_id: orderId, amount: 12550, currency: 'INR', status: 'authorized', captured: false
+    }) })
+  });
+  assert.deepEqual(verified, { status: 'pending', providerPaymentId: paymentId });
+});

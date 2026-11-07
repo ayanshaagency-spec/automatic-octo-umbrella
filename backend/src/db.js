@@ -1,13 +1,33 @@
-const { Client } = require('pg');
+const { Pool } = require('pg');
 
-let client;
+let pool;
+
 async function getDb() {
-  if (!process.env.DATABASE_URL) return null;
-  if (!client) {
-    client = new Client({ connectionString: process.env.DATABASE_URL, ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false });
-    await client.connect();
+  const connectionString = (process.env.DATABASE_URL || '').trim();
+  if (!connectionString) return null;
+
+  if (!pool) {
+    pool = new Pool({
+      connectionString,
+      ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false,
+      max: 5,
+      idleTimeoutMillis: 30000,
+      connectionTimeoutMillis: 5000
+    });
+    // Keep the pool resilient without logging connection details or credentials.
+    pool.on('error', () => {
+      console.error('Unexpected primary database pool error');
+    });
   }
-  return client;
+
+  return pool;
 }
 
-module.exports = { getDb };
+async function closeDb() {
+  if (!pool) return;
+  const current = pool;
+  pool = undefined;
+  await current.end();
+}
+
+module.exports = { getDb, closeDb };

@@ -4,9 +4,9 @@ const ALLOWED_TRANSITIONS = {
   created: ['pending', 'cancelled'],
   pending: ['paid', 'failed', 'cancelled'],
   paid: ['refunded'],
-  failed: ['pending', 'cancelled'],
+  failed: ['pending', 'paid', 'cancelled'],
   refunded: [],
-  cancelled: []
+  cancelled: ['paid']
 };
 
 function validatePaymentInput(data) {
@@ -30,4 +30,20 @@ function validateStatusTransition(currentStatus, nextStatus) {
   return null;
 }
 
-module.exports = { ALLOWED_PAYMENT_STATUSES, validatePaymentInput, validateStatusTransition };
+function getAllowedCurrentStatuses(nextStatus) {
+  if (!ALLOWED_PAYMENT_STATUSES.includes(nextStatus)) return [];
+  return [
+    nextStatus,
+    ...Object.entries(ALLOWED_TRANSITIONS)
+      .filter(([, allowedNext]) => allowedNext.includes(nextStatus))
+      .map(([current]) => current)
+  ];
+}
+
+module.exports = {
+  ALLOWED_PAYMENT_STATUSES,
+  ALLOWED_TRANSITIONS,
+  validatePaymentInput,
+  validateStatusTransition,
+  getAllowedCurrentStatuses
+};

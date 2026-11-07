@@ -2,15 +2,15 @@ const http = require('http');
 const fs = require('fs');
 const path = require('path');
 const PORT = process.env.PORT || 3000;
-const { issueOtp, verifyOtp, createToken, verifyToken, AuthError } = require('./auth');
+const { issueOtp, verifyOtp, createToken, verifyToken, getOtpProviderStatus, AuthError } = require('./auth');
 const { getDb } = require('./db');
 const { listDoctors, listAdminDoctors, createDoctor, listAppointments, updateAppointmentStatus, getDoctorByPhone, listDoctorAppointments, updateDoctorAppointmentStatus } = require('./repository');
 const { listFamilyMembers, createFamilyMember, revokeFamilyMember, listFamilyConsentRequests, verifyAdultFamilyMemberConsent, createDoctorAvailabilitySlot, listDoctorAvailabilitySlots, listPublicDoctorAvailability, cancelDoctorAvailabilitySlot, createAppointment } = require('./family_availability_repository');
 const { listPrescriptions, createPrescription, listHealthRecords, createHealthRecord } = require('./phase3_repository');
-const { listLabOrders, createLabOrder, updateLabOrderStatus } = require('./phase4_repository');
-const { listPayments, getPaymentById, setProviderOrderId, createPayment, updatePaymentStatus } = require('./phase5_payment_repository');
-const { createPaymentGatewayOrder } = require('./payment_gateway');
-const { getWebhookSecret, verifyWebhookSignature, parseWebhookEvent } = require('./payment_webhook');
+const { listLabOrders, listAdminLabOrders, createLabOrder, updateLabOrderAmount, updateLabOrderStatus } = require('./phase4_repository');
+const { listPayments, getPaymentById, findPaymentByProviderOrderId, setProviderOrderId, createPayment, createPaymentForLabOrder, updatePaymentStatus } = require('./phase5_payment_repository');
+const { createPaymentGatewayOrder, getPaymentProviderStatus, verifyRazorpayCheckout } = require('./payment_gateway');
+const { getWebhookSecret, verifyWebhookSignature, parseWebhookEvent, normalizeRazorpayPaymentEvent } = require('./payment_webhook');
 const { isAuthorizedPaymentStatusUpdate } = require('./payment_status_authorization');
 const isAuthorizedAdmin = req => isAuthorizedPaymentStatusUpdate(req.headers, process.env.ADMIN_API_TOKEN || process.env.PAYMENT_STATUS_ADMIN_TOKEN);
 const { validateCoordinates, emergencyResponse } = require('./phase6_emergency');
@@ -20,20 +20,54 @@ const { getAiStatus, generateSymptomGuidance } = require('./ai');
 const { verifyAdminCredentials, createAdminToken, createDoctorToken, verifyRoleToken } = require('./roles');
 const { handlePharmacyRoute } = require('./pharmacy_routes');
 const { handleInsuranceRoute } = require('./insurance_routes');
+const { getIntegrationReadiness } = require('./integration_readiness');
+const { consumeAuthRateLimit, getTrustedClientIp } = require('./auth_rate_limit');
 
 const configuredOrigins = (process.env.CORS_ALLOWED_ORIGINS || '').split(',').map(v => v.trim()).filter(Boolean);
 const isAllowedOrigin = origin => !origin || configuredOrigins.includes(origin) || (['development','test'].includes(process.env.NODE_ENV) && (configuredOrigins.includes('*') || /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin)));
-const send=(res,code,data,req)=>{const origin=req?.headers?.origin;if(isAllowedOrigin(origin)){res.setHeader('Access-Control-Allow-Origin',origin||'*');if(origin)res.setHeader('Vary','Origin');}res.setHeader('Access-Control-Allow-Methods','GET,POST,PATCH,OPTIONS');res.setHeader('Access-Control-Allow-Headers','Content-Type,Authorization,X-Payment-Signature');res.writeHead(code,{'Content-Type':'application/json'});res.end(JSON.stringify(data));};
+const send=(res,code,data,req)=>{const origin=req?.headers?.origin;if(isAllowedOrigin(origin)){res.setHeader('Access-Control-Allow-Origin',origin||'*');if(origin)res.setHeader('Vary','Origin');}res.setHeader('Access-Control-Allow-Methods','GET,POST,PATCH,OPTIONS');res.setHeader('Access-Control-Allow-Headers','Content-Type,Authorization,X-Razorpay-Signature');res.writeHead(code,{'Content-Type':'application/json'});res.end(JSON.stringify(data));};
 const parseBody=(req,done)=>{let body='';req.on('data',c=>body+=c);req.on('end',()=>{try{done(null,JSON.parse(body||'{}'));}catch(e){done(e);}});};
-const parseRawBody=(req,done)=>{let body='';req.setEncoding('utf8');req.on('data',c=>body+=c);req.on('end',()=>done(null,body));req.on('error',done);};
+const parseRawBody=(req,done)=>{const chunks=[];req.on('data',c=>chunks.push(Buffer.isBuffer(c)?c:Buffer.from(c)));req.on('end',()=>done(null,Buffer.concat(chunks)));req.on('error',done);};
 const getAuthToken=(req)=>{const header=req.headers.authorization||'';return header.startsWith('Bearer ')?header.slice(7):null;};
 const requireAdmin=(req,res)=>{const payload=verifyRoleToken(getAuthToken(req),'admin');if(!payload){send(res,401,{error:'Admin authentication required'},req);return null;}return payload;};
 const requireAuth=(req,res)=>{const payload=verifyToken(getAuthToken(req));if(!payload){send(res,401,{error:'Authentication required'},req);return null;}return payload;};
+const AUTH_RATE_LIMIT_WINDOW_MS = 15 * 60 * 1000;
+async function enforceAuthRateLimit(req,res,namespace,identifier,limit){
+  try{
+    const outcome=await consumeAuthRateLimit({
+      namespace,
+      identifier,
+      limit,
+      windowMs:AUTH_RATE_LIMIT_WINDOW_MS
+    });
+    if(!outcome.allowed){
+      send(res,429,{
+        error:'Too many authentication attempts. Please try again later.',
+        retryAfterSeconds:outcome.retryAfterSeconds
+      },req);
+      return false;
+    }
+    return true;
+  }catch(_error){
+    // Fail closed in Staging/Production if the shared PostgreSQL limiter is unavailable.
+    send(res,503,{error:'Authentication protection is temporarily unavailable'},req);
+    return false;
+  }
+}
 const server=http.createServer(async(req,res)=>{
   if(req.method==='OPTIONS') return send(res,204,{},req);
   const url = new URL(req.url, `http://${req.headers.host || 'localhost'}`);
   const insuranceHandled = await handleInsuranceRoute(req, res, url, { send: (status, body) => send(res, status, body, req) });
   if (insuranceHandled || res.writableEnded) return;
+  // Serve the shared role portal from a fixed file path; never accept a user-controlled file path.
+  if(req.method==='GET' && (url.pathname==='/portal' || url.pathname==='/portal/')){
+    const portalFile=path.resolve(__dirname,'../../web/portal.html');
+    if(fs.existsSync(portalFile) && fs.statSync(portalFile).isFile()){
+      res.writeHead(200,{'Content-Type':'text/html; charset=utf-8','X-Content-Type-Options':'nosniff','Cache-Control':'no-store'});
+      return fs.createReadStream(portalFile).pipe(res);
+    }
+    return send(res,503,{error:'Role portal unavailable'},req);
+  }
   // Serve only the existing, fixed admin entry point. No user-controlled file path is accepted.
   if(req.method==='GET' && url.pathname==='/admin'){
     const adminFile=path.resolve(__dirname,'../../admin-panel/index.html');
@@ -207,9 +241,20 @@ const server=http.createServer(async(req,res)=>{
 
   if(url.pathname==='/api/doctors'&&req.method==='GET'){try{const rows=await listDoctors();if(rows===null)return send(res,503,{error:'DATABASE_URL not configured'},req);return send(res,200,rows,req);}catch(e){return send(res,503,{error:'Unable to load doctors'},req);}}
   if(url.pathname==='/api/db/health'&&req.method==='GET'){try{const db=await getDb();if(!db)return send(res,503,{ok:false,error:'DATABASE_URL not configured'},req);await db.query('SELECT 1');return send(res,200,{ok:true,database:'connected'},req);}catch(e){return send(res,503,{ok:false,error:'Database unavailable'},req);}}
-  if(url.pathname==='/api/auth/request-otp'&&req.method==='POST')return parseBody(req,async(err,data)=>{if(err||!data.phone)return send(res,400,{error:'phone is required'},req);try{const result=await issueOtp(data.phone);return send(res,200,{message:'OTP sent',...result},req);}catch(e){if(e instanceof AuthError)return send(res,e.statusCode,{error:e.message},req);return send(res,502,{error:'Unable to send OTP'},req);}});
+  if(url.pathname==='/api/auth/request-otp'&&req.method==='POST')return parseBody(req,async(err,data)=>{
+    if(!await enforceAuthRateLimit(req,res,'otp:ip',getTrustedClientIp(req),10))return;
+    if(err||!data?.phone)return send(res,400,{error:'phone is required'},req);
+    try{
+      const result=await issueOtp(data.phone);
+      return send(res,200,{message:'OTP sent',...result},req);
+    }catch(e){
+      if(e instanceof AuthError)return send(res,e.statusCode,{error:e.message},req);
+      return send(res,502,{error:'Unable to send OTP'},req);
+    }
+  });
   if(url.pathname==='/api/auth/verify-otp'&&req.method==='POST')return parseBody(req,async(err,data)=>{
-    if(err||!data.phone||!data.otp)return send(res,400,{error:'phone and otp are required'},req);
+    if(!await enforceAuthRateLimit(req,res,'otp-verify:ip',getTrustedClientIp(req),30))return;
+    if(err||!data?.phone||!data?.otp)return send(res,400,{error:'phone and otp are required'},req);
     try{
       if(!await verifyOtp(data.phone,String(data.otp)))return send(res,401,{error:'Invalid or expired OTP'},req);
       const db=await getDb();
@@ -227,9 +272,23 @@ const server=http.createServer(async(req,res)=>{
       return send(res,503,{error:'Unable to create secure session'},req);
     }
   });
-  if(url.pathname==='/api/doctor/auth/request-otp'&&req.method==='POST')return parseBody(req,async(err,data)=>{if(err||!data.phone)return send(res,400,{error:'phone is required'},req);try{const doctor=await getDoctorByPhone(data.phone);if(doctor===null)return send(res,503,{error:'DATABASE_URL not configured'},req);if(!doctor)return send(res,404,{error:'Doctor identity is not provisioned'},req);const result=await issueOtp(data.phone);return send(res,200,{message:'OTP sent',...result,doctor:{id:doctor.id,name:doctor.name,specialty:doctor.specialty}},req);}catch(e){if(e instanceof AuthError)return send(res,e.statusCode,{error:e.message},req);return send(res,502,{error:'Unable to send doctor OTP'},req);}});
+  if(url.pathname==='/api/doctor/auth/request-otp'&&req.method==='POST')return parseBody(req,async(err,data)=>{
+    if(!await enforceAuthRateLimit(req,res,'otp:ip',getTrustedClientIp(req),10))return;
+    if(err||!data?.phone)return send(res,400,{error:'phone is required'},req);
+    try{
+      const doctor=await getDoctorByPhone(data.phone);
+      if(doctor===null)return send(res,503,{error:'DATABASE_URL not configured'},req);
+      if(!doctor)return send(res,404,{error:'Doctor identity is not provisioned'},req);
+      const result=await issueOtp(data.phone);
+      return send(res,200,{message:'OTP sent',...result,doctor:{id:doctor.id,name:doctor.name,specialty:doctor.specialty}},req);
+    }catch(e){
+      if(e instanceof AuthError)return send(res,e.statusCode,{error:e.message},req);
+      return send(res,502,{error:'Unable to send doctor OTP'},req);
+    }
+  });
   if(url.pathname==='/api/doctor/auth/verify-otp'&&req.method==='POST')return parseBody(req,async(err,data)=>{
-    if(err||!data.phone||!data.otp)return send(res,400,{error:'phone and otp are required'},req);
+    if(!await enforceAuthRateLimit(req,res,'otp-verify:ip',getTrustedClientIp(req),30))return;
+    if(err||!data?.phone||!data?.otp)return send(res,400,{error:'phone and otp are required'},req);
     try{
       if(!await verifyOtp(data.phone,String(data.otp)))return send(res,401,{error:'Invalid or expired OTP'},req);
       const doctor=await getDoctorByPhone(data.phone);
@@ -243,6 +302,18 @@ const server=http.createServer(async(req,res)=>{
   if(url.pathname==='/api/doctor/appointments'&&req.method==='GET'){const doctor=verifyRoleToken(getAuthToken(req),'doctor');if(!doctor)return send(res,401,{error:'Doctor authentication required'},req);try{const rows=await listDoctorAppointments(doctor.sub);if(rows===null)return send(res,503,{error:'DATABASE_URL not configured'},req);return send(res,200,rows,req);}catch(e){return send(res,503,{error:'Unable to load doctor appointments'},req);}}
   const doctorStatusMatch=url.pathname.match(/^\/api\/doctor\/appointments\/(\d+)\/status$/);
   if(doctorStatusMatch&&req.method==='PATCH')return parseBody(req,async(err,data)=>{const doctor=verifyRoleToken(getAuthToken(req),'doctor');if(!doctor)return send(res,401,{error:'Doctor authentication required'},req);if(err)return send(res,400,{error:'Invalid JSON'},req);try{const saved=await updateDoctorAppointmentStatus(Number(doctorStatusMatch[1]),doctor.sub,data.status);return send(res,200,saved,req);}catch(e){if(e.statusCode)return send(res,e.statusCode,{error:e.message},req);return send(res,503,{error:'Unable to update doctor appointment'},req);}});
+  if(url.pathname==='/api/admin/payment/status'&&req.method==='GET'){
+    if(!requireAdmin(req,res))return;
+    return send(res,200,getPaymentProviderStatus(),req);
+  }
+  if(url.pathname==='/api/admin/otp/status'&&req.method==='GET'){
+    if(!requireAdmin(req,res))return;
+    return send(res,200,getOtpProviderStatus(),req);
+  }
+  if(url.pathname==='/api/admin/integrations/status'&&req.method==='GET'){
+    if(!requireAdmin(req,res))return;
+    return send(res,200,getIntegrationReadiness(),req);
+  }
   if(url.pathname==='/api/admin/doctors'&&req.method==='GET'){
     if(!requireAdmin(req,res))return;
     try{const rows=await listAdminDoctors();if(rows===null)return send(res,503,{error:'DATABASE_URL not configured'},req);return send(res,200,rows,req);}
@@ -256,7 +327,19 @@ const server=http.createServer(async(req,res)=>{
       catch(e){if(e.statusCode)return send(res,e.statusCode,{error:e.message},req);return send(res,503,{error:'Unable to register doctor'},req);}
     });
   }
-  if(url.pathname==='/api/admin/login'&&req.method==='POST')return parseBody(req,(err,data)=>{if(err)return send(res,400,{error:'Invalid JSON'},req);try{if(!verifyAdminCredentials(data.email,data.password))return send(res,401,{error:'Invalid admin credentials'},req);return send(res,200,{token:createAdminToken(data.email),user:{email:String(data.email).trim().toLowerCase(),role:'admin'}},req);}catch(e){if(e instanceof AuthError)return send(res,e.statusCode,{error:e.message},req);return send(res,503,{error:'Unable to create admin session'},req);}});
+  if(url.pathname==='/api/admin/login'&&req.method==='POST')return parseBody(req,async(err,data)=>{
+    if(!await enforceAuthRateLimit(req,res,'admin:ip',getTrustedClientIp(req),30))return;
+    const email=typeof data?.email==='string'?data.email.trim().toLowerCase().slice(0,254):'';
+    if(!await enforceAuthRateLimit(req,res,'admin:email',email||'(missing)',8))return;
+    if(err)return send(res,400,{error:'Invalid JSON'},req);
+    try{
+      if(!verifyAdminCredentials(email,data?.password))return send(res,401,{error:'Invalid admin credentials'},req);
+      return send(res,200,{token:createAdminToken(email),user:{email,role:'admin'}},req);
+    }catch(e){
+      if(e instanceof AuthError)return send(res,e.statusCode,{error:e.message},req);
+      return send(res,503,{error:'Unable to create admin session'},req);
+    }
+  });
   if(url.pathname==='/api/admin/appointments'&&req.method==='GET'){if(!requireAdmin(req,res))return;try{const rows=await listAppointments();if(rows===null)return send(res,503,{error:'DATABASE_URL not configured'},req);return send(res,200,rows,req);}catch(e){return send(res,503,{error:'Unable to load admin appointments'},req);}}
   if(url.pathname==='/api/emergency'&&req.method==='GET')return send(res,200,emergencyResponse(),req);
   if(url.pathname==='/api/hospitals/nearby'&&req.method==='GET'){try{const {latitude,longitude}=validateCoordinates(url.searchParams.get('latitude'),url.searchParams.get('longitude'));const rows=await listNearbyHospitals(latitude,longitude,url.searchParams.get('radiusKm')||25,url.searchParams.get('limit')||20);if(rows===null)return send(res,503,{error:'Hospital directory database is not configured'},req);return send(res,200,{latitude,longitude,radiusKm:Number(url.searchParams.get('radiusKm')||25),hospitals:rows},req);}catch(e){if(e.statusCode)return send(res,e.statusCode,{error:e.message},req);return send(res,503,{error:'Unable to load nearby hospitals'},req);}}
@@ -265,18 +348,143 @@ const server=http.createServer(async(req,res)=>{
   if(statusMatch&&req.method==='PATCH')return parseBody(req,async(err,data)=>{if(!isAuthorizedAdmin(req))return send(res,403,{error:'Admin authorization required'},req);if(err)return send(res,400,{error:'Invalid JSON'},req);try{const saved=await updateAppointmentStatus(Number(statusMatch[1]),data.status);if(saved)return send(res,200,saved,req);return send(res,503,{error:'DATABASE_URL not configured'},req);}catch(e){if(e.statusCode)return send(res,e.statusCode,{error:e.message},req);return send(res,503,{error:'Unable to update appointment status'},req);}});
   if(url.pathname==='/api/appointments'&&req.method==='POST')return parseBody(req,async(err,data)=>{const auth=requireAuth(req,res);if(!auth)return;if(err)return send(res,400,{error:'Invalid JSON'},req);if(!data.patientName||!data.phone||!data.doctorId||(!data.slotId&&!data.appointmentAt))return send(res,422,{error:'patientName, phone, doctorId and a published availability slot are required'},req);if(data.phone!==auth.sub)return send(res,403,{error:'Patient access denied'},req);try{const saved=await createAppointment(data);if(saved)return send(res,201,saved,req);}catch(e){if(e.statusCode)return send(res,e.statusCode,{error:e.message},req);return send(res,503,{error:'Unable to save appointment'},req);}return send(res,503,{error:'DATABASE_URL not configured'},req);});
   if(url.pathname==='/api/prescriptions'&&req.method==='GET'){const auth=requireAuth(req,res);if(!auth)return;const phone=url.searchParams.get('phone');if(!phone)return send(res,422,{error:'phone is required'},req);if(phone!==auth.sub)return send(res,403,{error:'Patient access denied'},req);try{const rows=await listPrescriptions(phone);if(rows===null)return send(res,503,{error:'DATABASE_URL not configured'},req);return send(res,200,rows,req);}catch(e){return send(res,503,{error:'Unable to load prescriptions'},req);}}
-  if(url.pathname==='/api/prescriptions'&&req.method==='POST')return parseBody(req,async(err,data)=>{if(err)return send(res,400,{error:'Invalid JSON'},req);const doctor=verifyRoleToken(getAuthToken(req),'doctor');if(doctor){data.doctorPhone=doctor.sub;}else{const auth=requireAuth(req,res);if(!auth)return;if(!data.phone||data.phone!==auth.sub)return send(res,403,{error:'Patient access denied'},req);}try{const saved=await createPrescription(data);if(saved)return send(res,201,saved,req);return send(res,503,{error:'DATABASE_URL not configured'},req);}catch(e){if(e.statusCode)return send(res,e.statusCode,{error:e.message},req);return send(res,503,{error:'Unable to save prescription'},req);}});
+  if(url.pathname==='/api/prescriptions'&&req.method==='POST')return parseBody(req,async(err,data)=>{
+    if(err)return send(res,400,{error:'Invalid JSON'},req);
+    const doctor=verifyRoleToken(getAuthToken(req),'doctor');
+    if(!doctor)return send(res,401,{error:'Doctor authentication required'},req);
+    data.doctorPhone=doctor.sub;
+    try{
+      const saved=await createPrescription(data);
+      if(saved)return send(res,201,saved,req);
+      return send(res,503,{error:'DATABASE_URL not configured'},req);
+    }catch(e){
+      if(e.statusCode)return send(res,e.statusCode,{error:e.message},req);
+      return send(res,503,{error:'Unable to save prescription'},req);
+    }
+  });
   if(url.pathname==='/api/health-records'&&req.method==='GET'){const auth=requireAuth(req,res);if(!auth)return;const phone=url.searchParams.get('phone');if(!phone)return send(res,422,{error:'phone is required'},req);if(phone!==auth.sub)return send(res,403,{error:'Patient access denied'},req);try{const rows=await listHealthRecords(phone);if(rows===null)return send(res,503,{error:'DATABASE_URL not configured'},req);return send(res,200,rows,req);}catch(e){return send(res,503,{error:'Unable to load health records'},req);}}
-  if(url.pathname==='/api/health-records'&&req.method==='POST')return parseBody(req,async(err,data)=>{if(err)return send(res,400,{error:'Invalid JSON'},req);const doctor=verifyRoleToken(getAuthToken(req),'doctor');if(doctor){data.doctorPhone=doctor.sub;}else{const auth=requireAuth(req,res);if(!auth)return;if(!data.phone||data.phone!==auth.sub)return send(res,403,{error:'Patient access denied'},req);}try{const saved=await createHealthRecord(data);if(saved)return send(res,201,saved,req);return send(res,503,{error:'DATABASE_URL not configured'},req);}catch(e){if(e.statusCode)return send(res,e.statusCode,{error:e.message},req);return send(res,503,{error:'Unable to save health record'},req);}});
+  if(url.pathname==='/api/health-records'&&req.method==='POST')return parseBody(req,async(err,data)=>{
+    if(err)return send(res,400,{error:'Invalid JSON'},req);
+    const doctor=verifyRoleToken(getAuthToken(req),'doctor');
+    if(!doctor)return send(res,401,{error:'Doctor authentication required'},req);
+    data.doctorPhone=doctor.sub;
+    try{
+      const saved=await createHealthRecord(data);
+      if(saved)return send(res,201,saved,req);
+      return send(res,503,{error:'DATABASE_URL not configured'},req);
+    }catch(e){
+      if(e.statusCode)return send(res,e.statusCode,{error:e.message},req);
+      return send(res,503,{error:'Unable to save health record'},req);
+    }
+  });
+  if(url.pathname==='/api/admin/lab-orders'&&req.method==='GET'){
+    if(!requireAdmin(req,res))return;
+    try{
+      const rows=await listAdminLabOrders();
+      if(rows===null)return send(res,503,{error:'DATABASE_URL not configured'},req);
+      return send(res,200,rows,req);
+    }catch(e){
+      return send(res,503,{error:'Unable to load admin lab orders'},req);
+    }
+  }
+  const labPriceMatch=url.pathname.match(/^\/api\/admin\/lab-orders\/(\d+)\/amount$/);
+  if(labPriceMatch&&req.method==='PATCH')return parseBody(req,async(err,data)=>{
+    if(!requireAdmin(req,res))return;
+    if(err)return send(res,400,{error:'Invalid JSON'},req);
+    try{
+      const saved=await updateLabOrderAmount(Number(labPriceMatch[1]),data.amount);
+      if(saved)return send(res,200,saved,req);
+      return send(res,503,{error:'DATABASE_URL not configured'},req);
+    }catch(e){
+      if(e.statusCode)return send(res,e.statusCode,{error:e.message},req);
+      return send(res,503,{error:'Unable to update lab price'},req);
+    }
+  });
   if(url.pathname==='/api/lab-orders'&&req.method==='GET'){const auth=requireAuth(req,res);if(!auth)return;const phone=url.searchParams.get('phone');if(!phone)return send(res,422,{error:'phone is required'},req);if(phone!==auth.sub)return send(res,403,{error:'Patient access denied'},req);try{const rows=await listLabOrders(phone);if(rows===null)return send(res,503,{error:'DATABASE_URL not configured'},req);return send(res,200,rows,req);}catch(e){return send(res,503,{error:'Unable to load lab orders'},req);}}
   if(url.pathname==='/api/lab-orders'&&req.method==='POST')return parseBody(req,async(err,data)=>{const auth=requireAuth(req,res);if(!auth)return;if(err)return send(res,400,{error:'Invalid JSON'},req);if(data.phone!==auth.sub)return send(res,403,{error:'Patient access denied'},req);try{const saved=await createLabOrder(data);if(saved)return send(res,201,saved,req);return send(res,503,{error:'DATABASE_URL not configured'},req);}catch(e){if(e.statusCode)return send(res,e.statusCode,{error:e.message},req);return send(res,503,{error:'Unable to save lab order'},req);}});
+  const labPaymentMatch=url.pathname.match(/^\/api\/lab-orders\/(\d+)\/payment$/);
+  if(labPaymentMatch&&req.method==='POST')return parseBody(req,async(err,_data)=>{
+    const auth=requireAuth(req,res);
+    if(!auth)return;
+    if(err)return send(res,400,{error:'Invalid JSON'},req);
+    try{
+      const saved=await createPaymentForLabOrder(auth.sub,Number(labPaymentMatch[1]));
+      if(saved)return send(res,200,saved,req);
+      return send(res,503,{error:'DATABASE_URL not configured'},req);
+    }catch(e){
+      if(e.statusCode)return send(res,e.statusCode,{error:e.message},req);
+      return send(res,503,{error:'Unable to create lab payment'},req);
+    }
+  });
   const labStatusMatch=url.pathname.match(/^\/api\/lab-orders\/(\d+)\/status$/);
   if(labStatusMatch&&req.method==='PATCH')return parseBody(req,async(err,data)=>{if(!isAuthorizedAdmin(req))return send(res,403,{error:'Admin authorization required'},req);if(err)return send(res,400,{error:'Invalid JSON'},req);try{const saved=await updateLabOrderStatus(Number(labStatusMatch[1]),data.status);if(saved)return send(res,200,saved,req);return send(res,503,{error:'DATABASE_URL not configured'},req);}catch(e){if(e.statusCode)return send(res,e.statusCode,{error:e.message},req);return send(res,503,{error:'Unable to update lab order status'},req);}});
   if(url.pathname==='/api/payments'&&req.method==='GET'){const auth=requireAuth(req,res);if(!auth)return;const phone=url.searchParams.get('phone');if(!phone)return send(res,422,{error:'phone is required'},req);if(phone!==auth.sub)return send(res,403,{error:'Patient access denied'},req);try{const rows=await listPayments(phone);if(rows===null)return send(res,503,{error:'DATABASE_URL not configured'},req);return send(res,200,rows,req);}catch(e){return send(res,503,{error:'Unable to load payments'},req);}}
   if(url.pathname==='/api/payments'&&req.method==='POST')return parseBody(req,async(err,data)=>{const auth=requireAuth(req,res);if(!auth)return;if(err)return send(res,400,{error:'Invalid JSON'},req);if(data.phone!==auth.sub)return send(res,403,{error:'Patient access denied'},req);try{const saved=await createPayment(data);if(saved)return send(res,201,saved,req);return send(res,503,{error:'DATABASE_URL not configured'},req);}catch(e){if(e.statusCode)return send(res,e.statusCode,{error:e.message},req);return send(res,503,{error:'Unable to create payment'},req);}});
   const paymentOrderMatch=url.pathname.match(/^\/api\/payments\/(\d+)\/order$/);
-  if(paymentOrderMatch&&req.method==='POST')return parseBody(req,async(err,data)=>{const auth=requireAuth(req,res);if(!auth)return;if(err)return send(res,400,{error:'Invalid JSON'},req);if(!data.phone)return send(res,422,{error:'phone is required'},req);try{const db=await getDb();if(!db)return send(res,503,{error:'DATABASE_URL not configured'},req);const payment=await getPaymentById(Number(paymentOrderMatch[1]));if(!payment)return send(res,404,{error:'Payment not found'},req);if(payment.phone!==auth.sub||payment.phone!==data.phone)return send(res,403,{error:'Payment does not belong to patient'},req);if(payment.provider_order_id)return send(res,200,{payment,order:{provider:payment.provider,orderId:payment.provider_order_id,amount:Math.round(Number(payment.amount)*100),currency:payment.currency}},req);const order=await createPaymentGatewayOrder({amount:payment.amount,currency:payment.currency,receipt:`payment_${payment.id}`});const saved=await setProviderOrderId(payment.id,order.provider,order.orderId);return send(res,200,{payment:saved,order:{provider:order.provider,orderId:order.orderId,amount:order.amount,currency:order.currency}},req);}catch(e){if(e.statusCode)return send(res,e.statusCode,{error:e.message},req);return send(res,502,{error:'Unable to create payment gateway order'},req);}});
-  if(url.pathname==='/api/payments/webhook'&&req.method==='POST')return parseRawBody(req,async(err,rawBody)=>{if(err)return send(res,400,{error:'Unable to read webhook body'},req);const signature=req.headers['x-payment-signature'];if(!getWebhookSecret())return send(res,503,{error:'Payment webhook is not configured'},req);if(!verifyWebhookSignature(rawBody,signature))return send(res,401,{error:'Invalid webhook signature'},req);try{const event=parseWebhookEvent(rawBody);const paymentId=Number(event.paymentId);const status=event.status;if(!Number.isInteger(paymentId)||paymentId<1||typeof status!=='string')return send(res,422,{error:'paymentId and status are required'},req);const saved=await updatePaymentStatus(paymentId,status,event.providerPaymentId);if(saved)return send(res,200,{ok:true,payment:saved},req);return send(res,503,{error:'DATABASE_URL not configured'},req);}catch(e){if(e.statusCode)return send(res,e.statusCode,{error:e.message},req);return send(res,503,{error:'Unable to process payment webhook'},req);}});
+  if(paymentOrderMatch&&req.method==='POST')return parseBody(req,async(err,data)=>{const auth=requireAuth(req,res);if(!auth)return;if(err)return send(res,400,{error:'Invalid JSON'},req);try{const db=await getDb();if(!db)return send(res,503,{error:'DATABASE_URL not configured'},req);const payment=await getPaymentById(Number(paymentOrderMatch[1]));if(!payment)return send(res,404,{error:'Payment not found'},req);if(payment.phone!==auth.sub)return send(res,403,{error:'Payment does not belong to patient'},req);if(payment.provider_order_id)return send(res,200,{payment,order:{provider:payment.provider,keyId:(process.env.RAZORPAY_KEY_ID||'').trim(),orderId:payment.provider_order_id,amount:Math.round(Number(payment.amount)*100),currency:payment.currency}},req);const order=await createPaymentGatewayOrder({amount:payment.amount,currency:payment.currency,receipt:`payment_${payment.id}`});const saved=await setProviderOrderId(payment.id,order.provider,order.orderId);return send(res,200,{payment:saved,order:{provider:order.provider,keyId:order.keyId,orderId:order.orderId,amount:order.amount,currency:order.currency}},req);}catch(e){if(e.statusCode)return send(res,e.statusCode,{error:e.message},req);return send(res,502,{error:'Unable to create payment gateway order'},req);}});
+  const paymentVerifyMatch=url.pathname.match(/^\/api\/payments\/(\d+)\/verify$/);
+  if(paymentVerifyMatch&&req.method==='POST')return parseBody(req,async(err,data)=>{
+    const auth=requireAuth(req,res);
+    if(!auth)return;
+    if(err)return send(res,400,{error:'Invalid JSON'},req);
+    try{
+      const db=await getDb();
+      if(!db)return send(res,503,{error:'DATABASE_URL not configured'},req);
+      const payment=await getPaymentById(Number(paymentVerifyMatch[1]));
+      if(!payment)return send(res,404,{error:'Payment not found'},req);
+      if(payment.phone!==auth.sub)return send(res,403,{error:'Payment does not belong to patient'},req);
+      if(payment.provider!=='razorpay'||!payment.provider_order_id)return send(res,409,{error:'Razorpay order has not been created'},req);
+      if(data.razorpay_order_id!==payment.provider_order_id)return send(res,422,{error:'Razorpay order does not match this payment'},req);
+
+      const verified=await verifyRazorpayCheckout({
+        orderId:payment.provider_order_id,
+        paymentId:data.razorpay_payment_id,
+        signature:data.razorpay_signature,
+        expectedAmount:payment.amount,
+        expectedCurrency:payment.currency
+      });
+      if(verified.status==='pending')return send(res,202,{ok:false,status:'pending',message:'Payment is not captured yet. Refresh status; do not create another order.'},req);
+      if(payment.status==='paid'){
+        if(payment.provider_payment_id===verified.providerPaymentId)return send(res,200,{ok:true,duplicate:true,status:'paid'},req);
+        return send(res,409,{ok:false,needsReconciliation:true},req);
+      }
+      const saved=await updatePaymentStatus(payment.id,verified.status,verified.providerPaymentId);
+      return send(res,200,{ok:verified.status==='paid',payment:saved},req);
+    }catch(e){
+      if(e.statusCode)return send(res,e.statusCode,{error:e.message},req);
+      return send(res,502,{error:'Unable to verify Razorpay payment'},req);
+    }
+  });
+  if(url.pathname==='/api/payments/webhook'&&req.method==='POST')return parseRawBody(req,async(err,rawBody)=>{
+    if(err)return send(res,400,{error:'Unable to read webhook body'},req);
+    const signature=req.headers['x-razorpay-signature'];
+    if(!getWebhookSecret())return send(res,503,{error:'Payment webhook is not configured'},req);
+    if(!verifyWebhookSignature(rawBody,signature))return send(res,401,{error:'Invalid webhook signature'},req);
+    try{
+      const normalized=normalizeRazorpayPaymentEvent(parseWebhookEvent(rawBody));
+      if(!normalized)return send(res,200,{ok:true,ignored:true},req);
+      const payment=await findPaymentByProviderOrderId(normalized.orderId);
+      if(payment===null)return send(res,503,{error:'DATABASE_URL not configured'},req);
+      if(!payment)return send(res,404,{error:'Payment order not found'},req);
+      if(payment.provider!=='razorpay' || Math.round(Number(payment.amount)*100)!==normalized.amount || payment.currency!==normalized.currency){
+        return send(res,422,{error:'Razorpay payment does not match the stored order'},req);
+      }
+      if(payment.status==='refunded' ||
+         (payment.status==='paid' && normalized.status==='failed') ||
+         (payment.status==='cancelled' && normalized.status==='failed')){
+        return send(res,200,{ok:true,ignored:true},req);
+      }
+      if(payment.status==='paid' && normalized.status==='paid'){
+        if(payment.provider_payment_id===normalized.providerPaymentId) return send(res,200,{ok:true,duplicate:true},req);
+        return send(res,200,{ok:true,needsReconciliation:true},req);
+      }
+      const saved=await updatePaymentStatus(payment.id,normalized.status,normalized.providerPaymentId);
+      return send(res,200,{ok:true,payment:saved},req);
+    }catch(e){
+      if(e.statusCode)return send(res,e.statusCode,{error:e.message},req);
+      return send(res,503,{error:'Unable to process payment webhook'},req);
+    }
+  });
   const paymentStatusMatch=url.pathname.match(/^\/api\/payments\/(\d+)\/status$/);
   if(paymentStatusMatch&&req.method==='PATCH')return parseBody(req,async(err,data)=>{if(err)return send(res,400,{error:'Invalid JSON'},req);if(!isAuthorizedPaymentStatusUpdate(req.headers))return send(res,403,{error:'Payment status update is restricted'},req);try{const saved=await updatePaymentStatus(Number(paymentStatusMatch[1]),data.status,data.providerPaymentId);if(saved)return send(res,200,saved,req);return send(res,503,{error:'DATABASE_URL not configured'},req);}catch(e){if(e.statusCode)return send(res,e.statusCode,{error:e.message},req);return send(res,503,{error:'Unable to update payment status'},req);}});
   if (url.pathname.startsWith('/api/pharmacy/')) {

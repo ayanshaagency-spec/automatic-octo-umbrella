@@ -27,6 +27,17 @@ input:focus,select:focus,button:focus-visible{outline:3px solid #5fc3ce66;outlin
 .insurance-admin-policy select,.insurance-admin-policy textarea{width:100%;box-sizing:border-box;padding:10px;border-radius:8px;border:1px solid #bfd1d6;margin:6px 0 10px}
 .insurance-admin-policy textarea{min-height:68px}
 .insurance-admin-policy button{margin:6px 6px 6px 0}
+.health-grid{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:12px;margin:14px 0}
+.health-card{min-width:0;padding:15px;border:1px solid var(--line);border-radius:12px;background:#f8fbfc}
+.health-card-head{display:flex;align-items:center;justify-content:space-between;gap:8px}
+.health-card strong{font-size:13px;color:var(--navy)}
+.health-card p{margin:9px 0 0;color:var(--muted);font-size:12px;line-height:1.5}
+.health-badge{display:inline-block;padding:4px 8px;border-radius:999px;font-size:10px;font-weight:800;white-space:nowrap}
+.health-badge.pending{background:#fff4dc;color:#885d05}
+.health-badge.active{background:#e4f5eb;color:#17643c}
+.health-badge.inactive{background:#fdebea;color:#a12d26}
+@media(max-width:780px){.health-grid{grid-template-columns:1fr 1fr}}
+@media(max-width:520px){.health-grid{grid-template-columns:1fr}}
 </style>
 </head>
 <body>
@@ -46,18 +57,44 @@ input:focus,select:focus,button:focus-visible{outline:3px solid #5fc3ce66;outlin
 <nav class="tabs" aria-label="Admin sections">
 <button type="button" data-tab="appointmentsPanel" aria-selected="true">Appointments</button>
 <button type="button" data-tab="doctorsPanel" aria-selected="false">Doctors</button>
+<button type="button" data-tab="labBillingPanel" aria-selected="false">Lab billing</button>
 <button type="button" data-tab="storesPanel" aria-selected="false">Pharmacy stores</button>
 <button type="button" data-tab="cataloguePanel" aria-selected="false">Catalogue & stock</button>
 <button type="button" data-tab="ordersPanel" aria-selected="false">Pharmacy orders</button>
 <button type="button" data-tab="insurancePanel" aria-selected="false">Health insurance</button>
+<button type="button" data-tab="healthPanel" aria-selected="false">System health</button>
 </nav>
+<section id="healthPanel" class="card panel hidden">
+<div class="section-head"><div><p class="eyebrow">Platform monitoring</p><h2>System health</h2><p class="muted">Read-only checks against this deployed Ayansha Health Care service.</p></div><button type="button" class="secondary" id="refreshSystemHealth">Refresh checks</button></div>
+<p id="systemHealthUpdated" class="muted" role="status" aria-live="polite">Checks will run after secure admin sign-in.</p>
+<div class="health-grid">
+<div class="health-card"><div class="health-card-head"><strong>Backend API</strong><span id="healthApiBadge" class="health-badge pending">Waiting</span></div><p id="healthApiDetail">Waiting for check.</p></div>
+<div class="health-card"><div class="health-card-head"><strong>Database</strong><span id="healthDbBadge" class="health-badge pending">Waiting</span></div><p id="healthDbDetail">Waiting for check.</p></div>
+<div class="health-card"><div class="health-card-head"><strong>Pharmacy directory</strong><span id="healthPharmacyBadge" class="health-badge pending">Waiting</span></div><p id="healthPharmacyDetail">Waiting for check.</p></div>
+<div class="health-card"><div class="health-card-head"><strong>Hospital directory</strong><span id="healthHospitalsBadge" class="health-badge pending">Waiting</span></div><p id="healthHospitalsDetail">Waiting for check.</p></div>
+<div class="health-card"><div class="health-card-head"><strong>Patient &amp; Doctor SMS OTP</strong><span id="healthOtpBadge" class="health-badge pending">Waiting</span></div><p id="healthOtpDetail">Waiting for check.</p></div>
+<div class="health-card"><div class="health-card-head"><strong>Online Payments</strong><span id="healthPaymentBadge" class="health-badge pending">Waiting</span></div><p id="healthPaymentDetail">Waiting for check.</p></div>
+<div class="health-card"><div class="health-card-head"><strong>AI Health Assistant</strong><span id="healthAiBadge" class="health-badge pending">Waiting</span></div><p id="healthAiDetail">Waiting for check.</p></div>
+<div class="health-card"><div class="health-card-head"><strong>WhatsApp Notifications</strong><span id="healthWhatsappBadge" class="health-badge pending">Waiting</span></div><p id="healthWhatsappDetail">Waiting for check.</p></div>
+<div class="health-card"><div class="health-card-head"><strong>Insurance document security</strong><span id="healthInsuranceBadge" class="health-badge pending">Waiting</span></div><p id="healthInsuranceDetail">Waiting for check.</p></div>
+</div>
+<p class="notice">Doctor access note: SMS OTP readiness only confirms provider configuration. Each clinician must also be registered under Doctors with the exact mobile number they will use. No OTP bypass is enabled.</p>
+<p class="notice">Integration note: “Configured” confirms required variable presence only. It does not prove provider connectivity, message delivery, successful document scanning, or clinical approval. Live acceptance remains a separate gate.</p>
+<p class="notice">Data coverage note: Patient totals, admin-wide Lab orders and Payment totals are not shown because the current backend does not expose dedicated admin-wide summary APIs for them. No sample counts are fabricated.</p>
+</section>
 <section id="appointmentsPanel" class="card panel">
 <div class="section-head"><div><p class="eyebrow">Care operations</p><h2>Appointments</h2></div><button type="button" class="secondary" id="reloadAppointments">Refresh</button></div>
 <p id="appointmentStatus" class="muted" aria-live="polite">Loading appointments…</p><div id="appointments"></div>
 </section>
+<section id="labBillingPanel" class="card panel hidden">
+ <div class="section-head"><div><p class="eyebrow">Patient billing</p><h2>Lab order pricing</h2><p class="muted">Set the verified lab quote here. Patients cannot choose or change this amount.</p></div><button type="button" class="secondary" id="reloadLabBilling">Refresh lab orders</button></div>
+ <p class="notice">Enter only a price confirmed by the lab/clinic. A price locks when a payment record exists or the order is closed.</p>
+ <p id="labBillingStatus" class="muted" role="status"></p>
+ <div id="labBillingList"><div class="empty">Loading lab billing…</div></div>
+</section>
 <section id="doctorsPanel" class="card panel hidden">
 <div class="section-head"><div><p class="eyebrow">Clinical team</p><h2>Register a doctor</h2></div><button type="button" class="secondary" id="reloadDoctors">Refresh doctors</button></div>
-<p class="notice">Register only a verified clinician after checking identity and credentials offline. The doctor must complete OTP verification on the registered phone before accessing appointments or patient records.</p>
+<p class="notice">Register only a verified clinician after checking identity and credentials offline. Enter the doctor's mobile number in international format (for example, +91 followed by the number). Registration alone does not enable sign-in: an approved SMS OTP provider must also be configured in Railway Staging.</p>
 <form id="doctorForm">
 <div class="form-grid">
 <div class="field"><label for="doctorName">Doctor name *</label><input id="doctorName" required minlength="2" maxlength="120" autocomplete="name"></div>
@@ -183,6 +220,47 @@ async function downloadInsuranceDocument(id){
 }
 $('insuranceRefresh').addEventListener('click',loadInsurancePolicies);
 $('insuranceStatusFilter').addEventListener('change',loadInsurancePolicies);
+async function refreshSystemHealth(){
+ const button=$('refreshSystemHealth');
+ if(button)button.disabled=true;
+ const jobs=[
+  {path:'/health',badge:'healthApiBadge',detail:'healthApiDetail',format:()=>({ok:true,message:'Backend health endpoint responded successfully.'})},
+  {path:'/api/db/health',badge:'healthDbBadge',detail:'healthDbDetail',format:data=>({ok:data?.ok===true,message:data?.database==='connected'?'Database connection is healthy.':'Database did not confirm a healthy connection.'})},
+  {path:'/api/pharmacy/stores',badge:'healthPharmacyBadge',detail:'healthPharmacyDetail',format:rows=>({ok:Array.isArray(rows),message:Array.isArray(rows)?(rows.length?rows.length+' active store(s) returned.':'No active stores are listed yet.'):'Unexpected pharmacy directory response.'})},
+  {path:'/api/pharmacy/hospitals',badge:'healthHospitalsBadge',detail:'healthHospitalsDetail',format:rows=>({ok:Array.isArray(rows),message:Array.isArray(rows)?(rows.length?rows.length+' delivery hospital(s) returned.':'No delivery hospitals are listed yet.'):'Unexpected hospital directory response.'})},
+  {path:'/api/admin/otp/status',badge:'healthOtpBadge',detail:'healthOtpDetail',format:data=>({ok:data?.configured===true,pending:data?.configured!==true,message:data?.configured?'SMS OTP provider ('+(data.provider==='msg91'?'MSG91':'generic')+') is configured. Test with registered patient and doctor phones.':'Not configured. Add the approved provider variables to Railway Staging. No OTP bypass is enabled.'})},
+  {path:'/api/admin/payment/status',badge:'healthPaymentBadge',detail:'healthPaymentDetail',format:data=>({ok:data?.configured===true,pending:data?.configured!==true,message:data?.configured?'Razorpay credentials and webhook are configured. Complete an authorised test-mode payment before acceptance.':(!data?.providerSupported?'Payment provider is not configured or unsupported.':(!data?.credentialsConfigured?'Razorpay API credentials are incomplete.':'Razorpay webhook secret is missing.'))})},
+  {path:'/api/admin/integrations/status',cards:[
+   {badge:'healthAiBadge',detail:'healthAiDetail',format:data=>({ok:data?.ai?.configured===true,okLabel:'Configured',pending:data?.ai?.configured!==true,message:data?.ai?.configured?'AI provider credentials are present. A real Staging request and clinician review are still required.':'AI provider URL/token are not configured in Staging.'})},
+   {badge:'healthWhatsappBadge',detail:'healthWhatsappDetail',format:data=>({ok:data?.whatsapp?.configured===true,okLabel:'Configured',pending:data?.whatsapp?.configured!==true,message:data?.whatsapp?.configured?'WhatsApp credentials are present; message delivery and delivery receipts are not yet verified.':'WhatsApp provider URL, access token and phone number ID are not configured in Staging.'})},
+   {badge:'healthInsuranceBadge',detail:'healthInsuranceDetail',format:data=>({ok:data?.insurance?.uploadPrerequisitesConfigured===true,okLabel:'Configured',pending:!(data?.insurance?.uploadPrerequisitesConfigured===true),partial:Boolean(data?.insurance?.privateStorageConfigured||data?.insurance?.malwareScannerConfigured)&&data?.insurance?.uploadPrerequisitesConfigured!==true,message:'Private storage: '+(data?.insurance?.privateStorageConfigured?'configured':'missing')+'. Malware scanner: '+(data?.insurance?.malwareScannerConfigured?'configured':'missing')+'. A synthetic upload/scan acceptance test is still required.'})}
+  ]}
+ ];
+ try{
+  await Promise.all(jobs.map(async job=>{
+   const cards=job.cards||[job];
+   try{
+    const data=await api(job.path);
+    cards.forEach(card=>{
+     const badge=$(card.badge),detail=$(card.detail),result=card.format(data);
+     badge.textContent=result.ok?(result.okLabel||'Online'):result.partial?'Partial':result.pending?'Pending':'Check response';
+     badge.className='health-badge '+(result.ok?'active':(result.pending||result.partial)?'pending':'inactive');
+     detail.textContent=result.message;
+    });
+   }catch(error){
+    cards.forEach(card=>{
+     const badge=$(card.badge),detail=$(card.detail);
+     badge.textContent='Unavailable';
+     badge.className='health-badge inactive';
+     detail.textContent=error.message||'Health check failed.';
+    });
+   }
+  }));
+  $('systemHealthUpdated').textContent='Last checked: '+new Date().toLocaleString();
+ }finally{
+  if(button)button.disabled=false;
+ }
+}
 function setTab(id){
  currentTab=id;
  document.querySelectorAll('[data-tab]').forEach(button=>button.setAttribute('aria-selected',String(button.dataset.tab===id)));
@@ -191,6 +269,7 @@ function setTab(id){
  if(id==='cataloguePanel'){populateStorePicker();if($('catalogueStore').value)loadProducts();}
  if(id==='ordersPanel')loadOrders();
   if(id==='insurancePanel')loadInsurancePolicies();
+  if(id==='healthPanel')refreshSystemHealth();
 }
 document.querySelectorAll('[data-tab]').forEach(button=>button.addEventListener('click',()=>setTab(button.dataset.tab)));
 async function loadDoctors(){
@@ -205,7 +284,7 @@ $('doctorForm').addEventListener('submit',async event=>{
  const body={name:$('doctorName').value.trim(),specialty:$('doctorSpecialty').value.trim(),phone:$('doctorPhone').value.trim()};
  try{
   const doctor=await api('/api/admin/doctors',{method:'POST',body:JSON.stringify(body)});
-  showMessage('doctorFormMessage','Doctor registered (#'+doctor.id+'). OTP sign-in is enabled for the registered phone.',true);
+  showMessage('doctorFormMessage','Doctor registered (#'+doctor.id+'). Sign-in requires this exact phone number and a configured SMS OTP provider.',true);
   $('doctorForm').reset();await loadDoctors();
  }catch(e){showMessage('doctorFormMessage',e.message)}
 });
@@ -321,9 +400,10 @@ $('reloadDoctors').onclick=loadDoctors;
 $('reloadStores').onclick=loadStores;
 $('reloadProducts').onclick=loadProducts;
 $('reloadOrders').onclick=loadOrders;
+$('refreshSystemHealth').onclick=refreshSystemHealth;
 async function openDashboard(){
  $('login').classList.add('hidden');$('dashboard').classList.remove('hidden');$('logout').classList.remove('hidden');$('sessionLabel').textContent='Admin session active';
- await Promise.all([loadAppointments(),loadDoctors(),loadStores(),loadOrders()]);
+ await Promise.all([loadAppointments(),loadDoctors(),loadStores(),loadOrders(),refreshSystemHealth()]);
 }
 $('loginBtn').onclick=async()=>{
  $('loginError').textContent='';

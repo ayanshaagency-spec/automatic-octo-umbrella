@@ -2,6 +2,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const crypto = require('node:crypto');
 const { verifyAdminCredentials, createAdminToken, createDoctorToken, verifyRoleToken } = require('./roles');
+const { verifyToken } = require('./auth');
 
 const SECRET = 'ci-admin-role-secret-long-enough-for-hmac';
 function withEnv(values, fn) {
@@ -35,6 +36,13 @@ test('admin token carries admin role and is verifiable; doctor token is not an a
     assert.equal(payload.sub, 'admin@example.com');
     assert.equal(payload.role, 'admin');
     assert.equal(verifyRoleToken(createDoctorToken('+919900000001'), 'admin'), null);
+  });
+});
+
+test('patient-token verifier rejects Doctor and Admin role tokens', () => {
+  withEnv({ JWT_SECRET: SECRET }, () => {
+    assert.equal(verifyToken(createDoctorToken('+919900000001')), null);
+    assert.equal(verifyToken(createAdminToken('admin@example.com')), null);
   });
 });
 
