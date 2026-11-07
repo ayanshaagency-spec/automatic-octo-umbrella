@@ -2,14 +2,18 @@ name: Insurance Private Storage + Malware E2E
 
 on:
   push:
-    branches: ["feat/phase7-pharmacy-railway-aligned"]
+    branches:
+      - "feat/phase7-pharmacy-railway-aligned"
+      - "staging/auth-abuse-protection-with-role-portal"
     paths:
       - "backend/src/insurance_*"
       - "backend/db/migrations/004_phase8_health_insurance_documents.sql"
       - "backend/package.json"
       - ".github/workflows/insurance-storage-e2e.yml"
   pull_request:
-    branches: ["feat/phase6-emergency-hospitals"]
+    branches:
+      - "feat/phase6-emergency-hospitals"
+      - "feat/phase7-pharmacy-railway-aligned"
     paths:
       - "backend/src/insurance_*"
       - "backend/db/migrations/004_phase8_health_insurance_documents.sql"
