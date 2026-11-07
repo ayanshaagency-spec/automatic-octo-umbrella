@@ -301,15 +301,15 @@ test('authenticated patient access and ownership contract', async t => {
     method: 'POST', headers: { ...authHeaders, 'Content-Type': 'application/json' },
     body: JSON.stringify({ phone: '+919999999999', appointmentId: 1, diagnosis: 'test', medicines: [{ medicineName: 'Test', dosage: '1', frequency: 'daily', duration: '1 day' }] })
   });
-  assert.equal(prescriptionOwnership.status, 503);
-  assert.equal((await prescriptionOwnership.json()).error, 'DATABASE_URL not configured');
+  assert.equal(prescriptionOwnership.status, 401);
+  assert.equal((await prescriptionOwnership.json()).error, 'Doctor authentication required');
 
   const healthRecord = await fetch(`${BASE_URL}/api/health-records`, {
     method: 'POST', headers: { ...authHeaders, 'Content-Type': 'application/json' },
     body: JSON.stringify({ phone: '+919999999999', recordType: 'lab', title: 'Test' })
   });
-  assert.equal(healthRecord.status, 503);
-  assert.equal((await healthRecord.json()).error, 'DATABASE_URL not configured');
+  assert.equal(healthRecord.status, 401);
+  assert.equal((await healthRecord.json()).error, 'Doctor authentication required');
 
   const labOrder = await fetch(`${BASE_URL}/api/lab-orders`, {
     method: 'POST', headers: { ...authHeaders, 'Content-Type': 'application/json' },
