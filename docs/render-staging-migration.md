@@ -18,7 +18,7 @@
 Current Render pricing shows:
 - Hobby workspace: $0/month.
 - Web service plan `0.5c-512mb`: approximately $7/month.
-- Postgres plan `0.1c-256mb`: approximately $6/month.
+- Postgres plan `basic-256mb`: approximately $6/month.
 
 **Estimated Staging compute total: about $13/month**, before additional database storage, bandwidth, tax, and any other usage. The paid web service is required because the Blueprint uses a pre-deploy migration command. Review the live Render billing page before approving Blueprint sync.
 
