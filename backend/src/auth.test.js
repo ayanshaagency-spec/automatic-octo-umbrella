@@ -200,3 +200,34 @@ test('OTP provider status exposes readiness only and never returns credentials',
     }
   }
 });
+
+
+test('explicit staging test OTP works with production runtime mode but never leaks into production', async () => {
+  const keys = ['NODE_ENV', 'APP_ENV', 'ENABLE_TEST_OTP', 'OTP_PROVIDER', 'OTP_PROVIDER_URL', 'OTP_PROVIDER_TOKEN', 'MSG91_AUTH_KEY', 'MSG91_TEMPLATE_ID', 'MSG91_OTP_VARIABLE', 'JWT_SECRET'];
+  const previous = Object.fromEntries(keys.map(key => [key, process.env[key]]));
+  process.env.NODE_ENV = 'production';
+  process.env.APP_ENV = 'staging';
+  process.env.ENABLE_TEST_OTP = 'true';
+  process.env.OTP_PROVIDER = 'generic';
+  delete process.env.OTP_PROVIDER_URL;
+  delete process.env.OTP_PROVIDER_TOKEN;
+  process.env.JWT_SECRET = 'test-secret-that-is-long-enough-for-hmac-123456';
+  try {
+    const phone = '+919000000001';
+    const issued = await issueOtp(phone);
+    assert.equal(issued.delivery, 'staging_test');
+    assert.match(issued.devOtp, /^\\d{6}$/);
+    assert.equal(await verifyOtp(phone, issued.devOtp), true);
+
+    process.env.APP_ENV = 'production';
+    await assert.rejects(
+      () => issueOtp('+919000000002'),
+      error => error.statusCode === 503 && /OTP provider is not configured/.test(error.message)
+    );
+  } finally {
+    for (const key of keys) {
+      if (previous[key] === undefined) delete process.env[key];
+      else process.env[key] = previous[key];
+    }
+  }
+});
