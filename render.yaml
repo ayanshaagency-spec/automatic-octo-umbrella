@@ -8,7 +8,7 @@ databases:
     user: ayansha_staging_app
     postgresMajorVersion: "18"
     region: singapore
-    plan: 0.1c-256mb
+    plan: basic-256mb
     ipAllowList: []
 
 services:
