@@ -223,3 +223,14 @@ document.getElementById('adminLogoutButton')?.addEventListener('click',logoutAdm
 if($('apiBaseInput'))$('apiBaseInput').value=localStorage.getItem('ayansha_api_base')||DEFAULT_API_BASE;
 updateAdminSessionUi();
 checkApi(); checkDatabase(); loadDoctorsForForm(); loadAppointments(); loadDashboardSummary(); loadVerificationStatus();
+
+
+// Installable PWA support. The service worker caches only the static app shell;
+// API requests remain online and are never cached.
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('./service-worker.js').catch((error) => {
+      console.warn('PWA service worker registration failed:', error);
+    });
+  });
+}
