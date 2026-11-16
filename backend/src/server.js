@@ -99,7 +99,7 @@ const server=http.createServer(async(req,res)=>{
     }
   });
   if(url.pathname==='/api/auth/request-otp'&&req.method==='POST')return parseBody(req,(err,data)=>{if(err||!data.phone)return send(res,400,{error:'phone is required'});if(isProduction)return send(res,503,{error:'Production SMS OTP provider is not configured'});const devOtp=issueOtp(data.phone);if(!devOtp)return send(res,503,{error:'Development OTP is unavailable'});send(res,200,{message:'Development-only OTP generated',devOtp});});
-  if(url.pathname==='/api/auth/verify-otp'&&req.method==='POST')return parseBody(req,(err,data)=>{if(err||!data.phone||!data.otp)return send(res,400,{error:'phone and otp are required'});if(!verifyOtp(data.phone,String(data.otp)))return send(res,401,{error:'Invalid or expired OTP'});send(res,200,{token:createDevToken(data.phone),user:{phone:data.phone}});});
+  if(url.pathname==='/api/auth/verify-otp'&&req.method==='POST')return parseBody(req,(err,data)=>{if(err||!data.phone||!data.otp)return send(res,400,{error:'phone and otp are required'});if(!verifyOtp(data.phone,String(data.otp)))return send(res,401,{error:'Invalid or expired OTP'});try{send(res,200,{token:createDevToken(data.phone),user:{phone:data.phone}});}catch(e){send(res,503,{error:'Staging authentication is not configured'});}});
   if(url.pathname==='/api/emergency'&&req.method==='GET')return send(res,200,emergencyResponse());
   if(url.pathname==='/api/hospitals/nearby'&&req.method==='GET'){
     try {
