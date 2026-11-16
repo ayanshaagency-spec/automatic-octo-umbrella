@@ -1,0 +1,51 @@
+name: Build Ayansha Health Care Android APK
+
+on:
+  push:
+    branches:
+      - feat/client-demo-web-app
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-android:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: mobile-app
+    steps:
+      - name: Checkout existing project
+        uses: actions/checkout@v4
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Generate missing Android platform files
+        run: flutter create --platforms=android --org com.ayansha.healthcare .
+
+      - name: Install Flutter dependencies
+        run: flutter pub get
+
+      - name: Analyze Flutter app
+        run: flutter analyze
+
+      - name: Run Flutter tests
+        run: flutter test
+
+      - name: Build release APK
+        run: >-
+          flutter build apk --release
+          --dart-define=AYANSHA_API_URL=https://health-care-backend-production-4210.up.railway.app
+
+      - name: Upload APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ayansha-health-care-android-apk
+          path: mobile-app/build/app/outputs/flutter-apk/app-release.apk
+          if-no-files-found: error
+          retention-days: 14
