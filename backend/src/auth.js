@@ -11,8 +11,7 @@ const OTP_VERIFY_ATTEMPT_LIMIT = 5;
 const OTP_RATE_STORE_MAX_KEYS = 10000;
 const TOKEN_TTL_SECONDS = 24 * 60 * 60;
 const isStagingTestOtpEnabled = () =>
-  process.env.APP_ENV === 'staging' && process.env.ENABLE_TEST_OTP === 'true' &&
-  process.env.NODE_ENV !== 'production';
+  process.env.APP_ENV === 'staging' && process.env.ENABLE_TEST_OTP === 'true';
 
 function pruneOtpStore(now = Date.now()) {
   for (const [phone, record] of otpStore) {
