@@ -513,4 +513,4 @@ const server=http.createServer(async(req,res)=>{
   }
   send(res,404,{error:'Not found'},req);
 });
-server.listen(PORT,()=>console.log(`Ayansha API running on ${PORT}`));
+server.listen(PORT, '0.0.0.0', () => console.log(`Ayansha API running on ${PORT}`));
