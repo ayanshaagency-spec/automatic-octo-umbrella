@@ -10,6 +10,9 @@ const OTP_REQUEST_LIMIT = 3;
 const OTP_VERIFY_ATTEMPT_LIMIT = 5;
 const OTP_RATE_STORE_MAX_KEYS = 10000;
 const TOKEN_TTL_SECONDS = 24 * 60 * 60;
+const isStagingTestOtpEnabled = () =>
+  process.env.APP_ENV === 'staging' && process.env.ENABLE_TEST_OTP === 'true' &&
+  process.env.NODE_ENV !== 'production';
 
 function pruneOtpStore(now = Date.now()) {
   for (const [phone, record] of otpStore) {
@@ -120,12 +123,13 @@ async function sendOtp(phone, otp) {
   const providerUrl = (process.env.OTP_PROVIDER_URL || '').trim();
   const accessToken = (process.env.OTP_PROVIDER_TOKEN || '').trim();
   if (!providerUrl || !accessToken) {
-    // Never disclose OTPs in staging, preview, or production environments.
-    // Development OTP disclosure is limited to local development and automated tests.
-    if (process.env.NODE_ENV !== 'development' && process.env.NODE_ENV !== 'test') {
+    // OTP disclosure is limited to local development/tests or explicitly enabled staging.
+    // Production and preview environments remain closed.
+    const localDevelopment = process.env.NODE_ENV === 'development' || process.env.NODE_ENV === 'test';
+    if (!localDevelopment && !isStagingTestOtpEnabled()) {
       throw new AuthError('OTP provider is not configured');
     }
-    return { delivery: 'development', devOtp: otp };
+    return { delivery: isStagingTestOtpEnabled() ? 'staging_test' : 'development', devOtp: otp };
   }
 
   let parsedProviderUrl;
@@ -155,7 +159,7 @@ async function sendOtp(phone, otp) {
 }
 
 function usesEphemeralOtpStore() {
-  return process.env.NODE_ENV === 'development' || process.env.NODE_ENV === 'test';
+  return process.env.NODE_ENV === 'development' || process.env.NODE_ENV === 'test' || isStagingTestOtpEnabled();
 }
 
 function isOtpProviderConfigured() {
