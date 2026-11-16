@@ -26,7 +26,7 @@ The small Postgres plan has 256 MB RAM and is intended only for a low-volume Sta
 
 ## Data protection gate
 
-The low-cost Hobby configuration is **not a general healthcare compliance certification**. Render lists HIPAA-compliant workspaces under its Scale workspace plan ($499/month, compute additional). Do not put identifiable patient, family, insurance, prescription, or other clinical data in this Hobby Staging database. Use synthetic/anonymized QA data only until the owner has reviewed applicable privacy, contractual, security, residency and regulatory requirements and approved the target hosting arrangement.
+The low-cost Hobby configuration is **not a healthcare compliance certification**. Render lists HIPAA-enabled workspaces under its Scale plan ($499/month flat, compute additional), but Render's current HIPAA documentation says Singapore region is not supported for HIPAA-enabled workspaces. Therefore this proposed Singapore Staging service is strictly for synthetic/anonymized QA data and must not process or store identifiable patient, family, insurance, prescription or other clinical data. Any future PHI/clinical-data hosting needs a separate approved region/workspace and privacy, contractual, security, residency and regulatory review.
 
 Do not restore a Railway database backup into Render merely because the database is Staging. First classify its contents, verify the backup, and confirm that the export is approved for the destination. Production database URLs, secrets and records must never be used here.
 
