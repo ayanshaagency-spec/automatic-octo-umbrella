@@ -35,24 +35,27 @@ async function createPrescription(data) {
     throw error;
   }
 
-  const appointment = await db.query(
-    `SELECT a.id, a.patient_id, a.doctor_id
-       FROM appointments a
-       JOIN patients pt ON pt.id = a.patient_id
-      JOIN doctors d ON d.id = a.doctor_id
-      WHERE a.id = $1 AND pt.phone = $2 AND d.phone = $3`,
-    [data.appointmentId, data.phone, data.doctorPhone]
-  );
-  if (appointment.rowCount === 0) {
-    const error = new Error('Appointment not found');
-    error.statusCode = 404;
-    throw error;
-  }
-
-  const a = appointment.rows[0];
-  await db.query('BEGIN');
+  // A transaction must stay on one checked-out pool connection. Using pool.query()
+  // for BEGIN/COMMIT would allow each statement to use a different connection.
+  const client = await db.connect();
   try {
-    const prescription = await db.query(
+    await client.query('BEGIN');
+    const appointment = await client.query(
+      `SELECT a.id, a.patient_id, a.doctor_id
+         FROM appointments a
+         JOIN patients pt ON pt.id = a.patient_id
+         JOIN doctors d ON d.id = a.doctor_id
+        WHERE a.id = $1 AND d.phone = $2`,
+      [data.appointmentId, data.doctorPhone]
+    );
+    if (appointment.rowCount === 0) {
+      const error = new Error('Appointment not found');
+      error.statusCode = 404;
+      throw error;
+    }
+
+    const a = appointment.rows[0];
+    const prescription = await client.query(
       `INSERT INTO prescriptions (appointment_id, patient_id, doctor_id, diagnosis, notes)
        VALUES ($1,$2,$3,$4,$5)
        RETURNING id, appointment_id, patient_id, doctor_id, diagnosis, notes, prescribed_at`,
@@ -64,18 +67,20 @@ async function createPrescription(data) {
         error.statusCode = 422;
         throw error;
       }
-      await db.query(
+      await client.query(
         `INSERT INTO prescription_items
           (prescription_id, medicine_name, dosage, frequency, duration, instructions)
          VALUES ($1,$2,$3,$4,$5,$6)`,
         [prescription.rows[0].id, medicine.medicineName, medicine.dosage, medicine.frequency, medicine.duration, medicine.instructions || null]
       );
     }
-    await db.query('COMMIT');
+    await client.query('COMMIT');
     return prescription.rows[0];
   } catch (error) {
-    await db.query('ROLLBACK');
+    await client.query('ROLLBACK').catch(() => {});
     throw error;
+  } finally {
+    client.release();
   }
 }
 

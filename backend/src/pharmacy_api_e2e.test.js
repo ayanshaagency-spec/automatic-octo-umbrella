@@ -188,7 +188,7 @@ test('Phase 7 pharmacy API smoke and fail-closed contract', async t => {
 });
 
 
-test('production pharmacy routes enforce distinct patient and admin tokens', async t => {
+test('pharmacy routes enforce distinct patient and admin tokens in isolated test mode', async t => {
   const prodPort = 3920;
   const prodBase = `http://127.0.0.1:${prodPort}`;
   const child = spawn(process.execPath, ['src/server.js'], {
@@ -196,7 +196,9 @@ test('production pharmacy routes enforce distinct patient and admin tokens', asy
     env: {
       ...process.env,
       PORT: String(prodPort),
-      NODE_ENV: 'production',
+      // Test mode permits an in-memory limiter because this isolated RBAC contract test has no DB.
+      // Production fail-closed behavior is covered separately in api_e2e_smoke.test.js.
+      NODE_ENV: 'test',
       DATABASE_URL: '',
       ADMIN_EMAIL: 'phase7-ci-admin@example.test',
       ADMIN_PASSWORD: 'ci-only-admin-password',

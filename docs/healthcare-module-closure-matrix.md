@@ -1,6 +1,6 @@
 # Ayansha Health Care — Built-in Module Closure Matrix
 
-Updated: 1 November 2026
+Updated: 6 November 2026
 Scope: existing repository and Railway Staging. Production remains on the Phase 6 branch.
 
 This matrix distinguishes implementation and automated evidence from live provider/data readiness. A screen or endpoint is not treated as complete unless its workflow is verified.
@@ -11,44 +11,43 @@ This matrix distinguishes implementation and automated evidence from live provid
 |---|---|---|
 | Patient web portal | Implemented | Served by the existing backend; Staging backend and database health checks pass. The live directory has no verified doctor records yet. |
 | Admin operations panel | Implemented | Existing appointment and Pharmacy operations; protected doctor registration/list added. Docker smoke verifies the admin entry point. |
-| Doctor Panel | Implemented in the Staging feature branch | Served at `/doctor`; fixed asset allowlist; admin provisioning and doctor OTP sign-in flow pass isolated PostgreSQL Runtime E2E. It is not live on Staging until the queued Railway deployment completes. |
+| Doctor Panel | Implemented and deployed to Staging | Served at `/doctor`; admin provisioning and doctor OTP sign-in flow pass isolated PostgreSQL Runtime E2E. Actual SMS delivery remains gated by approved MSG91 credentials/template. |
 | Flutter patient app | Implemented; safety corrections added | Fake doctors, fake slots and default Delhi coordinates removed. Flutter analyze, safety tests and Debug APK build pass; APK artifact uploaded by CI and retained until 8 November 2026. |
-| Backend API | Implemented for delivered MVP modules | Latest Backend Tests, Docker Build and Runtime E2E checks pass on the Staging branch. Latest branch is not yet deployed to Staging because Railway deployment 5d28e528 remains QUEUED with no build/deploy logs. |
-| Appointments | Basic flow implemented | Protected patient/doctor flows and status updates. Real doctor availability calendar, slot publication and race-safe reservation are not implemented. |
+| Backend API | Implemented for delivered MVP modules | Commit `5d01ff79b5573b5e940ab903d89f6e267928568c` is deployed successfully to Railway Staging. Backend Tests, Docker Build and Runtime E2E pass on this commit. |
+| Appointments | Core booking flow implemented | Protected patient/doctor flows, doctor-published availability slots, family-member consent scopes, race-safe slot booking and doctor queue scoping pass isolated PostgreSQL Runtime E2E. Human acceptance with verified clinicians remains pending. |
 | Prescriptions | Implemented | Protected doctor/patient routes; covered by automated tests. No patient/test prescription data was left in the persistent Staging database. |
 | Health records | Implemented | Protected patient and doctor APIs. Anonymous access is rejected. |
 | Lab orders | Implemented | Protected patient API and status workflow. Anonymous access is rejected. |
-| Payments | MVP adapter implemented | Razorpay code and validation tests exist. Staging test credentials/webhook are absent, so live provider E2E is not complete. |
+| Payments | Lab billing + Razorpay Checkout and webhook code deployed to Staging; live provider acceptance pending | Admin-only Lab Billing tab sets saved lab-order prices; patient-supplied amounts are ignored. Patient Dashboard shows Pay Now only for priced lab orders. Checkout callback HMAC is verified server-side, payment status is fetched from Razorpay, and only captured payments become paid. Signed webhook handling checks raw-body signature and order/amount/currency, with duplicate/out-of-order protection. Backend Tests, Docker Build and Runtime E2E pass. Staging Razorpay keys/webhook secret are absent; live Test Mode checkout remains blocked. |
+| Health insurance documents | Metadata/review workflow and private upload/scanning pipeline implemented; uploads deliberately disabled in Staging | Patient/Admin API responses now use a strict allow-list and never return S3 object keys, temporary upload keys or signed URLs. Upload intent/completion requires both private storage and ClamAV; downloads require `submitted + clean`. Added tests for serialization, missing scanner/storage and fail-closed upload gates. Staging S3 and ClamAV are not configured; synthetic clean/infected end-to-end acceptance, bucket ACL/encryption/lifecycle verification and real private download test remain pending. |
 | Emergency information | Implemented | Emergency information endpoint responds. It is not an ambulance dispatch or booking service. |
 | Nearby hospitals | Implemented | Coordinate-based directory API exists; Staging hospital directory currently returns an empty array. |
-| Pharmacy integration | Implemented in Phase 7 branch | Isolated PostgreSQL E2E covers hospital/partner stores, catalogue, COD home/hospital orders, stock reservation, prescription mismatch, patient history, admin queue and fulfilment. Persistent Staging has no verified store/product/hospital data. Migration 008 is applied on Staging; migration 009 is still waiting for the queued deployment. |
+| Pharmacy integration | Implemented in the existing Staging code line; release review open | Isolated PostgreSQL Runtime E2E covers hospital/partner stores, catalogue, COD home/hospital orders, stock reservation, prescription matching, patient history, admin queue and fulfilment. Staging has no verified store/product/hospital onboarding data. Migration scripts are applied by the successful Staging pre-deploy step. PR #8 remains Draft and unmerged; no Production release is authorised. |
 | Floot Operations Dashboard | Existing project retained | Latest read-only preview remains available. Typecheck and tests must be rerun after Floot's daily build-action limit reset. |
 
 ## Provider / configuration gates
 
 | Integration | Current state | Required before live acceptance |
 |---|---|---|
-| Patient/doctor SMS OTP | Shared PostgreSQL OTP code and isolated CI E2E pass | Approve SMS vendor, provider-specific adapter/template/sender, configure Staging secrets and use an authorised test phone. Public Staging must not disclose development OTPs. |
+| Patient/doctor SMS OTP | Shared PostgreSQL OTP store and MSG91 Flow adapter implemented | Provider adapter, HMAC challenge storage, 5-minute expiry, single-use verification, five-attempt lockout, per-phone throttling and automated tests exist. Staging lacks `OTP_PROVIDER`, `MSG91_AUTH_KEY` and `MSG91_TEMPLATE_ID`; DLT/sender/template approval and an authorised-phone delivery test remain pending. |
 | AI assistant | Code exists; live status reports `configured:false` | Approved AI credentials, medical-safety configuration and clinical acceptance. |
 | WhatsApp notifications | Code exists; live status reports `configured:false` | WhatsApp Business account, approved template and secret configuration. |
 | Video consultation | No live room/session integration | Select provider or approve a secure WebRTC/signalling/TURN architecture; implement and test patient/doctor room lifecycle. |
-| Razorpay payment | Adapter code exists; provider credentials not configured | Test-mode key/secret, webhook secret, callback verification and payment end-to-end test. |
+| Razorpay payment | Checkout signature verification, provider status lookup and webhook security covered by disposable CI Runtime E2E | Lab order price must first be set by Admin. Add Test Mode `PAYMENT_PROVIDER=razorpay`, `RAZORPAY_KEY_ID`, `RAZORPAY_KEY_SECRET` and `PAYMENT_WEBHOOK_SECRET` to Railway Staging secret variables; configure webhook endpoint `/api/payments/webhook` for `payment.captured` and `payment.failed`; then complete a real authorised test checkout/webhook delivery. |
 
 ## Not implemented in the current code line
 
-- Doctor availability calendar, published time slots and atomic slot reservation.
-- Family Profiles with dependent ownership, consent, and explicit access scopes.
 - Live video-room/session creation and secure meeting-link workflow.
 - Ambulance booking/dispatch and provider integration; emergency information alone does not dispatch an ambulance.
-- Health-insurance document vault with private object storage, least-privilege access, malware scanning/quarantine and retention/deletion controls. Tracked separately in GitHub Issue #10.
+- Live insurance document acceptance remains blocked until private object storage and ClamAV are provisioned, access controls/encryption/lifecycle are verified, and synthetic clean/infected upload/download acceptance passes. Tracked separately in GitHub Issue #10.
 
 ## Environment safety
 
 - Staging backend: https://health-care-backend-staging-staging.up.railway.app
-- Staging `/health` and `/api/db/health` were verified successfully on the currently deployed version.
-- Deployment `5d28e528-040c-49fc-a2a8-58175a24caf5` containing migration 009 is still `QUEUED` with no build/deploy logs; migration 009 is not confirmed live on Staging.
+- Latest Staging deployment `efe6aeda-aef3-42f4-8b9d-8f3f1d4f5208` is `SUCCESS` for commit `5d01ff79b5573b5e940ab903d89f6e267928568c`; Railway logs confirm schema/migrations applied and API started.
+- This deployment adds strict insurance response allow-listing and fail-closed upload acceptance checks. It also retains Admin Lab Billing, Patient Pay Now, Razorpay callback/webhook verification and protected integration readiness. Public human provider acceptance is still pending because provider credentials are not configured.
 - Staging directories for Pharmacy stores and delivery hospitals currently return empty arrays.
-- Production branch remains `feat/phase6-emergency-hospitals`; Production Backend and Postgres are Online with 0 warnings/criticals. Public `/health` and `/api/db/health` both pass. No Production service, branch, database, migration or secret was changed.
+- Production Backend and Postgres remain `SUCCESS`; no Production service, branch, database, migration or secret was changed during this MVP work.
 - Floot Operations Dashboard typecheck is clean and all five tests pass. Its proxy is pinned to the Staging backend; dedicated Staging admin sign-in is disabled until the environment has its own admin credentials. The preview is ready but unpublished.
 - No fake patient, doctor, prescription, pharmacy, store, hospital or product records were inserted into the persistent Staging database.
 - PR #8 remains Draft and unmerged. No Phase 7 changes have been merged into Production.

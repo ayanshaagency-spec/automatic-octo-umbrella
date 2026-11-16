@@ -80,10 +80,10 @@ async function main() {
     await pool.query(fs.readFileSync(familyAvailabilityMigration, 'utf8'));
 
     const hospitalOne = (await pool.query(
-      "INSERT INTO hospitals (name, address, city, state, active) VALUES ('CI Hospital A', '1 Test Road', 'Faridabad', 'Haryana', TRUE) RETURNING id"
+      "INSERT INTO hospitals (name, address, city, state, latitude, longitude, active) VALUES ('CI Hospital A', '1 Test Road', 'Faridabad', 'Haryana', 28.4089, 77.3178, TRUE) RETURNING id"
     )).rows[0];
     const hospitalTwo = (await pool.query(
-      "INSERT INTO hospitals (name, address, city, state, active) VALUES ('CI Hospital B', '2 Test Road', 'Faridabad', 'Haryana', TRUE) RETURNING id"
+      "INSERT INTO hospitals (name, address, city, state, latitude, longitude, active) VALUES ('CI Hospital B', '2 Test Road', 'Faridabad', 'Haryana', 28.4110, 77.3200, TRUE) RETURNING id"
     )).rows[0];
     const patient = (await pool.query(
       "INSERT INTO patients (name, phone) VALUES ('CI Test Patient', '9990000001') RETURNING id"
@@ -92,7 +92,7 @@ async function main() {
       'INSERT INTO prescriptions (patient_id) VALUES ($1) RETURNING id', [patient.id]
     )).rows[0];
     await pool.query(
-      "INSERT INTO prescription_items (prescription_id, medicine_name) VALUES ($1, 'Amoxicillin 250mg')",
+      "INSERT INTO prescription_items (prescription_id, medicine_name, dosage, frequency, duration, instructions) VALUES ($1, 'Amoxicillin 250mg', '250 mg', 'twice daily', '5 days', 'CI fixture')",
       [prescription.id]
     );
 

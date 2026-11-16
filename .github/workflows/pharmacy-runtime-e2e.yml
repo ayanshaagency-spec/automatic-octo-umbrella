@@ -3,10 +3,12 @@ name: Runtime E2E Verification
 on:
   push:
     branches:
+      - staging/auth-abuse-protection-with-role-portal
       - feat/phase7-pharmacy-railway-aligned
       - feat/phase7-pharmacy-shared-otp
   pull_request:
     branches:
+      - staging/auth-abuse-protection-with-role-portal
       - feat/phase6-emergency-hospitals
       - feat/phase7-pharmacy-railway-aligned
 
@@ -39,6 +41,20 @@ jobs:
       - name: Install backend dependencies
         working-directory: backend
         run: npm install
+
+      - name: Apply schema and migrations to disposable PostgreSQL
+        working-directory: backend
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/ayansha_healthcare
+        run: |
+          psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f db/schema.sql
+          npm run db:migrate
+
+      - name: Verify pooled PostgreSQL concurrency against disposable database
+        working-directory: backend
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/ayansha_healthcare
+        run: node --test src/db_pool.test.js
 
       - name: Start backend against real PostgreSQL
         working-directory: backend
@@ -96,6 +112,19 @@ jobs:
           PHARMACY_E2E_BASE_URL: http://127.0.0.1:3918
           DOCTOR_ADMIN_E2E_CI: '1'
         run: node src/doctor_admin_runtime_e2e.js
+
+      - name: Verify Razorpay webhook against isolated PostgreSQL
+        working-directory: backend
+        env:
+          NODE_ENV: test
+          DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/ayansha_healthcare
+          JWT_SECRET: pharmacy-ci-jwt-secret-long-enough-for-hs256
+          ADMIN_EMAIL: pharmacy-ci-admin@example.test
+          ADMIN_PASSWORD: ci-only-pharmacy-admin-password
+          PAYMENT_WEBHOOK_SECRET: runtime-webhook-secret
+          PAYMENT_WEBHOOK_E2E_CI: '1'
+          PHARMACY_E2E_BASE_URL: http://127.0.0.1:3918
+        run: node src/payment_webhook_runtime_e2e.js
 
       - name: Verify family profiles and doctor availability against isolated PostgreSQL
         working-directory: backend

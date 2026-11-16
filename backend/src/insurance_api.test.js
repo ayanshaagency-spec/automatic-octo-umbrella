@@ -68,6 +68,7 @@ test('insurance endpoints enforce patient/admin auth and fail closed without pri
   assert.equal((await request('/api/insurance/policies')).status, 401);
   const readiness = await request('/api/insurance/status');
   assert.equal(readiness.status, 200);
+  assert.deepEqual(Object.keys(readiness.body).sort(), ['storageConfigured', 'scannerConfigured', 'uploadsEnabled'].sort());
   assert.equal(readiness.body.storageConfigured, true);
   assert.equal(readiness.body.scannerConfigured, false);
   assert.equal(readiness.body.uploadsEnabled, false);
@@ -94,11 +95,18 @@ test('insurance endpoints enforce patient/admin auth and fail closed without pri
   assert.equal(policyWhenStorageMissing.status, 503);
   assert.match(policyWhenStorageMissing.body.error, /database is not configured/i);
 
-  const intentWhenStorageMissing = await request('/api/insurance/policies/1/documents', {
+  const intentWhenScannerMissing = await request('/api/insurance/policies/1/documents', {
     method: 'POST', headers: patientHeaders,
     body: { documentType: 'insurance_card', contentType: 'application/pdf', sizeBytes: 100, filename: 'card.pdf' }
   });
-  assert.equal(intentWhenStorageMissing.status, 503);
+  assert.equal(intentWhenScannerMissing.status, 503);
+  assert.match(intentWhenScannerMissing.body.error, /storage and malware scanning must be configured/i);
+
+  const completeWhenScannerMissing = await request('/api/insurance/documents/1/complete', {
+    method: 'POST', headers: patientHeaders, body: {}
+  });
+  assert.equal(completeWhenScannerMissing.status, 503);
+  assert.match(completeWhenScannerMissing.body.error, /storage and malware scanning must be configured/i);
 
   const patientCannotAccessAdminQueue = await request('/api/admin/insurance/policies', { headers: patientHeaders });
   assert.equal(patientCannotAccessAdminQueue.status, 401);

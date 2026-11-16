@@ -46,6 +46,33 @@ async function main() {
   const adminToken = login.body.token;
   assert.ok(adminToken, 'admin token should be returned');
 
+  const adminCannotUsePatientWorkspace = await request('/api/appointments', {
+    headers: jsonHeaders(adminToken)
+  });
+  assert.equal(adminCannotUsePatientWorkspace.status, 401,
+    'admin role token must not be accepted by patient APIs');
+
+  const anonymousPaymentStatus = await request('/api/admin/payment/status');
+  assert.equal(anonymousPaymentStatus.status, 401,
+    'payment readiness must require admin authentication');
+  const paymentStatus = await request('/api/admin/payment/status', {
+    headers: jsonHeaders(adminToken)
+  });
+  assert.equal(paymentStatus.status, 200,
+    'authenticated admin should read payment readiness');
+  assert.deepEqual(Object.keys(paymentStatus.body).sort(), [
+    'provider', 'providerSupported', 'credentialsConfigured', 'webhookConfigured', 'configured'
+  ].sort(), 'payment readiness response must be limited to non-secret status fields');
+  assert.equal(typeof paymentStatus.body.providerSupported, 'boolean');
+  assert.equal(typeof paymentStatus.body.credentialsConfigured, 'boolean');
+  assert.equal(typeof paymentStatus.body.webhookConfigured, 'boolean');
+  assert.equal(typeof paymentStatus.body.configured, 'boolean');
+  assert.equal(
+    JSON.stringify(paymentStatus.body).includes('secret'),
+    false,
+    'payment readiness must never disclose credential values'
+  );
+
   const timestamp = String(Date.now()).slice(-5);
   const phone = `+9199999${timestamp}`;
   const doctorInput = {
@@ -114,6 +141,12 @@ async function main() {
   assert.equal(appointments.status, 200, 'doctor should be able to view the doctor-scoped queue');
   assert.ok(Array.isArray(appointments.body));
 
+  const doctorCannotUsePatientWorkspace = await request('/api/appointments', {
+    headers: jsonHeaders(verified.body.token)
+  });
+  assert.equal(doctorCannotUsePatientWorkspace.status, 401,
+    'doctor role token must not be accepted by patient APIs');
+
   const doctorCannotOpenAdmin = await request('/api/admin/doctors', {
     headers: jsonHeaders(verified.body.token)
   });
@@ -136,6 +169,40 @@ async function main() {
   });
   assert.equal(ownerLogin.status, 200);
   const ownerToken = ownerLogin.body.token;
+
+  const patientCannotUseDoctorWorkspace = await request('/api/doctor/appointments', {
+    headers: jsonHeaders(ownerToken)
+  });
+  assert.equal(patientCannotUseDoctorWorkspace.status, 401,
+    'patient token must not be accepted by doctor APIs');
+
+  const patientCannotUseAdminWorkspace = await request('/api/admin/doctors', {
+    headers: jsonHeaders(ownerToken)
+  });
+  assert.equal(patientCannotUseAdminWorkspace.status, 401,
+    'patient token must not be accepted by admin APIs');
+
+  const patientCannotWritePrescription = await request('/api/prescriptions', {
+    method: 'POST',
+    headers: jsonHeaders(ownerToken),
+    body: {
+      phone: ownerPhone,
+      doctorPhone: phone,
+      appointmentId: 1,
+      diagnosis: 'Unauthorised patient-created prescription',
+      medicines: [{ medicineName: 'Test medicine', dosage: '1', frequency: 'daily', duration: '1 day' }]
+    }
+  });
+  assert.equal(patientCannotWritePrescription.status, 401,
+    'patient token must not create a prescription');
+
+  const patientCannotWriteHealthRecord = await request('/api/health-records', {
+    method: 'POST',
+    headers: jsonHeaders(ownerToken),
+    body: { phone: ownerPhone, doctorPhone: phone, recordType: 'consultation', title: 'Unauthorised patient-created record' }
+  });
+  assert.equal(patientCannotWriteHealthRecord.status, 401,
+    'patient token must not create a clinical health record');
 
   const dateYearsAgo = years => {
     const date = new Date();
@@ -319,6 +386,40 @@ async function main() {
     }
   });
   assert.equal(adultAppointment.status, 201, 'adult dependent may be booked only after verified consent');
+
+  const doctorPrescription = await request('/api/prescriptions', {
+    method: 'POST',
+    headers: jsonHeaders(verified.body.token),
+    body: {
+      appointmentId: adultAppointment.body.id,
+      diagnosis: 'CI doctor-authorised consultation',
+      medicines: [{ medicineName: 'Test medicine', dosage: '1 tablet', frequency: 'once daily', duration: '3 days' }]
+    }
+  });
+  assert.equal(doctorPrescription.status, 201,
+    'authenticated appointment doctor should be able to create a prescription');
+
+  const patientPrescriptions = await request(`/api/prescriptions?phone=${encodeURIComponent(ownerPhone)}`, {
+    headers: jsonHeaders(ownerToken)
+  });
+  assert.equal(patientPrescriptions.status, 200);
+  assert.ok(patientPrescriptions.body.some(item => item.id === doctorPrescription.body.id),
+    'patient should be able to read the doctor-created prescription');
+
+  const doctorHealthRecord = await request('/api/health-records', {
+    method: 'POST',
+    headers: jsonHeaders(verified.body.token),
+    body: { phone: ownerPhone, recordType: 'consultation', title: 'CI doctor-authored health record' }
+  });
+  assert.equal(doctorHealthRecord.status, 201,
+    'authenticated doctor should be able to create a health record for their patient');
+
+  const patientHealthRecords = await request(`/api/health-records?phone=${encodeURIComponent(ownerPhone)}`, {
+    headers: jsonHeaders(ownerToken)
+  });
+  assert.equal(patientHealthRecords.status, 200);
+  assert.ok(patientHealthRecords.body.some(item => item.id === doctorHealthRecord.body.id),
+    'patient should be able to read the doctor-created health record');
 
   const doctorQueue = await request('/api/doctor/appointments', {
     headers: jsonHeaders(verified.body.token)

@@ -60,3 +60,19 @@ The existing Railway service runs a pre-deploy command that applies all SQL migr
 5. Test a patient policy, upload each accepted format, patient document history/download, admin queue and review notes/status.
 6. Test that a second patient cannot list/download the first patient's policy/documents; confirm non-admin staff cannot access the admin queue.
 7. Record non-sensitive results and the tested commit on the launch-readiness issue. Only after acceptance and explicit approval should a separate production release be planned.
+
+
+## Staging security acceptance checklist — 6 November 2026
+
+The code remains fail-closed while either private storage or the malware scanner is absent. The following infrastructure controls must be confirmed by the storage/security owner before any real patient document is accepted:
+
+1. **Private bucket:** block all public access and public ACLs; do not enable website hosting or anonymous reads. Only the backend service identity may read, write, copy, and delete the required insurance prefixes.
+2. **Encryption at rest:** enable provider-side encryption for the bucket (SSE-S3 or the provider's managed/KMS-backed equivalent). Keep encryption keys in the provider's key-management service; never place them in GitHub or application output.
+3. **Transport:** allow only TLS/HTTPS to the object-storage endpoint. Do not use an HTTP S3 endpoint outside local automated tests.
+4. **Temporary upload retention:** configure a lifecycle rule on `insurance-uploads/` to remove abandoned or uncompleted uploads after a short retention window (recommended: 1 day). Keep quarantined objects under a separate restricted prefix with a documented security-review retention policy.
+5. **Malware scanner:** run ClamAV on a private network reachable only from the backend; use a maintained signature database, resource limits, health monitoring and an update cadence. A configured hostname alone is not a successful scan test.
+6. **CORS:** permit browser POST uploads only from the approved Staging/Production patient portal origins; do not wildcard origins. Limit allowed methods and required form fields to the presigned upload flow.
+7. **Operational privacy:** do not log policy numbers, file bytes, signed URLs, S3 object keys, access credentials or full patient document metadata. Download URLs remain short-lived and are issued only after patient/admin authorization and a `submitted + clean` scan state.
+8. **Acceptance gate:** run synthetic clean and infected test documents against disposable Staging infrastructure; verify clean files promote, infected/error files quarantine, and only clean submitted files can be downloaded. Do not use real patient files for this test.
+
+Current Staging does not have S3 storage or ClamAV configured. This is an operational checklist, not a claim that bucket ACLs, encryption, lifecycle or real scanner connectivity have already been verified.

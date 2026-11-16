@@ -90,7 +90,78 @@ $('familyForm').addEventListener('submit',async event=>{
 $('familyRefresh').addEventListener('click',loadFamilyArea);
 
 function renderDashboardSection(title,items,renderer){return '<article class="card dashboard-card"><div class="card-head"><div><p class="eyebrow">'+esc(title)+'</p><h3>'+items.length+'</h3></div></div>'+ (items.length?'<div class="dashboard-list">'+items.slice(0,5).map(renderer).join('')+'</div>':'<p class="muted">No records yet.</p>')+'</article>'}
-$('loadDashboard').onclick=async()=>{if(!authToken){$('dashboardGrid').innerHTML='<div class="card">Please login first.</div>';return}const phone=authPhone;const p=encodeURIComponent(phone);const g=$('dashboardGrid');g.innerHTML='<div class="loading">Loading your care records…</div>';try{const [a,pr,h,l,pay]=await Promise.all([api('/api/appointments?phone='+p),api('/api/prescriptions?phone='+p),api('/api/health-records?phone='+p),api('/api/lab-orders?phone='+p),api('/api/payments?phone='+p)]);g.innerHTML=renderDashboardSection('Appointments',a,v=>'<div class="dashboard-item"><strong>#'+esc(v.id)+' · '+esc(v.doctor_name||'Doctor')+'</strong><span>'+esc(v.appointment_at||'Date not set')+' · '+esc(v.status||'scheduled')+'</span></div>')+renderDashboardSection('Prescriptions',pr,v=>'<div class="dashboard-item"><strong>'+esc(v.diagnosis||'Prescription')+'</strong><span>'+esc(v.prescribed_at||v.created_at||'')+'</span></div>')+renderDashboardSection('Health Records',h,v=>'<div class="dashboard-item"><strong>'+esc(v.title||v.record_type||'Health record')+'</strong><span>'+esc(v.record_date||v.created_at||'')+'</span></div>')+renderDashboardSection('Lab Orders',l,v=>'<div class="dashboard-item"><strong>'+esc(v.test_name||'Lab test')+'</strong><span>'+esc(v.status||'booked')+'</span></div>')+renderDashboardSection('Payments',pay,v=>'<div class="dashboard-item"><strong>'+esc(v.currency||'INR')+' '+esc(v.amount??'')+'</strong><span>'+esc(v.status||'created')+'</span></div>')}catch(e){g.innerHTML='<div class="card">Dashboard load failed: '+esc(e.message)+'</div>'}};
+function loadRazorpayCheckoutScript(){
+ return new Promise((resolve,reject)=>{
+  if(window.Razorpay){resolve();return;}
+  const existing=document.querySelector('script[data-razorpay-checkout]');
+  if(existing){existing.addEventListener('load',resolve,{once:true});existing.addEventListener('error',reject,{once:true});return;}
+  const script=document.createElement('script');
+  script.src='https://checkout.razorpay.com/v1/checkout.js';
+  script.async=true;script.dataset.razorpayCheckout='true';
+  script.onload=resolve;script.onerror=()=>reject(new Error('Razorpay Checkout could not be loaded.'));
+  document.head.appendChild(script);
+ });
+}
+async function startLabOrderPayment(labOrderId,button){
+ if(!authToken){alert('Please login first.');return}
+ button.disabled=true;button.textContent='Preparing payment…';
+ try{
+  const payment=await api('/api/lab-orders/'+labOrderId+'/payment',{method:'POST',body:JSON.stringify({})});
+  const checkout=await api('/api/payments/'+payment.id+'/order',{method:'POST',body:JSON.stringify({})});
+  if(!checkout.order||!checkout.order.keyId||!checkout.order.orderId)throw new Error('Razorpay Test Mode is not configured yet.');
+  await loadRazorpayCheckoutScript();
+  const options={
+   key:checkout.order.keyId,
+   amount:checkout.order.amount,
+   currency:checkout.order.currency,
+   name:'Ayansha Health Care',
+   description:'Lab order #'+labOrderId,
+   order_id:checkout.order.orderId,
+   handler:async response=>{
+    try{
+     const verified=await api('/api/payments/'+payment.id+'/verify',{method:'POST',body:JSON.stringify(response)});
+     if((verified.payment&&verified.payment.status==='paid')||verified.status==='paid')alert('Payment captured successfully.');
+     else alert('Payment is not captured yet. Refresh your dashboard before retrying.');
+    }catch(error){alert('Payment verification pending: '+error.message+'. Refresh the dashboard before trying again.');}
+    $('loadDashboard').click();
+   },
+   modal:{ondismiss:()=>{$('loadDashboard').click();}}
+  };
+  const instance=new window.Razorpay(options);
+  instance.on('payment.failed',()=>{alert('Payment failed or was cancelled. You can retry from the same lab order.');$('loadDashboard').click();});
+  instance.open();
+  button.disabled=false;button.textContent='Continue payment';
+ }catch(error){alert(error.message);button.disabled=false;button.textContent='Pay now';}
+}
+$('dashboardGrid').addEventListener('click',event=>{
+ const button=event.target.closest('[data-pay-lab-order]');
+ if(button)startLabOrderPayment(Number(button.dataset.payLabOrder),button);
+});
+$('loadDashboard').onclick=async()=>{
+ if(!authToken){$('dashboardGrid').innerHTML='<div class="card">Please login first.</div>';return}
+ const p=encodeURIComponent(authPhone),g=$('dashboardGrid');g.innerHTML='<div class="loading">Loading your care records…</div>';
+ try{
+  const [a,pr,h,l,pay]=await Promise.all([
+   api('/api/appointments?phone='+p),api('/api/prescriptions?phone='+p),
+   api('/api/health-records?phone='+p),api('/api/lab-orders?phone='+p),
+   api('/api/payments?phone='+p)
+  ]);
+  const paymentsByLab=new Map(pay.filter(item=>item.lab_order_id).map(item=>[String(item.lab_order_id),item]));
+  g.innerHTML=renderDashboardSection('Appointments',a,v=>'<div class="dashboard-item"><strong>#'+esc(v.id)+' · '+esc(v.doctor_name||'Doctor')+'</strong><span>'+esc(v.appointment_at||'Date not set')+' · '+esc(v.status||'scheduled')+'</span></div>')+
+   renderDashboardSection('Prescriptions',pr,v=>'<div class="dashboard-item"><strong>'+esc(v.diagnosis||'Prescription')+'</strong><span>'+esc(v.prescribed_at||v.created_at||'')+'</span></div>')+
+   renderDashboardSection('Health Records',h,v=>'<div class="dashboard-item"><strong>'+esc(v.title||v.record_type||'Health record')+'</strong><span>'+esc(v.record_date||v.created_at||'')+'</span></div>')+
+   renderDashboardSection('Lab Orders',l,v=>{
+    const payment=paymentsByLab.get(String(v.id));
+    const amount=v.amount==null?null:Number(v.amount);
+    const closed=['completed','cancelled'].includes(v.status);
+    const canPay=amount>0&&!closed&&payment?.status!=='paid';
+    const paymentLabel=payment?.status==='paid'?' · Paid':payment?.status==='pending'?' · Payment pending':payment?.status==='failed'?' · Previous attempt failed':'';
+    const price=amount>0?(' · ₹'+amount.toFixed(2)):' · Price awaiting admin confirmation';
+    return '<div class="dashboard-item"><strong>#'+esc(v.id)+' · '+esc(v.test_name||'Lab test')+'</strong><span>'+esc(v.status||'booked')+esc(price)+esc(paymentLabel)+'</span>'+(canPay?'<button type="button" class="secondary" data-pay-lab-order="'+Number(v.id)+'">'+(payment?'Continue payment':'Pay now')+'</button>':'')+'</div>';
+   })+
+   renderDashboardSection('Payments',pay,v=>'<div class="dashboard-item"><strong>'+esc(v.currency||'INR')+' '+esc(v.amount??'')+'</strong><span>'+esc(v.status||'created')+'</span></div>');
+ }catch(e){g.innerHTML='<div class="card">Dashboard load failed: '+esc(e.message)+'</div>'}
+};
 $('dashboardHospitalBtn').onclick=async()=>{const lat=$('dashboardLat').value.trim(),lng=$('dashboardLng').value.trim(),out=$('dashboardHospitalList');if(!lat||!lng){out.innerHTML='<p class="muted">Enter both latitude and longitude.</p>';return}out.innerHTML='<p class="loading">Loading nearby hospitals…</p>';try{const d=await api('/api/hospitals/nearby?latitude='+encodeURIComponent(lat)+'&longitude='+encodeURIComponent(lng));out.innerHTML=d.hospitals?.length?d.hospitals.slice(0,5).map(h=>'<div class="dashboard-item"><strong>'+esc(h.name||'Hospital')+'</strong><span>'+esc(h.address||'')+(h.distanceKm!=null?' · '+esc(h.distanceKm)+' km away':'')+(h.phone?' · '+esc(h.phone):'')+'</span></div>').join(''):'<p class="muted">No hospitals found for this location.</p>'}catch(e){out.innerHTML='<p class="muted">'+esc(e.message)+'</p>'}};
 $('aiBtn').onclick=async()=>{const s=$('symptoms').value.trim();if(!s){$('aiResult').textContent='Please enter a symptom or question.';return}$('aiResult').textContent='Checking AI guidance service…';try{const d=await api('/api/ai/symptom-guidance',{method:'POST',body:JSON.stringify({symptoms:s})});$('aiResult').textContent=(d.guidance||'No guidance returned.')+'\n\n'+(d.disclaimer||'AI guidance is informational and does not replace a qualified clinician or emergency care.')}catch(e){$('aiResult').textContent='AI guidance is not configured yet. Please consult a qualified clinician; for severe or life-threatening symptoms, seek emergency care immediately.'}};
 $('labForm').addEventListener('submit',async e=>{e.preventDefault();if(!authToken){$('labResult').textContent='Please login before booking a lab test.';return}try{const r=await api('/api/lab-orders',{method:'POST',body:JSON.stringify({phone:authPhone,patientName:$('labPatient').value,testName:$('labName').value})});$('labResult').textContent='Lab order created: '+(r.id||'success')}catch(x){$('labResult').textContent=x.message}});

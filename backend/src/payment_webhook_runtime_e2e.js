@@ -1,0 +1,155 @@
+'use strict';
+
+const assert = require('node:assert/strict');
+const crypto = require('node:crypto');
+const { Client } = require('pg');
+
+async function main() {
+  if (process.env.GITHUB_ACTIONS !== 'true' || process.env.PAYMENT_WEBHOOK_E2E_CI !== '1') {
+    throw new Error('Payment webhook E2E is restricted to the disposable GitHub Actions database.');
+  }
+  if (!process.env.DATABASE_URL || !process.env.PAYMENT_WEBHOOK_SECRET || !process.env.PHARMACY_E2E_BASE_URL) {
+    throw new Error('DATABASE_URL, PAYMENT_WEBHOOK_SECRET and PHARMACY_E2E_BASE_URL are required.');
+  }
+  const databaseUrl = new URL(process.env.DATABASE_URL);
+  if (!['127.0.0.1', 'localhost', '::1'].includes(databaseUrl.hostname) ||
+      databaseUrl.pathname.replace(/^\//, '') !== 'ayansha_healthcare') {
+    throw new Error('Refusing to run payment webhook E2E outside the disposable local CI database.');
+  }
+
+  const baseUrl = process.env.PHARMACY_E2E_BASE_URL;
+  const secret = process.env.PAYMENT_WEBHOOK_SECRET;
+  const phone = '+919988770001';
+  const orderId = 'order_ci_razorpay_001';
+  const providerPaymentId = 'pay_ci_razorpay_001';
+
+  async function request(route, options = {}) {
+    const headers = { ...(options.headers || {}) };
+    if (options.body !== undefined) headers['Content-Type'] = 'application/json';
+    const response = await fetch(new URL(route, baseUrl), {
+      method: options.method || 'GET',
+      headers,
+      body: options.body === undefined ? undefined : JSON.stringify(options.body)
+    });
+    const raw = await response.text();
+    let body = null;
+    try { body = raw ? JSON.parse(raw) : null; } catch (_) { body = { raw }; }
+    return { status: response.status, body };
+  }
+
+  const otpResponse = await request('/api/auth/request-otp', { method: 'POST', body: { phone } });
+  assert.equal(otpResponse.status, 200);
+  assert.match(otpResponse.body.devOtp, /^[0-9]{6}$/);
+  const login = await request('/api/auth/verify-otp', {
+    method: 'POST', body: { phone, otp: otpResponse.body.devOtp, name: 'CI Payment Patient' }
+  });
+  assert.equal(login.status, 200);
+  const auth = { Authorization: `Bearer ${login.body.token}` };
+
+  const labOrder = await request('/api/lab-orders', {
+    method: 'POST', headers: auth,
+    body: { phone, testName: 'CI Payment Webhook Test', amount: 99999 }
+  });
+  assert.equal(labOrder.status, 201);
+  assert.equal(labOrder.body.amount, null, 'patient-supplied price must be ignored');
+
+  const anonymousIntegrationStatus = await request('/api/admin/integrations/status');
+  assert.equal(anonymousIntegrationStatus.status, 401, 'integration readiness must be admin-only');
+
+  const anonymousLabQueue = await request('/api/admin/lab-orders');
+  assert.equal(anonymousLabQueue.status, 401, 'admin lab billing queue must be protected');
+  const patientCannotSetPrice = await request('/api/admin/lab-orders/' + labOrder.body.id + '/amount', {
+    method: 'PATCH', headers: auth, body: { amount: 1 }
+  });
+  assert.equal(patientCannotSetPrice.status, 401, 'a patient session must not set lab pricing');
+
+  const adminLogin = await request('/api/admin/login', {
+    method: 'POST',
+    body: { email: process.env.ADMIN_EMAIL, password: process.env.ADMIN_PASSWORD }
+  });
+  assert.equal(adminLogin.status, 200, 'CI admin login should succeed');
+  const adminAuth = { Authorization: 'Bearer ' + adminLogin.body.token };
+  const integrations = await request('/api/admin/integrations/status', { headers: adminAuth });
+  assert.equal(integrations.status, 200);
+  assert.deepEqual(Object.keys(integrations.body).sort(), ['ai', 'insurance', 'whatsapp']);
+  assert.equal(typeof integrations.body.ai.configured, 'boolean');
+  assert.equal(typeof integrations.body.whatsapp.configured, 'boolean');
+  assert.equal(integrations.body.whatsapp.deliveryVerified, false);
+  assert.equal(typeof integrations.body.insurance.privateStorageConfigured, 'boolean');
+  assert.equal(typeof integrations.body.insurance.malwareScannerConfigured, 'boolean');
+  assert.equal(typeof integrations.body.insurance.uploadPrerequisitesConfigured, 'boolean');
+  assert.equal(JSON.stringify(integrations.body).includes('secret'), false);
+  const quote = await request('/api/admin/lab-orders/' + labOrder.body.id + '/amount', {
+    method: 'PATCH', headers: adminAuth, body: { amount: 125.5 }
+  });
+  assert.equal(quote.status, 200, 'Admin should set a verified lab quote');
+  assert.equal(Number(quote.body.amount), 125.5);
+
+  const createdPayment = await request('/api/lab-orders/' + labOrder.body.id + '/payment', {
+    method: 'POST', headers: auth, body: { amount: 1 }
+  });
+  assert.equal(createdPayment.status, 200, 'patient payment should be created from saved lab quote');
+  assert.equal(Number(createdPayment.body.amount), 125.5, 'payment must use Admin-set price, never client amount');
+  const priceLock = await request('/api/admin/lab-orders/' + labOrder.body.id + '/amount', {
+    method: 'PATCH', headers: adminAuth, body: { amount: 200 }
+  });
+  assert.equal(priceLock.status, 409, 'price must lock after a payment record exists');
+
+  const internalPaymentId = createdPayment.body.id;
+
+  const db = new Client({ connectionString: process.env.DATABASE_URL });
+  await db.connect();
+  try {
+    const result = await db.query(
+      "UPDATE payments SET provider = 'razorpay', provider_order_id = $1, status = 'pending' WHERE id = $2 RETURNING id",
+      [orderId, internalPaymentId]
+    );
+    assert.equal(result.rowCount, 1);
+  } finally {
+    await db.end();
+  }
+
+  const makeEvent = (eventType, status, amount = 12550) => ({
+    entity: 'event',
+    event: eventType,
+    contains: ['payment'],
+    payload: { payment: { entity: {
+      id: providerPaymentId, entity: 'payment', order_id: orderId, amount,
+      currency: 'INR', status, captured: status === 'captured'
+    } } }
+  });
+  async function sendEvent(event, signatureOverride) {
+    const rawBody = Buffer.from(JSON.stringify(event), 'utf8');
+    const signature = signatureOverride || crypto.createHmac('sha256', secret).update(rawBody).digest('hex');
+    const response = await fetch(new URL('/api/payments/webhook', baseUrl), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-Razorpay-Signature': signature },
+      body: rawBody
+    });
+    return { status: response.status, body: await response.json().catch(() => ({})) };
+  }
+
+  assert.equal((await sendEvent(makeEvent('payment.captured', 'captured'), '0'.repeat(64))).status, 401);
+  assert.equal((await sendEvent(makeEvent('payment.captured', 'captured', 9999))).status, 422);
+  const captured = await sendEvent(makeEvent('payment.captured', 'captured'));
+  assert.equal(captured.status, 200);
+  assert.equal(captured.body.payment.status, 'paid');
+  assert.equal(captured.body.payment.provider_payment_id, providerPaymentId);
+
+  const duplicate = await sendEvent(makeEvent('payment.captured', 'captured'));
+  assert.equal(duplicate.status, 200);
+  assert.equal(duplicate.body.duplicate, true);
+  const lateFailure = await sendEvent(makeEvent('payment.failed', 'failed'));
+  assert.equal(lateFailure.status, 200);
+  assert.equal(lateFailure.body.ignored, true);
+
+  const payments = await request(`/api/payments?phone=${encodeURIComponent(phone)}`, { headers: auth });
+  assert.equal(payments.status, 200);
+  assert.equal(payments.body.find(item => item.id === internalPaymentId).status, 'paid');
+  console.log('Razorpay webhook E2E passed: raw-body signature, order/amount/currency match, capture, duplicate and late-failure handling.');
+}
+
+main().catch(error => {
+  console.error(error.message);
+  process.exitCode = 1;
+});

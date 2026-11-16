@@ -1,5 +1,5 @@
 const { getDb } = require('./db');
-const { validatePaymentInput, validateStatusTransition } = require('./phase5_payment_validation');
+const { validatePaymentInput, validateStatusTransition, getAllowedCurrentStatuses } = require('./phase5_payment_validation');
 
 async function listPayments(phone) {
   const db = await getDb();
@@ -27,6 +27,17 @@ async function getPaymentById(id) {
       FROM payments pay
       JOIN patients p ON p.id = pay.patient_id
      WHERE pay.id = $1`, [id]);
+  return rows[0] || null;
+}
+
+async function findPaymentByProviderOrderId(providerOrderId) {
+  const db = await getDb();
+  if (!db) return null;
+  const { rows } = await db.query(`
+    SELECT id, amount, currency, provider, provider_order_id, provider_payment_id, status
+      FROM payments
+     WHERE provider = 'razorpay' AND provider_order_id = $1
+  `, [providerOrderId]);
   return rows[0] || null;
 }
 
@@ -126,18 +137,44 @@ async function createPayment(data) {
   }
 }
 
-async function updatePaymentStatus(id, status, providerPaymentId) {
+async function createPaymentForLabOrder(phone, labOrderId) {
   const db = await getDb();
   if (!db) return null;
-  const current = await db.query('SELECT status FROM payments WHERE id = $1', [id]);
-  if (!current.rowCount) {
-    const error = new Error('Payment not found');
+  const { rows } = await db.query(
+    'SELECT lo.id, lo.amount, lo.status, p.phone FROM lab_orders lo JOIN patients p ON p.id = lo.patient_id WHERE lo.id = $1 AND p.phone = $2',
+    [labOrderId, phone]
+  );
+  if (!rows.length) {
+    const error = new Error('Lab order not found');
     error.statusCode = 404;
     throw error;
   }
-  const validationError = validateStatusTransition(current.rows[0].status, status);
-  if (validationError) {
-    const error = new Error(validationError);
+  const order = rows[0];
+  if (['cancelled', 'completed'].includes(order.status)) {
+    const error = new Error('This lab order is closed and cannot be paid');
+    error.statusCode = 409;
+    throw error;
+  }
+  const amount = Number(order.amount);
+  if (!Number.isFinite(amount) || amount <= 0) {
+    const error = new Error('Lab order price has not been set by the admin yet');
+    error.statusCode = 422;
+    throw error;
+  }
+  return createPayment({
+    phone,
+    labOrderId: Number(order.id),
+    amount,
+    currency: 'INR',
+    idempotencyKey: 'lab-order-' + Number(order.id)
+  });
+}
+async function updatePaymentStatus(id, status, providerPaymentId) {
+  const db = await getDb();
+  if (!db) return null;
+  const allowedCurrentStatuses = getAllowedCurrentStatuses(status);
+  if (!allowedCurrentStatuses.length) {
+    const error = new Error('invalid payment status');
     error.statusCode = 422;
     throw error;
   }
@@ -146,12 +183,22 @@ async function updatePaymentStatus(id, status, providerPaymentId) {
        SET status = $1,
            provider_payment_id = COALESCE($2, provider_payment_id),
            updated_at = NOW()
-     WHERE id = $3
+     WHERE id = $3 AND status = ANY($4::varchar[])
      RETURNING id, patient_id, appointment_id, lab_order_id, amount, currency, provider,
                provider_order_id, provider_payment_id, idempotency_key, status, notes, created_at, updated_at`,
-    [status, providerPaymentId || null, id]
+    [status, providerPaymentId || null, id, allowedCurrentStatuses]
   );
-  return rows[0];
+  if (rows[0]) return rows[0];
+  const current = await db.query('SELECT status FROM payments WHERE id = $1', [id]);
+  if (!current.rowCount) {
+    const error = new Error('Payment not found');
+    error.statusCode = 404;
+    throw error;
+  }
+  const validationError = validateStatusTransition(current.rows[0].status, status);
+  const error = new Error(validationError || 'Payment state changed during verification');
+  error.statusCode = 422;
+  throw error;
 }
 
-module.exports = { listPayments, getPaymentById, setProviderOrderId, createPayment, updatePaymentStatus };
+module.exports = { listPayments, getPaymentById, findPaymentByProviderOrderId, setProviderOrderId, createPayment, createPaymentForLabOrder, updatePaymentStatus };
