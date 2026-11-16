@@ -1,0 +1,40 @@
+# Ayansha Health Care — isolated Staging only.
+# This file does not provision anything until its Blueprint is explicitly synced in Render.
+# Do not point this environment at Railway Production or import identifiable clinical data.
+
+databases:
+  - name: ayansha-health-care-staging-db
+    databaseName: ayansha_health_care_staging
+    user: ayansha_staging_app
+    postgresMajorVersion: "18"
+    region: singapore
+    plan: 0.1c-256mb
+    ipAllowList: []
+
+services:
+  - type: web
+    name: ayansha-health-care-staging-api
+    runtime: docker
+    repo: https://github.com/ayanshaagency-spec/automatic-octo-umbrella
+    branch: staging/auth-abuse-protection-with-role-portal
+    region: singapore
+    plan: 0.5c-512mb
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
+    numInstances: 1
+    autoDeployTrigger: off
+    healthCheckPath: /health
+    preDeployCommand: node scripts/render-predeploy.js
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: DATABASE_URL
+        fromDatabase:
+          name: ayansha-health-care-staging-db
+          property: connectionString
+      - key: JWT_SECRET
+        generateValue: true
+      - key: ADMIN_EMAIL
+        sync: false
+      - key: ADMIN_PASSWORD
+        sync: false
