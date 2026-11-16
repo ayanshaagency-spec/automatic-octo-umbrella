@@ -2,6 +2,8 @@ const crypto = require('crypto');
 
 const otpStore = new Map();
 const isProduction = () => process.env.NODE_ENV === 'production';
+const isStagingTestOtpEnabled = () =>
+  process.env.APP_ENV === 'staging' && process.env.ENABLE_TEST_OTP === 'true';
 const base64url = (value) => Buffer.from(value).toString('base64url');
 const safeEqual = (a, b) => {
   const left = Buffer.from(String(a));
@@ -9,29 +11,22 @@ const safeEqual = (a, b) => {
   return left.length === right.length && crypto.timingSafeEqual(left, right);
 };
 
-// This repository has no production SMS adapter yet. Fail closed rather than
-// generating a patient OTP that is exposed by the API response.
+// Test OTP is allowed only when both staging-only flags are explicitly set.
+// Production remains closed even if ENABLE_TEST_OTP is accidentally enabled.
 const issueOtp = (phone) => {
-  if (isProduction()) return null;
-  if (typeof phone !== 'string' || !phone.trim()) return null;
+  if (!isStagingTestOtpEnabled()) return null;
+  if (typeof phone !== 'string' || !/^\+?[1-9]\d{7,14}$/.test(phone.trim())) return null;
   const otp = String(crypto.randomInt(100000, 1000000));
   otpStore.set(phone, { otp, expiresAt: Date.now() + 5 * 60 * 1000 });
   return otp;
 };
 
 const verifyOtp = (phone, otp) => {
-  if (isProduction()) return false;
+  if (!isStagingTestOtpEnabled()) return false;
   const record = otpStore.get(phone);
   if (!record || record.expiresAt < Date.now() || record.otp !== String(otp)) return false;
   otpStore.delete(phone);
   return true;
-};
-
-const createDevToken = (phone) => {
-  if (isProduction()) throw new Error('Development tokens are disabled in production');
-  const header = base64url(JSON.stringify({ alg: 'HS256', typ: 'JWT' }));
-  const payload = base64url(JSON.stringify({ sub: phone, iat: Math.floor(Date.now() / 1000), exp: Math.floor(Date.now() / 1000) + 3600 }));
-  return `${header}.${payload}.development-only`;
 };
 
 const createAccessToken = (phone) => {
@@ -43,6 +38,11 @@ const createAccessToken = (phone) => {
   const unsigned = `${header}.${payload}`;
   const signature = crypto.createHmac('sha256', secret).update(unsigned).digest('base64url');
   return `${unsigned}.${signature}`;
+};
+
+const createDevToken = (phone) => {
+  if (!isStagingTestOtpEnabled()) throw new Error('Staging test tokens are disabled');
+  return createAccessToken(phone);
 };
 
 const verifyAccessToken = (token) => {
