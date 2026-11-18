@@ -28,7 +28,7 @@ function createTransactionPool() {
     connect: async () => client,
     async query(sql) { poolCalls.push(sql); throw new Error('transaction queries must not run on the shared pool'); }
   };
-  return { pool, poolCalls, clientCalls, get released() { return released; };
+  return { pool, poolCalls, clientCalls, get released() { return released; } };
 }
 
 test('prescription transaction uses a dedicated client and releases it after commit', async () => {
