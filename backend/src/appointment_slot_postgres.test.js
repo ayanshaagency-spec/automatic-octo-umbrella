@@ -8,7 +8,9 @@ test('PostgreSQL enforces one active doctor slot and permits rebooking after can
     return;
   }
   const db = new Client({ connectionString: process.env.DATABASE_URL });
-  await db.connect();
+  const contenderA = new Client({ connectionString: process.env.DATABASE_URL });
+  const contenderB = new Client({ connectionString: process.env.DATABASE_URL });
+  await Promise.all([db.connect(), contenderA.connect(), contenderB.connect()]);
   const suffix = `ci-slot-${Date.now()}-${Math.floor(Math.random()*100000)}`;
   let doctorId, patientA, patientB;
   const slot = new Date(Date.now() + 48 * 60 * 60 * 1000).toISOString();
@@ -26,25 +28,25 @@ test('PostgreSQL enforces one active doctor slot and permits rebooking after can
       ['CI Patient B', suffix + '-b']
     )).rows[0].id;
 
-    const insert = (patientId) => db.query(
+    const insert = (client, patientId) => client.query(
       `INSERT INTO appointments(patient_id,doctor_id,appointment_at,mode,status)
        VALUES($1,$2,$3,'Video','confirmed') RETURNING id`,
       [patientId, doctorId, slot]
     );
-    const outcomes = await Promise.allSettled([insert(patientA), insert(patientB)]);
+    const outcomes = await Promise.allSettled([insert(contenderA, patientA), insert(contenderB, patientB)]);
     assert.equal(outcomes.filter(o => o.status === 'fulfilled').length, 1);
     const rejected = outcomes.find(o => o.status === 'rejected');
     assert.equal(rejected.reason.code, '23505');
 
     const winner = outcomes.find(o => o.status === 'fulfilled').value.rows[0];
     await db.query('UPDATE appointments SET status = $1 WHERE id = $2', ['cancelled', winner.id]);
-    const rebook = await insert(patientB);
+    const rebook = await insert(db, patientB);
     assert.ok(rebook.rows[0].id, 'cancelled slot should be bookable again');
   } finally {
     if (doctorId) await db.query('DELETE FROM appointments WHERE doctor_id = $1', [doctorId]);
     if (patientA) await db.query('DELETE FROM patients WHERE id = $1', [patientA]);
     if (patientB) await db.query('DELETE FROM patients WHERE id = $1', [patientB]);
     if (doctorId) await db.query('DELETE FROM doctors WHERE id = $1', [doctorId]);
-    await db.end();
+    await Promise.all([db.end(), contenderA.end(), contenderB.end()]);
   }
 });
