@@ -26,3 +26,14 @@ Scope: Read-only code review; no production changes.
 ## Status
 
 No production database, Railway service, live deployment, or data has been modified by this audit.
+
+
+## Recovery-branch remediation status (2026-11-18)
+
+- Added test-first coverage for concurrent slot booking and dedicated-client prescription transactions. The test-first commit intentionally exposed the existing booking conflict mapping and transaction-client problems in isolated CI.
+- Replaced the single PostgreSQL client with a pg.Pool so transaction code can acquire dedicated clients while existing non-transactional queries still use pool.query.
+- Appointment inserts now translate PostgreSQL unique-constraint violations (23505) into HTTP 409 conflicts.
+- Added backend/db/migrations/004_appointment_slot_uniqueness.sql. It performs a duplicate-active-slot preflight and raises an exception if existing active duplicates are found, then creates a partial unique index excluding cancelled bookings.
+- Added isolated PostgreSQL integration test for simultaneous inserts and rebooking a cancelled slot.
+- Production duplicates are NOT scanned: live Railway access remains prohibited. The migration guard is therefore the safety check that will stop the migration if active duplicates exist.
+- CI runs against its own PostgreSQL service only; CI success does not establish production DB health.
