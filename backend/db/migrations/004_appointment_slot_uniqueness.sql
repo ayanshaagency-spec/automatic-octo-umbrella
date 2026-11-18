@@ -16,4 +16,4 @@ END $$;
 
 CREATE UNIQUE INDEX IF NOT EXISTS appointments_active_doctor_slot_unique
   ON appointments(doctor_id, appointment_at)
-  WHERE status <> 'cancelled';
+  WHERE status IS DISTINCT FROM 'cancelled';
