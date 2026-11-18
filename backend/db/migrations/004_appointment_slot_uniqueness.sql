@@ -6,7 +6,7 @@ BEGIN
   IF EXISTS (
     SELECT 1
       FROM appointments
-     WHERE status <> 'cancelled'
+     WHERE status IS DISTINCT FROM 'cancelled'
      GROUP BY doctor_id, appointment_at
     HAVING COUNT(*) > 1
   ) THEN
