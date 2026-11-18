@@ -92,13 +92,22 @@ async function createAppointment(data) {
      RETURNING id`, [data.patientName, data.phone]
   );
 
-  const { rows } = await db.query(
-    `INSERT INTO appointments (patient_id, doctor_id, appointment_at, mode, status)
-     VALUES ($1,$2,$3,$4,'confirmed')
-     RETURNING id, patient_id, doctor_id, appointment_at, mode, status`,
-    [patient.rows[0].id, data.doctorId, appointmentAt.toISOString(), mode]
-  );
-  return rows[0];
+  try {
+    const { rows } = await db.query(
+      `INSERT INTO appointments (patient_id, doctor_id, appointment_at, mode, status)
+       VALUES ($1,$2,$3,$4,'confirmed')
+       RETURNING id, patient_id, doctor_id, appointment_at, mode, status`,
+      [patient.rows[0].id, data.doctorId, appointmentAt.toISOString(), mode]
+    );
+    return rows[0];
+  } catch (error) {
+    if (error.code === '23505') {
+      const conflict = new Error('Selected appointment slot is already booked');
+      conflict.statusCode = 409;
+      throw conflict;
+    }
+    throw error;
+  }
 }
 
 
