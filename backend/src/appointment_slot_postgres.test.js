@@ -9,7 +9,7 @@ test('PostgreSQL enforces one active doctor slot and permits rebooking after can
   }
   const db = new Client({ connectionString: process.env.DATABASE_URL });
   await db.connect();
-  const suffix = `ci-slot-${Date.now()}-${Math.floor(Math.random()*100000)`;
+  const suffix = `ci-slot-${Date.now()}-${Math.floor(Math.random()*100000)}`;
   let doctorId, patientA, patientB;
   const slot = new Date(Date.now() + 48 * 60 * 60 * 1000).toISOString();
   try {
