@@ -68,7 +68,7 @@ test('concurrent same-slot appointment requests use separate transactions; one c
     createAppointment({ ...base, patientName: 'Patient A', phone: '9000000001' }),
     createAppointment({ ...base, patientName: 'Patient B', phone: '9000000002' })
   ]);
-  assert.equal(results.filter(r => r.status === 'fulfilled').length, 1, 'exactly one booking commits');
+  assert.equal(results.filter(r => r.status === 'fulfilled').length, 1, 'exactly one booking commits; outcomes: ' + JSON.stringify(results.map(r => r.status === 'rejected' ? { error: r.reason.message, code: r.reason.code, statusCode: r.reason.statusCode } : { value: r.value })));
   const failures = results.filter(r => r.status === 'rejected');
   assert.equal(failures.length, 1, 'competing booking is rejected');
   assert.equal(failures[0].reason.statusCode, 409, 'unique violation becomes HTTP conflict');
