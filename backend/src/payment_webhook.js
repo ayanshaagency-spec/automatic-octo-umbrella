@@ -35,4 +35,52 @@ function parseWebhookEvent(rawBody) {
   return event;
 }
 
-module.exports = { getWebhookSecret, verifyWebhookSignature, parseWebhookEvent };
+// Normalize only known Razorpay payment events. This helper does not persist
+// anything or authorize a status transition; callers must verify linkage,
+// amount/currency and transition rules against their database record.
+function normalizeRazorpayEvent(event) {
+  if (!event || typeof event !== 'object' || Array.isArray(event)) {
+    const error = new Error('Invalid webhook payload');
+    error.statusCode = 400;
+    throw error;
+  }
+
+  const payment = event.payload?.payment?.entity;
+  if (!payment || typeof payment !== 'object') {
+    const error = new Error('Missing Razorpay payment entity');
+    error.statusCode = 422;
+    throw error;
+  }
+
+  const mapping = {
+    'payment.captured': 'paid',
+    'payment.failed': 'failed'
+  };
+  const status = mapping[event.event];
+  if (!status) {
+    const error = new Error('Unsupported Razorpay payment event');
+    error.statusCode = 422;
+    throw error;
+  }
+
+  if (typeof payment.id !== 'string' || !payment.id.trim() ||
+      typeof payment.order_id !== 'string' || !payment.order_id.trim() ||
+      !Number.isSafeInteger(payment.amount) || payment.amount <= 0 ||
+      typeof payment.currency !== 'string' || !/^[A-Z]{3}$/.test(payment.currency)) {
+    const error = new Error('Invalid Razorpay payment entity');
+    error.statusCode = 422;
+    throw error;
+  }
+
+  return {
+    eventId: typeof event.id === 'string' && event.id.trim() ? event.id : null,
+    event: event.event,
+    status,
+    providerPaymentId: payment.id,
+    providerOrderId: payment.order_id,
+    amountMinor: payment.amount,
+    currency: payment.currency
+  };
+}
+
+module.exports = { getWebhookSecret, verifyWebhookSignature, parseWebhookEvent, normalizeRazorpayEvent };
