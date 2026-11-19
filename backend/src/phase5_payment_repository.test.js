@@ -146,3 +146,20 @@ test('Phase 5 payment repository: status lifecycle and invalid transition protec
     error => error.statusCode === 422 && /invalid payment status transition: refunded -> paid/.test(error.message)
   );
 });
+
+
+test('Phase 5 payment repository: idempotency key rejects mismatched immutable details', async () => {
+  const fakeDb = createPaymentDb();
+  const { createPayment } = installFakeDb(fakeDb);
+  const first = await createPayment({ phone: '9999999999', appointmentId: 41, amount: 499, currency: 'INR', idempotencyKey: 'checkout-conflict-1' });
+  await assert.rejects(
+    () => createPayment({ phone: '9999999999', appointmentId: 41, amount: 599, currency: 'INR', idempotencyKey: 'checkout-conflict-1' }),
+    error => error.statusCode === 409 && /different payment details/.test(error.message)
+  );
+  await assert.rejects(
+    () => createPayment({ phone: '9999999999', appointmentId: 42, amount: 499, currency: 'INR', idempotencyKey: 'checkout-conflict-1' }),
+    error => error.statusCode === 409 && /different payment details/.test(error.message)
+  );
+  assert.equal(fakeDb.payments.length, 1);
+  assert.equal(first.amount, 499);
+});

@@ -47,6 +47,32 @@ async function setProviderOrderId(id, provider, providerOrderId) {
   return rows[0] || null;
 }
 
+
+function assertIdempotentPaymentMatches(existing, data, patientId) {
+  const expected = {
+    patient_id: patientId,
+    appointment_id: data.appointmentId || null,
+    lab_order_id: data.labOrderId || null,
+    amount: Number(data.amount),
+    currency: data.currency || 'INR',
+    provider: data.provider || null
+  };
+  const actual = {
+    patient_id: existing.patient_id,
+    appointment_id: existing.appointment_id || null,
+    lab_order_id: existing.lab_order_id || null,
+    amount: Number(existing.amount),
+    currency: existing.currency || 'INR',
+    provider: existing.provider || null
+  };
+  if (Object.keys(expected).some(key => expected[key] !== actual[key])) {
+    const error = new Error('Idempotency key was already used with different payment details');
+    error.statusCode = 409;
+    throw error;
+  }
+  return existing;
+}
+
 async function createPayment(data) {
   const validationError = validatePaymentInput(data);
   if (validationError) {
@@ -96,7 +122,7 @@ async function createPayment(data) {
        WHERE patient_id = $1 AND idempotency_key = $2`,
       [patient.rows[0].id, data.idempotencyKey]
     );
-    if (existing.rowCount) return existing.rows[0];
+    if (existing.rowCount) return assertIdempotentPaymentMatches(existing.rows[0], data, patient.rows[0].id);
   }
 
   try {
@@ -120,7 +146,7 @@ async function createPayment(data) {
          WHERE patient_id = $1 AND idempotency_key = $2`,
         [patient.rows[0].id, data.idempotencyKey]
       );
-      if (existing.rowCount) return existing.rows[0];
+      if (existing.rowCount) return assertIdempotentPaymentMatches(existing.rows[0], data, patient.rows[0].id);
     }
     throw error;
   }
