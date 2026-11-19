@@ -167,17 +167,23 @@ async function updatePaymentStatus(id, status, providerPaymentId) {
     error.statusCode = 422;
     throw error;
   }
+  // Guard the write with the status observed above. This prevents concurrent
+  // webhook/API updates from overwriting a transition validated against stale state.
   const { rows } = await db.query(`
     UPDATE payments
        SET status = $1,
            provider_payment_id = COALESCE($2, provider_payment_id),
            updated_at = NOW()
-     WHERE id = $3
+     WHERE id = $3 AND status = $4
      RETURNING id, patient_id, appointment_id, lab_order_id, amount, currency, provider,
                provider_order_id, provider_payment_id, idempotency_key, status, notes, created_at, updated_at`,
-    [status, providerPaymentId || null, id]
+    [status, providerPaymentId || null, id, current.rows[0].status]
   );
-  return rows[0];
+  if (rows[0]) return rows[0];
+
+  const conflict = new Error('Payment status changed concurrently; retry with the latest status');
+  conflict.statusCode = 409;
+  throw conflict;
 }
 
 module.exports = { listPayments, getPaymentById, setProviderOrderId, createPayment, updatePaymentStatus };
