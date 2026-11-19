@@ -3,7 +3,7 @@ const { validateStatusTransition } = require('./phase5_payment_validation');
 
 function amountToMinorUnits(value) {
   const s = String(value);
-  if (!/^\\d+(\\.\\d{1,2})?$/.test(s)) return null;
+  if (!/^\d+(\.\d{1,2})?$/.test(s)) return null;
   const [whole, frac = ''] = s.split('.');
   const minor = Number(whole) * 100 + Number((frac + '00').slice(0, 2));
   return Number.isSafeInteger(minor) ? minor : null;
