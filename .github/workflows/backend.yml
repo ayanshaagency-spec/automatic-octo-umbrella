@@ -5,17 +5,40 @@ on:
     branches:
       - feat/phase5-payment-mvp
       - feat/phase6-emergency-hospitals
+      - recovery/backend-postgres-safe-fixes
   pull_request:
     branches:
       - feat/phase5-payment-mvp
       - feat/phase6-emergency-hospitals
+      - recovery/backend-postgres-safe-fixes
 
 jobs:
   test:
     runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: healthcare_ci
+          POSTGRES_PASSWORD: ci_only_password
+          POSTGRES_DB: healthcare_ci
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U healthcare_ci -d healthcare_ci"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
     defaults:
       run:
         working-directory: backend
+    env:
+      DATABASE_URL: postgresql://healthcare_ci:ci_only_password@localhost:5432/healthcare_ci
+      NODE_ENV: test
+      JWT_SECRET: ci-only-jwt-secret-long-enough-for-tests
+      PAYMENT_WEBHOOK_SECRET: ci-only-webhook-secret
+      PAYMENT_STATUS_ADMIN_TOKEN: ci-admin-token
+      CORS_ALLOWED_ORIGINS: http://allowed.example
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -25,5 +48,7 @@ jobs:
           node-version: 20
       - name: Install dependencies
         run: npm install
+      - name: Apply migrations to disposable CI database
+        run: npm run db:migrate
       - name: Run backend tests
         run: npm test
