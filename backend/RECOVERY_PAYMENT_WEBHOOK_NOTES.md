@@ -1,15 +1,7 @@
-# Payment webhook recovery notes
+# Webhook integration recovery notes
 
-## Verified helper scope
-The recovery branch now has an isolated Razorpay event normalization helper for the documented payment event shapes `payment.captured` and `payment.failed`. It extracts event ID, payment ID, provider order ID, amount in minor units, currency, and normalized status. Unit tests cover supported events and malformed/unsupported inputs.
+Razorpay payment webhook route verifies the raw-body signature before normalizing events. Processing links by provider order ID, validates provider/payment linkage, exact minor-unit amount and currency, locks the payment row, and records provider event IDs in a durable ledger within the same transaction as the status update.
 
-## Important limitation
-Normalization is not webhook processing. Before integration can safely update a payment row, the route must:
-- verify signature against the original raw request body;
-- load the linked payment by provider order ID and/or other trusted linkage;
-- compare provider payment/order IDs, amount in minor units and currency with the stored payment;
-- deduplicate event IDs durably;
-- apply an allowed, concurrency-safe transition;
-- respond idempotently to duplicate deliveries.
+Migration: `backend/db/migrations/003_payment_webhook_event_ledger.sql`.
 
-The current route remains on its existing generic webhook contract. The helper is intentionally not wired into the payment status route yet. No database migrations or production operations were performed.
+This migration has not been executed against any database. Tests and CI verification are pending. Do not use production credentials or data.
