@@ -171,13 +171,14 @@ test('Phase 5 API smoke/E2E contract', async t => {
   assert.equal(invalidSignature.status, 401);
   assert.equal((await invalidSignature.json()).error, 'Invalid webhook signature');
 
+  const validWebhookPayload = JSON.stringify({ id: 'evt_smoke_1', event: 'payment.captured', payload: { payment: { entity: { id: 'pay_smoke_1', order_id: 'order_smoke_1', amount: 10000, currency: 'INR' } } } });
   const validSignatureButUnavailable = await fetch(`${BASE_URL}/api/payments/webhook`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      'X-Payment-Signature': webhookSignature(JSON.stringify({ paymentId: 1, status: 'paid' }))
+      'X-Payment-Signature': webhookSignature(validWebhookPayload)
     },
-    body: JSON.stringify({ paymentId: 1, status: 'paid' })
+    body: validWebhookPayload
   });
   assert.equal(validSignatureButUnavailable.status, 503);
   assert.equal((await validSignatureButUnavailable.json()).error, 'DATABASE_URL not configured');
