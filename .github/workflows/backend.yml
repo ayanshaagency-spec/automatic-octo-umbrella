@@ -50,5 +50,7 @@ jobs:
         run: npm install
       - name: Apply migrations to disposable CI database
         run: npm run db:migrate
+      - name: Verify migrations are repeatable on disposable CI database
+        run: npm run db:migrate
       - name: Run backend tests
         run: npm test
