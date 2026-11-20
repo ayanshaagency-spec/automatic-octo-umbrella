@@ -27,6 +27,21 @@ test('OTP verification limits incorrect attempts', async () => {
   assert.equal(verifyOtp('+919777777777', issued.devOtp), false);
 });
 
+test('OTP expires after five minutes', async () => {
+  const originalNow = Date.now;
+  let now = originalNow();
+  Date.now = () => now;
+  try {
+    const phone = '+919555555555';
+    const issued = await issueOtp(phone);
+    assert.match(issued.devOtp, /^\\d{6}$/);
+    now += 5 * 60 * 1000 + 1;
+    assert.equal(verifyOtp(phone, issued.devOtp), false);
+  } finally {
+    Date.now = originalNow;
+  }
+});
+
 test('OTP request cooldown and rate limit are enforced', async () => {
   await issueOtp('+919666666666');
   await assert.rejects(issueOtp('+919666666666'), error => error.statusCode === 429);
