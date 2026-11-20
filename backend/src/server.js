@@ -30,7 +30,7 @@ function limited(req, key, limit, windowMs) {
   if (!record || now >= record.resetAt) { apiRateBuckets.set(key, {count:1,resetAt:now+windowMs}); return false; }
   if (record.count >= limit) return true; record.count += 1; return false;
 }
-function clientKey(req, route) { return route + ':' + (req.headers['x-forwarded-for']?.split(',')[0]?.trim() || req.socket.remoteAddress || 'unknown'); }
+function clientKey(req, route) { return route + ':' + (req.socket.remoteAddress || 'unknown'); }
 const MAX_JSON_BODY_BYTES = 1024 * 1024;
 const MAX_WEBHOOK_BODY_BYTES = 512 * 1024;
 const parseBody=(req,done)=>{let body='';let bytes=0;let finished=false;req.on('data',c=>{if(finished)return;bytes+=c.length;if(bytes>MAX_JSON_BODY_BYTES){finished=true;const e=new Error('Request body too large');e.statusCode=413;body='';req.removeAllListeners('data');req.resume();done(e);return;}body+=c;});req.on('end',()=>{if(finished)return;try{done(null,JSON.parse(body||'{}'));}catch(e){done(e);}});req.on('error',e=>{if(!finished){finished=true;done(e);}});};
