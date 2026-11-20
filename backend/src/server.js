@@ -21,7 +21,7 @@ const { getAiStatus, generateSymptomGuidance } = require('./ai');
 const { verifyAdminCredentials, createAdminToken, createDoctorToken, verifyRoleToken } = require('./roles');
 
 const configuredOrigins = (process.env.CORS_ALLOWED_ORIGINS || '').split(',').map(v => v.trim()).filter(Boolean);
-const isAllowedOrigin = origin => !origin || configuredOrigins.includes('*') || configuredOrigins.includes(origin) || (process.env.NODE_ENV !== 'production' && /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin));
+const isAllowedOrigin = origin => !origin || (process.env.NODE_ENV !== 'production' && configuredOrigins.includes('*')) || configuredOrigins.includes(origin) || (process.env.NODE_ENV !== 'production' && /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin));
 const send=(res,code,data,req)=>{const origin=req?.headers?.origin;if(isAllowedOrigin(origin)){res.setHeader('Access-Control-Allow-Origin',origin||'*');if(origin)res.setHeader('Vary','Origin');}res.setHeader('Access-Control-Allow-Methods','GET,POST,PATCH,OPTIONS');res.setHeader('Access-Control-Allow-Headers','Content-Type,Authorization,X-Payment-Signature');res.writeHead(code,{'Content-Type':'application/json'});res.end(JSON.stringify(data));};
 const MAX_JSON_BODY_BYTES = 1024 * 1024;
 const MAX_WEBHOOK_BODY_BYTES = 512 * 1024;
