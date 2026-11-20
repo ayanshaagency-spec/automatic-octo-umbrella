@@ -291,3 +291,46 @@ test('authenticated patient access and ownership contract', async t => {
   const invalidHospitalCoordinates = await fetch(`${BASE_URL}/api/hospitals/nearby?latitude=999&longitude=0`);
   assert.equal(invalidHospitalCoordinates.status, 422);
 });
+
+
+test('API per-IP rate limits reject excess patient/doctor OTP and admin attempts', async t => {
+  const server = startServer();
+  t.after(() => server.kill());
+  await waitForHealth(server);
+
+  const postJson = (route, body) => fetch(`${BASE_URL}${route}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body)
+  });
+
+  // Patient OTP request limit: use distinct phones so the per-phone cooldown is not hit.
+  for (let i = 1; i <= 5; i++) {
+    const response = await postJson('/api/auth/request-otp', { phone: `+91910000000${i}` });
+    assert.equal(response.status, 200);
+  }
+  assert.equal((await postJson('/api/auth/request-otp', { phone: '+919100000006' })).status, 429);
+
+  // Doctor OTP request rate limit is reached before the missing CI database is checked.
+  for (let i = 0; i < 5; i++) {
+    assert.equal((await postJson('/api/doctor/auth/request-otp', { phone: '+919200000001' })).status, 503);
+  }
+  assert.equal((await postJson('/api/doctor/auth/request-otp', { phone: '+919200000001' })).status, 429);
+
+  // Verification endpoints reject the eleventh attempt from the same client IP.
+  for (let i = 0; i < 10; i++) {
+    assert.equal((await postJson('/api/auth/verify-otp', { phone: '+919300000001', otp: '000000' })).status, 401);
+  }
+  assert.equal((await postJson('/api/auth/verify-otp', { phone: '+919300000001', otp: '000000' })).status, 429);
+
+  for (let i = 0; i < 10; i++) {
+    assert.equal((await postJson('/api/doctor/auth/verify-otp', { phone: '+919400000001', otp: '000000' })).status, 401);
+  }
+  assert.equal((await postJson('/api/doctor/auth/verify-otp', { phone: '+919400000001', otp: '000000' })).status, 429);
+
+  // Admin login rate limit: five failures, then a blocked sixth request.
+  for (let i = 0; i < 5; i++) {
+    assert.equal((await postJson('/api/admin/login', { email: 'admin@example.test', password: 'wrong-password' })).status, 401);
+  }
+  assert.equal((await postJson('/api/admin/login', { email: 'admin@example.test', password: 'wrong-password' })).status, 429);
+});
