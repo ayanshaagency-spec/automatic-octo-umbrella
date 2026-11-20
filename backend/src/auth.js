@@ -1,7 +1,13 @@
 const crypto = require('crypto');
 
 const otpStore = new Map();
+const otpRequestStore = new Map();
 const OTP_TTL_MS = 5 * 60 * 1000;
+const OTP_REQUEST_WINDOW_MS = 60 * 60 * 1000;
+const OTP_REQUEST_LIMIT = 5;
+const OTP_REQUEST_COOLDOWN_MS = 60 * 1000;
+const OTP_VERIFY_LIMIT = 5;
+const OTP_STORE_MAX = 10000;
 const TOKEN_TTL_SECONDS = 24 * 60 * 60;
 
 class AuthError extends Error {
@@ -92,8 +98,22 @@ async function issueOtp(phone) {
   if (!/^\+?[1-9]\d{9,14}$/.test(normalizedPhone)) {
     throw new AuthError('phone must be a valid international phone number', 422);
   }
+  const now = Date.now();
+  let requestRecord = otpRequestStore.get(normalizedPhone);
+  if (!requestRecord || now - requestRecord.windowStart >= OTP_REQUEST_WINDOW_MS) {
+    requestRecord = { windowStart: now, count: 0, lastRequestAt: 0 };
+  }
+  if (requestRecord.count >= OTP_REQUEST_LIMIT) throw new AuthError('OTP request limit reached; try again later', 429);
+  if (now - requestRecord.lastRequestAt < OTP_REQUEST_COOLDOWN_MS) throw new AuthError('Please wait before requesting another OTP', 429);
+  if (otpStore.size >= OTP_STORE_MAX && !otpStore.has(normalizedPhone)) {
+    for (const [key, value] of otpStore) if (value.expiresAt < now) otpStore.delete(key);
+    if (otpStore.size >= OTP_STORE_MAX) throw new AuthError('OTP service temporarily busy', 503);
+  }
+  requestRecord.count += 1;
+  requestRecord.lastRequestAt = now;
+  otpRequestStore.set(normalizedPhone, requestRecord);
   const otp = String(crypto.randomInt(100000, 1000000));
-  otpStore.set(normalizedPhone, { otp, expiresAt: Date.now() + OTP_TTL_MS });
+  otpStore.set(normalizedPhone, { otp, expiresAt: now + OTP_TTL_MS, attempts: 0 });
   try {
     const delivery = await sendOtp(normalizedPhone, otp);
     return { ...delivery, expiresInSeconds: OTP_TTL_MS / 1000 };
@@ -106,7 +126,13 @@ async function issueOtp(phone) {
 function verifyOtp(phone, otp) {
   const normalizedPhone = String(phone).trim();
   const record = otpStore.get(normalizedPhone);
-  if (!record || record.expiresAt < Date.now() || record.otp !== String(otp).trim()) return false;
+  if (!record || record.expiresAt < Date.now()) { otpStore.delete(normalizedPhone); return false; }
+  if (record.attempts >= OTP_VERIFY_LIMIT) { otpStore.delete(normalizedPhone); return false; }
+  if (record.otp !== String(otp).trim()) {
+    record.attempts += 1;
+    if (record.attempts >= OTP_VERIFY_LIMIT) otpStore.delete(normalizedPhone);
+    return false;
+  }
   otpStore.delete(normalizedPhone);
   return true;
 }
