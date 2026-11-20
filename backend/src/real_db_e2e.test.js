@@ -15,7 +15,7 @@ function isSafeE2eDatabaseUrl(value) {
   if (process.env.NODE_ENV === 'production' || !value) return false;
   try {
     const parsed = new URL(value);
-    const databaseName = decodeURIComponent(parsed.pathname.replace(/^\\/+/, ''));
+    const databaseName = decodeURIComponent(parsed.pathname.startsWith('/') ? parsed.pathname.slice(1) : parsed.pathname);
     return ['localhost', '127.0.0.1', '::1'].includes(parsed.hostname) && SAFE_TEST_DATABASES.has(databaseName);
   } catch {
     return false;
