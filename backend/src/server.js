@@ -26,7 +26,19 @@ const send=(res,code,data,req)=>{const origin=req?.headers?.origin;if(isAllowedO
 // Lightweight per-process abuse controls; production multi-instance deployments should use shared storage.
 const apiRateBuckets = new Map();
 function limited(req, key, limit, windowMs) {
-  const now = Date.now(); const record = apiRateBuckets.get(key);
+  const now = Date.now();
+  // Bound memory: prune expired buckets and evict oldest entries if needed.
+  if (apiRateBuckets.size >= 1000) {
+    for (const [bucketKey, bucket] of apiRateBuckets) {
+      if (now >= bucket.resetAt) apiRateBuckets.delete(bucketKey);
+    }
+    while (apiRateBuckets.size >= 1000) {
+      const oldestKey = apiRateBuckets.keys().next().value;
+      if (oldestKey === undefined) break;
+      apiRateBuckets.delete(oldestKey);
+    }
+  }
+  const record = apiRateBuckets.get(key);
   if (!record || now >= record.resetAt) { apiRateBuckets.set(key, {count:1,resetAt:now+windowMs}); return false; }
   if (record.count >= limit) return true; record.count += 1; return false;
 }
