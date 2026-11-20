@@ -9,6 +9,20 @@ const PHONE = '+919900000001';
 const DOCTOR_PHONE = '+919900000099';
 const JWT_SECRET = 'ci-real-e2e-jwt-secret-long-enough-for-hmac';
 
+const SAFE_TEST_DATABASES = new Set(['healthcare_ci', 'ayansha_healthcare']);
+
+function isSafeE2eDatabaseUrl(value) {
+  if (process.env.NODE_ENV === 'production' || !value) return false;
+  try {
+    const parsed = new URL(value);
+    const databaseName = decodeURIComponent(parsed.pathname.replace(/^\\/+/, ''));
+    return ['localhost', '127.0.0.1', '::1'].includes(parsed.hostname) && SAFE_TEST_DATABASES.has(databaseName);
+  } catch {
+    return false;
+  }
+}
+
+
 async function dbClient() {
   const client = new Client({ connectionString: process.env.DATABASE_URL });
   await client.connect();
@@ -48,6 +62,10 @@ async function waitForHealth(child) {
 test('real PostgreSQL patient journey E2E', async t => {
   if (!process.env.DATABASE_URL) {
     t.skip('DATABASE_URL is required for the real database E2E test');
+    return;
+  }
+  if (!isSafeE2eDatabaseUrl(process.env.DATABASE_URL)) {
+    t.skip('Destructive E2E cleanup is limited to known local CI databases; refusing remote or production targets');
     return;
   }
 
