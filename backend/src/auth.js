@@ -109,6 +109,10 @@ async function issueOtp(phone) {
     for (const [key, value] of otpStore) if (value.expiresAt < now) otpStore.delete(key);
     if (otpStore.size >= OTP_STORE_MAX) throw new AuthError('OTP service temporarily busy', 503);
   }
+  if (otpRequestStore.size >= OTP_STORE_MAX && !otpRequestStore.has(normalizedPhone)) {
+    for (const [key, value] of otpRequestStore) if (now - value.windowStart >= OTP_REQUEST_WINDOW_MS) otpRequestStore.delete(key);
+    if (otpRequestStore.size >= OTP_STORE_MAX) throw new AuthError('OTP service temporarily busy', 503);
+  }
   requestRecord.count += 1;
   requestRecord.lastRequestAt = now;
   otpRequestStore.set(normalizedPhone, requestRecord);
