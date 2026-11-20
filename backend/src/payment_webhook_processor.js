@@ -9,11 +9,11 @@ function amountToMinorUnits(value) {
   return Number.isSafeInteger(minor) ? minor : null;
 }
 
-async function processRazorpayWebhook(normalized) {
+async function processRazorpayWebhook(normalized, dbOverride = null) {
   if (!normalized || typeof normalized.eventId !== 'string' || !normalized.eventId.trim()) {
     const error = new Error('Webhook event ID is required for durable deduplication'); error.statusCode = 422; throw error;
   }
-  const db = await getDb();
+  const db = dbOverride || await getDb();
   if (!db) return null;
   const client = await db.connect();
   try {
