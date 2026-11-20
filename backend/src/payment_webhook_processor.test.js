@@ -92,7 +92,7 @@ test('webhook processor rejects provider payment ID mismatch', async () => {
 
 test('webhook processor rolls back on update failure', async () => {
   const fake=makeFakeDb({failUpdate:true});
-  await assert.rejects(processorModule.processRazorpayWebhook({
+  await assert.rejects(require('./payment_webhook_processor').processRazorpayWebhook({
     eventId:'evt_fail',event:'payment.captured',status:'paid',
     providerPaymentId:'pay_ci_1',providerOrderId:'order_ci_1',amountMinor:10000,currency:'INR'
   }, fake.db), /simulated update failure/);
