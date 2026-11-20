@@ -20,3 +20,14 @@ test('OTP cannot be reused', async () => {
   assert.equal(verifyOtp('+919888888888', issued.devOtp), true);
   assert.equal(verifyOtp('+919888888888', issued.devOtp), false);
 });
+
+test('OTP verification limits incorrect attempts', async () => {
+  const issued = await issueOtp('+919777777777');
+  for (let i = 0; i < 5; i++) assert.equal(verifyOtp('+919777777777', '000000'), false);
+  assert.equal(verifyOtp('+919777777777', issued.devOtp), false);
+});
+
+test('OTP request cooldown and rate limit are enforced', async () => {
+  await issueOtp('+919666666666');
+  await assert.rejects(issueOtp('+919666666666'), error => error.statusCode === 429);
+});
