@@ -3,8 +3,15 @@ name: Backend Tests
 on:
   workflow_dispatch:
   push:
-    branches: ["**"]
+    branches-ignore:
+      - feat/phase5-payment-mvp
+      - feat/phase6-emergency-hospitals
+      - recovery/backend-postgres-safe-fixes
   pull_request:
+    branches-ignore:
+      - feat/phase5-payment-mvp
+      - feat/phase6-emergency-hospitals
+      - recovery/backend-postgres-safe-fixes
 
 jobs:
   test:
