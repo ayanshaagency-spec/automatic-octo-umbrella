@@ -15,7 +15,7 @@ async function main() {
 
   const client = new Client({
     connectionString: databaseUrl,
-    ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false
+    ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: true } : false
   });
 
   await client.connect();
