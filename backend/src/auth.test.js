@@ -34,7 +34,7 @@ test('OTP expires after five minutes', async () => {
   try {
     const phone = '+919555555555';
     const issued = await issueOtp(phone);
-    assert.match(issued.devOtp, /^\\d{6}$/);
+    assert.match(issued.devOtp, /^\d{6}$/);
     now += 5 * 60 * 1000 + 1;
     assert.equal(verifyOtp(phone, issued.devOtp), false);
   } finally {
