@@ -23,6 +23,14 @@ const { verifyAdminCredentials, createAdminToken, createDoctorToken, verifyRoleT
 const configuredOrigins = (process.env.CORS_ALLOWED_ORIGINS || '').split(',').map(v => v.trim()).filter(Boolean);
 const isAllowedOrigin = origin => !origin || (process.env.NODE_ENV !== 'production' && configuredOrigins.includes('*')) || configuredOrigins.includes(origin) || (process.env.NODE_ENV !== 'production' && /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin));
 const send=(res,code,data,req)=>{const origin=req?.headers?.origin;if(isAllowedOrigin(origin)){res.setHeader('Access-Control-Allow-Origin',origin||'*');if(origin)res.setHeader('Vary','Origin');}res.setHeader('Access-Control-Allow-Methods','GET,POST,PATCH,OPTIONS');res.setHeader('Access-Control-Allow-Headers','Content-Type,Authorization,X-Payment-Signature');res.setHeader('X-Content-Type-Options','nosniff');res.setHeader('X-Frame-Options','DENY');res.setHeader('Referrer-Policy','no-referrer');res.setHeader('Cache-Control','no-store');res.writeHead(code,{'Content-Type':'application/json'});res.end(JSON.stringify(data));};
+// Lightweight per-process abuse controls; production multi-instance deployments should use shared storage.
+const apiRateBuckets = new Map();
+function limited(req, key, limit, windowMs) {
+  const now = Date.now(); const record = apiRateBuckets.get(key);
+  if (!record || now >= record.resetAt) { apiRateBuckets.set(key, {count:1,resetAt:now+windowMs}); return false; }
+  if (record.count >= limit) return true; record.count += 1; return false;
+}
+function clientKey(req, route) { return route + ':' + (req.headers['x-forwarded-for']?.split(',')[0]?.trim() || req.socket.remoteAddress || 'unknown'); }
 const MAX_JSON_BODY_BYTES = 1024 * 1024;
 const MAX_WEBHOOK_BODY_BYTES = 512 * 1024;
 const parseBody=(req,done)=>{let body='';let bytes=0;let finished=false;req.on('data',c=>{if(finished)return;bytes+=c.length;if(bytes>MAX_JSON_BODY_BYTES){finished=true;const e=new Error('Request body too large');e.statusCode=413;body='';req.removeAllListeners('data');req.resume();done(e);return;}body+=c;});req.on('end',()=>{if(finished)return;try{done(null,JSON.parse(body||'{}'));}catch(e){done(e);}});req.on('error',e=>{if(!finished){finished=true;done(e);}});};
@@ -52,13 +60,19 @@ const server=http.createServer(async(req,res)=>{
     }
   }
   if(url.pathname==='/api/ai/status'&&req.method==='GET')return send(res,200,getAiStatus(),req);
-  if(url.pathname==='/api/ai/symptom-guidance'&&req.method==='POST')return parseBody(req,async(err,data)=>{if(err)return send(res,400,{error:'Invalid JSON'},req);if(!data.symptoms||typeof data.symptoms!=='string')return send(res,422,{error:'symptoms is required'},req);try{const result=await generateSymptomGuidance(data.symptoms);return send(res,result.configured?200:503,result,req);}catch(e){return send(res,502,{error:'AI provider request failed'},req);}});
+  if(url.pathname==='/api/ai/symptom-guidance'&&req.method==='POST')return parseBody(req,async(err,data)=>{if(limited(req,clientKey(req,'ai-guidance'),10,60*1000))return send(res,429,{error:'Too many requests; try again later'},req);if(err)return send(res,400,{error:'Invalid JSON'},req);if(!data.symptoms||typeof data.symptoms!=='string')return send(res,422,{error:'symptoms is required'},req);const symptoms=data.symptoms.trim();if(!symptoms||symptoms.length>2000)return send(res,422,{error:'symptoms must be 1-2000 characters'},req);try{const result=await generateSymptomGuidance(symptoms);return send(res,result.configured?200:503,result,req);}catch(e){return send(res,502,{error:'AI provider request failed'},req);}});
   if(url.pathname==='/api/notifications/whatsapp/status'&&req.method==='GET')return send(res,200,whatsappStatus(),req);
   if(url.pathname==='/api/notifications/whatsapp'&&req.method==='POST')return parseBody(req,async(err,data)=>{
     const auth=requireAuth(req,res); if(!auth)return;
+    if(limited(req,clientKey(req,'whatsapp'),5,60*1000))return send(res,429,{error:'Too many requests; try again later'},req);
     if(err)return send(res,400,{error:'Invalid JSON'},req);
     if(!data.to||!data.text||!data.event)return send(res,422,{error:'to, text and event are required'},req);
-    return send(res,whatsappStatus().configured?200:503,await sendWhatsApp({to:data.to,text:data.text,event:data.event}),req);
+    const normalizePhone=value=>String(value).replace(/[^0-9]/g,'');
+    if(normalizePhone(data.to)!==normalizePhone(auth.sub))return send(res,403,{error:'WhatsApp destination must match authenticated patient'},req);
+    if(typeof data.text!=='string'||data.text.length>2000||typeof data.event!=='string'||data.event.length>100)return send(res,422,{error:'Invalid message or event length'},req);
+    const result=await sendWhatsApp({to:data.to,text:data.text,event:data.event});
+    if(result.data!==undefined){const {data:providerData,...safeResult}=result;return send(res,whatsappStatus().configured?200:503,safeResult,req);}
+    return send(res,whatsappStatus().configured?200:503,result,req);
   });
   if(url.pathname==='/health') return send(res,200,{ok:true,service:'Ayansha Health Care'},req);
   if(url.pathname==='/api/doctors'&&req.method==='GET'){try{const rows=await listDoctors();return send(res,200,rows||doctorsFallback,req);}catch(e){return send(res,503,{error:'Unable to load doctors'},req);}}
