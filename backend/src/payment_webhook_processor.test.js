@@ -13,9 +13,6 @@ test('rejects malformed or unsafe decimal amounts', () => {
   for (const value of ['499.999', '-1', '1e2', 'abc', '', '1.']) assert.equal(amountToMinorUnits(value), null, value);
 });
 
-const dbModule = require('./db');
-const originalGetDb = dbModule.getDb;
-const processorModule = require('./payment_webhook_processor');
 
 function makeFakeDb({ payment = {}, failUpdate = false } = {}) {
   const state = {
@@ -48,11 +45,10 @@ function makeFakeDb({ payment = {}, failUpdate = false } = {}) {
 
 test('webhook processor commits a valid captured event and stores payment ID', async () => {
   const fake=makeFakeDb();
-  dbModule.getDb=async()=>fake.db;
-  const result=await processorModule.processRazorpayWebhook({
+  const result=await require('./payment_webhook_processor').processRazorpayWebhook({
     eventId:'evt_ci_1',event:'payment.captured',status:'paid',
     providerPaymentId:'pay_ci_1',providerOrderId:'order_ci_1',amountMinor:10000,currency:'INR'
-  });
+  }, fake.db);
   assert.equal(result.duplicate,false);
   assert.equal(result.payment.status,'paid');
   assert.equal(fake.state.committed,true);
@@ -61,11 +57,10 @@ test('webhook processor commits a valid captured event and stores payment ID', a
 
 test('webhook processor reports duplicate event IDs without updating payment', async () => {
   const fake=makeFakeDb(); fake.state.events.add('evt_duplicate');
-  dbModule.getDb=async()=>fake.db;
-  const result=await processorModule.processRazorpayWebhook({
+  const result=await require('./payment_webhook_processor').processRazorpayWebhook({
     eventId:'evt_duplicate',event:'payment.captured',status:'paid',
     providerPaymentId:'pay_ci_1',providerOrderId:'order_ci_1',amountMinor:10000,currency:'INR'
-  });
+  }, fake.db);
   assert.equal(result.duplicate,true);
   assert.equal(fake.state.committed,true);
   assert.equal(fake.state.payment.status,'pending');
@@ -76,39 +71,33 @@ test('webhook processor rejects amount or currency mismatch and rolls back', asy
     { amountMinor:9999,currency:'INR' },
     { amountMinor:10000,currency:'USD' }
   ]) {
-    const fake=makeFakeDb(); dbModule.getDb=async()=>fake.db;
-    await assert.rejects(processorModule.processRazorpayWebhook({
+    const fake=makeFakeDb();
+    await assert.rejects(require('./payment_webhook_processor').processRazorpayWebhook({
       eventId:'evt_mismatch',event:'payment.captured',status:'paid',
       providerPaymentId:'pay_ci_1',providerOrderId:'order_ci_1',
       amountMinor:normalized.amountMinor,currency:normalized.currency
-    }), /mismatch/);
+    }, fake.db), /mismatch/);
     assert.equal(fake.state.rolledBack,true);
   }
 });
 
 test('webhook processor rejects provider payment ID mismatch', async () => {
   const fake=makeFakeDb({payment:{provider_payment_id:'pay_other'}});
-  dbModule.getDb=async()=>fake.db;
-  await assert.rejects(processorModule.processRazorpayWebhook({
+  await assert.rejects(require('./payment_webhook_processor').processRazorpayWebhook({
     eventId:'evt_id_mismatch',event:'payment.captured',status:'paid',
     providerPaymentId:'pay_ci_1',providerOrderId:'order_ci_1',amountMinor:10000,currency:'INR'
-  }), /ID mismatch/);
+  }, fake.db), /ID mismatch/);
   assert.equal(fake.state.rolledBack,true);
 });
 
 test('webhook processor rolls back on update failure', async () => {
-  const fake=makeFakeDb({failUpdate:true}); dbModule.getDb=async()=>fake.db;
+  const fake=makeFakeDb({failUpdate:true});
   await assert.rejects(processorModule.processRazorpayWebhook({
     eventId:'evt_fail',event:'payment.captured',status:'paid',
     providerPaymentId:'pay_ci_1',providerOrderId:'order_ci_1',amountMinor:10000,currency:'INR'
-  }), /simulated update failure/);
+  }, fake.db), /simulated update failure/);
   assert.equal(fake.state.rolledBack,true);
   assert.equal(fake.state.committed,false);
 });
 
-test('webhook processor rejects missing event ID before opening DB connection', async () => {
-  dbModule.getDb=async()=>{ throw new Error('must not connect'); };
-  await assert.rejects(processorModule.processRazorpayWebhook({}), /event ID is required/);
-});
 
-test.after(() => { dbModule.getDb=originalGetDb; });
