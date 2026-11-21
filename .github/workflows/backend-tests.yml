@@ -3,19 +3,23 @@ name: Backend Tests
 on:
   workflow_dispatch:
   push:
-    branches-ignore:
-      - feat/phase5-payment-mvp
-      - feat/phase6-emergency-hospitals
+    branches:
       - recovery/backend-postgres-safe-fixes
   pull_request:
-    branches-ignore:
-      - feat/phase5-payment-mvp
-      - feat/phase6-emergency-hospitals
+    branches:
       - recovery/backend-postgres-safe-fixes
+
+permissions:
+  contents: read
+
+concurrency:
+  group: backend-tests-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   test:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     services:
       postgres:
         image: postgres:16
