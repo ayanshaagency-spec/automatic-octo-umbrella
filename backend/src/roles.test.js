@@ -54,6 +54,15 @@ test('role-token verifier rejects missing, malformed, tampered, expired, wrong-r
   });
 });
 
+test('role-token verifier rejects unsupported JWT headers even with a valid HMAC', () => {
+  withEnv({ JWT_SECRET: SECRET }, () => {
+    const now = Math.floor(Date.now() / 1000);
+    const payload = { sub: 'admin@example.com', role: 'admin', iat: now, exp: now + 60 };
+    assert.equal(verifyRoleToken(sign(payload, SECRET, { alg: 'HS512', typ: 'JWT' }), 'admin'), null);
+    assert.equal(verifyRoleToken(sign(payload, SECRET, { alg: 'HS256', typ: 'OTHER' }), 'admin'), null);
+  });
+});
+
 test('role-token creation preserves JWT_SECRET strength validation', () => {
   withEnv({ JWT_SECRET: 'short' }, () => assert.throws(() => createAdminToken('admin@example.com'), /JWT_SECRET is not securely configured/));
 });
