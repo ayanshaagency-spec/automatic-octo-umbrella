@@ -14,6 +14,12 @@ This recovery branch contains implemented API modules and tests for authenticati
 
 Run commands from the `backend/` directory. Provide environment settings through your local/staging secret manager or environment, not tracked files.
 
+## Existing panel entry points
+- Patient panel: `/` (served from the existing `web/` directory).
+- Doctor panel: `/doctor-panel` (served from the existing `doctor-panel/` directory on the backend origin).
+- Admin panel: `/admin` (existing admin entry point).
+- API health check: `/health`; database health: `/api/db/health` (database health requires configured PostgreSQL).
+
 ## Safe client-demo guidance
 - Use an isolated demo/staging database and fictional test records only.
 - Do not run write workflows against production or a shared patient database.
