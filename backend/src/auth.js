@@ -136,7 +136,7 @@ function verifyOtp(phone, otp) {
   if (typeof phone !== 'string' || typeof otp !== 'string') return false;
   const normalizedPhone = phone.trim();
   const normalizedOtp = otp.trim();
-  if (!/^\\+?[1-9]\\d{9,14}$/.test(normalizedPhone) || !/^\\d{6}$/.test(normalizedOtp)) return false;
+  if (!/^\+?[1-9]\d{9,14}$/.test(normalizedPhone) || !/^\d{6}$/.test(normalizedOtp)) return false;
   const record = otpStore.get(normalizedPhone);
   if (!record || record.expiresAt < Date.now()) { otpStore.delete(normalizedPhone); return false; }
   if (record.attempts >= OTP_VERIFY_LIMIT) { otpStore.delete(normalizedPhone); return false; }
