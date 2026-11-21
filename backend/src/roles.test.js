@@ -66,3 +66,5 @@ test('role-token verifier rejects unsupported JWT headers even with a valid HMAC
 test('role-token creation preserves JWT_SECRET strength validation', () => {
   withEnv({ JWT_SECRET: 'short' }, () => assert.throws(() => createAdminToken('admin@example.com'), /JWT_SECRET is not securely configured/));
 });
+
+test('role token rejects missing and future issued-at claims', () => {\n  withEnv({ JWT_SECRET: SECRET }, () => {\n    const now = Math.floor(Date.now() / 1000);\n    assert.equal(verifyRoleToken(sign({ sub: 'admin@example.com', role: 'admin', exp: now + 60 }), 'admin'), null);\n    assert.equal(verifyRoleToken(sign({ sub: 'admin@example.com', role: 'admin', iat: now + 120, exp: now + 180 }), 'admin'), null);\n  });\n});\n
