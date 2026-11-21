@@ -49,12 +49,15 @@ function verifyToken(token) {
   if (typeof token !== 'string') return null;
   const parts = token.split('.');
   if (parts.length !== 3) return null;
+  let header;
   let payload;
   try {
+    header = JSON.parse(Buffer.from(parts[0], 'base64url').toString('utf8'));
     payload = JSON.parse(Buffer.from(parts[1], 'base64url').toString('utf8'));
   } catch {
     return null;
   }
+  if (header?.alg !== 'HS256' || header?.typ !== 'JWT') return null;
   if (!payload?.sub || !Number.isFinite(payload.exp) || payload.exp <= Math.floor(Date.now() / 1000)) return null;
   let expected;
   try {
