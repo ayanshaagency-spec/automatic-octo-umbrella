@@ -70,3 +70,22 @@ test('token verifier rejects missing or future issued-at claims', () => {
     assert.equal(verifyToken(input + '.' + signature), null);
   }
 });
+
+
+test('token verifier rejects invalid time relationships and non-numeric claims', () => {
+  process.env.JWT_SECRET = 'test-secret-that-is-long-enough-for-hmac-123456';
+  const now = Math.floor(Date.now() / 1000);
+  const b64 = value => Buffer.from(JSON.stringify(value)).toString('base64url');
+  const crypto = require('crypto');
+  const payloads = [
+    { sub: '+919999999999', iat: now, exp: now },
+    { sub: '+919999999999', iat: now - 60, exp: now - 1 },
+    { sub: '+919999999999', iat: 'invalid', exp: now + 60 },
+    { sub: '+919999999999', iat: now, exp: 'invalid' }
+  ];
+  for (const payload of payloads) {
+    const input = b64({ alg: 'HS256', typ: 'JWT' }) + '.' + b64(payload);
+    const signature = crypto.createHmac('sha256', process.env.JWT_SECRET).update(input).digest('base64url');
+    assert.equal(verifyToken(input + '.' + signature), null);
+  }
+});
