@@ -58,7 +58,7 @@ function verifyToken(token) {
     return null;
   }
   if (header?.alg !== 'HS256' || header?.typ !== 'JWT') return null;
-  if (!payload?.sub || !Number.isFinite(payload.exp) || payload.exp <= Math.floor(Date.now() / 1000)) return null;
+  const now = Math.floor(Date.now() / 1000);\n  if (!payload?.sub || !Number.isFinite(payload.iat) || payload.iat > now + 60 || !Number.isFinite(payload.exp) || payload.exp <= now || payload.exp <= payload.iat) return null;
   let expected;
   try {
     expected = sign(`${parts[0]}.${parts[1]}`, getJwtSecret());
