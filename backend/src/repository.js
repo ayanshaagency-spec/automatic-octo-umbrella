@@ -83,13 +83,13 @@ async function createAppointment(data) {
   }
 
   const appointmentAt = new Date(data.appointmentAt);
-  const pool = await getDb();
-  if (!pool) return null;
   if (Number.isNaN(appointmentAt.getTime()) || appointmentAt <= new Date()) {
     const error = new Error('appointmentAt must be a valid future date');
     error.statusCode = 422;
     throw error;
   }
+  const pool = await getDb();
+  if (!pool) return null;
 
   const client = await pool.connect();
   try {
