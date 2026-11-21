@@ -77,13 +77,16 @@ const server=http.createServer(async(req,res)=>{
     return send(res,404,{error:'Doctor panel file not found'},req);
   }
   if(req.method==='GET' && (url.pathname==='/' || url.pathname.startsWith('/web/'))){
-    const relative=url.pathname==='/'?'index.html':url.pathname.replace(/^\/web\//,'');
-    const file=path.join(__dirname,'../../web',relative);
-    if(file.startsWith(path.join(__dirname,'../../web')) && fs.existsSync(file) && fs.statSync(file).isFile()){
+    const relative=url.pathname==='/'?'index.html':url.pathname.slice('/web/'.length);
+    const webRoot=path.resolve(__dirname,'../../web');
+    const file=path.resolve(webRoot,relative);
+    if(file!==webRoot && !file.startsWith(webRoot+path.sep)) return send(res,400,{error:'Invalid web path'},req);
+    if(fs.existsSync(file) && fs.statSync(file).isFile()){
       const ext=path.extname(file).toLowerCase();
       const types={'.html':'text/html; charset=utf-8','.css':'text/css; charset=utf-8','.js':'text/javascript; charset=utf-8','.json':'application/json'};
-      res.writeHead(200,{'Content-Type':types[ext]||'application/octet-stream'}); return fs.createReadStream(file).pipe(res);
+      res.writeHead(200,{'Content-Type':types[ext]||'application/octet-stream','X-Content-Type-Options':'nosniff','Cache-Control':'no-store'}); return fs.createReadStream(file).pipe(res);
     }
+    return send(res,404,{error:'Web panel file not found'},req);
   }
   if(url.pathname==='/api/ai/status'&&req.method==='GET')return send(res,200,getAiStatus(),req);
   if(url.pathname==='/api/ai/symptom-guidance'&&req.method==='POST')return parseBody(req,async(err,data)=>{if(limited(req,clientKey(req,'ai-guidance'),10,60*1000))return send(res,429,{error:'Too many requests; try again later'},req);if(err)return send(res,400,{error:'Invalid JSON'},req);if(!data.symptoms||typeof data.symptoms!=='string')return send(res,422,{error:'symptoms is required'},req);const symptoms=data.symptoms.trim();if(!symptoms||symptoms.length>2000)return send(res,422,{error:'symptoms must be 1-2000 characters'},req);try{const result=await generateSymptomGuidance(symptoms);return send(res,result.configured?200:503,result,req);}catch(e){return send(res,502,{error:'AI provider request failed'},req);}});
