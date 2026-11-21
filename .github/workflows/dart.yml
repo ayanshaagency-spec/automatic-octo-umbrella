@@ -1,5 +1,8 @@
 name: Flutter Mobile App
 
+permissions:
+  contents: read
+
 on:
   workflow_dispatch:
   push:
