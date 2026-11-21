@@ -111,3 +111,15 @@ test('OTP provider request includes a bounded timeout signal', async () => {
     if (originalToken === undefined) delete process.env.OTP_PROVIDER_TOKEN; else process.env.OTP_PROVIDER_TOKEN = originalToken;
   }
 });
+
+
+test('OTP verifier rejects malformed phone and OTP inputs safely', async () => {
+  const issued = await issueOtp('+919333333333');
+  assert.equal(verifyOtp('+919333333333', issued.devOtp), true);
+  assert.equal(verifyOtp('+919333333333', issued.devOtp), false);
+  assert.equal(verifyOtp('+919333333333', {}), false);
+  assert.equal(verifyOtp({}, '123456'), false);
+  assert.equal(verifyOtp('bad-phone', '123456'), false);
+  assert.equal(verifyOtp('+919333333333', '12345'), false);
+  assert.equal(verifyOtp('+919333333333', 'abcdef'), false);
+});
