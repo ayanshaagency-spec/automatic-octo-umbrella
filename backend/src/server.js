@@ -62,6 +62,20 @@ const server=http.createServer(async(req,res)=>{
     }
     return send(res,503,{error:'Admin panel unavailable'},req);
   }
+  // Serve the existing doctor panel from this backend origin so its same-origin API default works.
+  if(req.method==='GET' && (url.pathname==='/doctor-panel' || url.pathname.startsWith('/doctor-panel/'))){
+    const relative=url.pathname==='/doctor-panel'?'index.html':url.pathname.slice('/doctor-panel/'.length);
+    const doctorRoot=path.resolve(__dirname,'../../doctor-panel');
+    const doctorFile=path.resolve(doctorRoot,relative);
+    if(doctorFile!==doctorRoot && !doctorFile.startsWith(doctorRoot+path.sep)) return send(res,400,{error:'Invalid panel path'},req);
+    if(fs.existsSync(doctorFile) && fs.statSync(doctorFile).isFile()){
+      const ext=path.extname(doctorFile).toLowerCase();
+      const types={'.html':'text/html; charset=utf-8','.css':'text/css; charset=utf-8','.js':'text/javascript; charset=utf-8'};
+      res.writeHead(200,{'Content-Type':types[ext]||'application/octet-stream','X-Content-Type-Options':'nosniff','Cache-Control':'no-store'});
+      return fs.createReadStream(doctorFile).pipe(res);
+    }
+    return send(res,404,{error:'Doctor panel file not found'},req);
+  }
   if(req.method==='GET' && (url.pathname==='/' || url.pathname.startsWith('/web/'))){
     const relative=url.pathname==='/'?'index.html':url.pathname.replace(/^\/web\//,'');
     const file=path.join(__dirname,'../../web',relative);
