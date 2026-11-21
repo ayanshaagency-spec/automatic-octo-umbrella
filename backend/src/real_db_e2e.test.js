@@ -1,5 +1,6 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
+const crypto = require('crypto');
 const { spawn } = require('node:child_process');
 const { Client } = require('pg');
 
@@ -8,6 +9,7 @@ const BASE_URL = `http://127.0.0.1:${PORT}`;
 const PHONE = '+919900000001';
 const DOCTOR_PHONE = '+919900000099';
 const JWT_SECRET = 'ci-real-e2e-jwt-secret-long-enough-for-hmac';
+const PAYMENT_WEBHOOK_SECRET = 'ci-e2e-webhook-secret';
 
 const SAFE_TEST_DATABASES = new Set(['healthcare_ci', 'ayansha_healthcare']);
 
@@ -38,6 +40,7 @@ function startServer() {
       JWT_SECRET,
       NODE_ENV: 'test',
       PAYMENT_STATUS_ADMIN_TOKEN: 'ci-admin-token',
+      PAYMENT_WEBHOOK_SECRET,
       CORS_ALLOWED_ORIGINS: 'http://allowed.example'
     },
     stdio: ['ignore', 'pipe', 'pipe']
@@ -85,6 +88,7 @@ test('real PostgreSQL patient journey E2E', async t => {
   const server = startServer();
   t.after(async () => {
     server.kill();
+    await db.query('DELETE FROM payment_webhook_events WHERE payment_id IN (SELECT id FROM payments WHERE patient_id IN (SELECT id FROM patients WHERE phone = $1))', [PHONE]);
     await db.query('DELETE FROM payments WHERE patient_id IN (SELECT id FROM patients WHERE phone = $1)', [PHONE]);
     await db.query('DELETE FROM health_records WHERE patient_id IN (SELECT id FROM patients WHERE phone = $1)', [PHONE]);
     await db.query('DELETE FROM lab_orders WHERE patient_id IN (SELECT id FROM patients WHERE phone = $1)', [PHONE]);
@@ -216,6 +220,24 @@ test('real PostgreSQL patient journey E2E', async t => {
   });
   assert.equal(payment.status, 201);
   const paymentBody = await payment.json();
+
+  // Exercise the signed webhook route and durable replay ledger against real PostgreSQL.
+  await db.query("UPDATE payments SET provider = 'razorpay', provider_order_id = $1, status = 'pending' WHERE id = $2", ['order_ci_e2e_1', paymentBody.id]);
+  const webhookPayload = JSON.stringify({ id: 'evt_ci_e2e_1', event: 'payment.captured', payload: { payment: { entity: { id: 'pay_ci_e2e_1', order_id: 'order_ci_e2e_1', amount: 10000, currency: 'INR' } } } });
+  const webhookSignature = crypto.createHmac('sha256', PAYMENT_WEBHOOK_SECRET).update(webhookPayload, 'utf8').digest('hex');
+  const webhookHeaders = { 'Content-Type': 'application/json', 'X-Payment-Signature': webhookSignature };
+  const firstWebhook = await fetch(BASE_URL + '/api/payments/webhook', { method: 'POST', headers: webhookHeaders, body: webhookPayload });
+  assert.equal(firstWebhook.status, 200);
+  const firstWebhookBody = await firstWebhook.json();
+  assert.equal(firstWebhookBody.payment.status, 'paid');
+  const persistedPayment = await db.query('SELECT status, provider_payment_id FROM payments WHERE id = $1', [paymentBody.id]);
+  assert.equal(persistedPayment.rows[0].status, 'paid');
+  assert.equal(persistedPayment.rows[0].provider_payment_id, 'pay_ci_e2e_1');
+  const replayWebhook = await fetch(BASE_URL + '/api/payments/webhook', { method: 'POST', headers: webhookHeaders, body: webhookPayload });
+  assert.equal(replayWebhook.status, 200);
+  assert.equal((await replayWebhook.json()).duplicate, true);
+  const ledgerCount = await db.query('SELECT COUNT(*)::int AS count FROM payment_webhook_events WHERE event_id = $1', ['evt_ci_e2e_1']);
+  assert.equal(ledgerCount.rows[0].count, 1);
 
   const foreignAuth = { Authorization: `Bearer ${session.token}` };
   const foreignLab = await fetch(`${BASE_URL}/api/lab-orders?phone=+919900000002`, { headers: foreignAuth });
