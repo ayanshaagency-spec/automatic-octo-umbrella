@@ -89,3 +89,25 @@ test('token verifier rejects invalid time relationships and non-numeric claims',
     assert.equal(verifyToken(input + '.' + signature), null);
   }
 });
+
+
+test('OTP provider request includes a bounded timeout signal', async () => {
+  const originalFetch = global.fetch;
+  const originalUrl = process.env.OTP_PROVIDER_URL;
+  const originalToken = process.env.OTP_PROVIDER_TOKEN;
+  process.env.OTP_PROVIDER_URL = 'https://otp-provider.invalid/send';
+  process.env.OTP_PROVIDER_TOKEN = 'test-token';
+  global.fetch = async (_url, options) => {
+    assert.ok(options.signal instanceof AbortSignal);
+    assert.equal(options.signal.aborted, false);
+    return { ok: true };
+  };
+  try {
+    const result = await issueOtp('+919444444444');
+    assert.equal(result.delivery, 'provider_accepted');
+  } finally {
+    global.fetch = originalFetch;
+    if (originalUrl === undefined) delete process.env.OTP_PROVIDER_URL; else process.env.OTP_PROVIDER_URL = originalUrl;
+    if (originalToken === undefined) delete process.env.OTP_PROVIDER_TOKEN; else process.env.OTP_PROVIDER_TOKEN = originalToken;
+  }
+});
