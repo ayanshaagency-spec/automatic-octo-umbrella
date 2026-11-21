@@ -55,6 +55,28 @@ async function createAppointment(data) {
   const pool = await getDb();
   if (!pool) return null;
 
+  if (!data || typeof data !== 'object') {
+    const error = new Error('appointment details are required');
+    error.statusCode = 422;
+    throw error;
+  }
+  const patientName = typeof data.patientName === 'string' ? data.patientName.trim() : '';
+  const phone = typeof data.phone === 'string' ? data.phone.trim() : '';
+  if (!patientName || patientName.length > 120) {
+    const error = new Error('patientName must be 1-120 characters');
+    error.statusCode = 422;
+    throw error;
+  }
+  if (!/^\\+?[1-9]\\d{9,14}$/.test(phone)) {
+    const error = new Error('phone must be a valid phone number');
+    error.statusCode = 422;
+    throw error;
+  }
+  if (!Number.isSafeInteger(Number(data.doctorId)) || Number(data.doctorId) <= 0) {
+    const error = new Error('doctorId must be a positive integer');
+    error.statusCode = 422;
+    throw error;
+  }
   const mode = data.mode || 'Video';
   if (!['Video', 'In-clinic'].includes(mode)) {
     const error = new Error('mode must be Video or In-clinic');
@@ -81,7 +103,7 @@ async function createAppointment(data) {
 
     const existing = await client.query(
       'SELECT id FROM appointments WHERE doctor_id = $1 AND appointment_at = $2 AND status IS DISTINCT FROM $3 LIMIT 1',
-      [data.doctorId, appointmentAt.toISOString(), 'cancelled']
+      [Number(data.doctorId), appointmentAt.toISOString(), 'cancelled']
     );
     if (existing.rowCount > 0) {
       const error = new Error('Selected appointment slot is already booked');
@@ -93,7 +115,7 @@ async function createAppointment(data) {
       `INSERT INTO patients (name, phone) VALUES ($1,$2)
        ON CONFLICT (phone) DO UPDATE SET name=EXCLUDED.name
        RETURNING id`,
-      [data.patientName, data.phone]
+      [patientName, phone]
     );
 
     const { rows } = await client.query(
