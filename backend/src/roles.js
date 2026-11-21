@@ -33,7 +33,7 @@ function verifyRoleToken(token, role) {
     payload = JSON.parse(Buffer.from(parts[1], 'base64url').toString('utf8'));
   } catch { return null; }
   if (header?.alg !== 'HS256' || header?.typ !== 'JWT') return null;
-  if (payload?.role !== role || !payload?.sub || !Number.isFinite(payload.exp) || payload.exp <= Math.floor(Date.now() / 1000)) return null;
+  const now = Math.floor(Date.now() / 1000);\n  if (payload?.role !== role || !payload?.sub || !Number.isFinite(payload.iat) || payload.iat > now + 60 || !Number.isFinite(payload.exp) || payload.exp <= now || payload.exp <= payload.iat) return null;
   const secret = (process.env.JWT_SECRET || '').trim();
   if (!secret || secret.length < 32) return null;
   const expected = crypto.createHmac('sha256', secret).update(parts[0] + '.' + parts[1]).digest('base64url');
