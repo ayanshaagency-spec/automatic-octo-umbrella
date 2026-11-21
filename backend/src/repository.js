@@ -52,9 +52,6 @@ async function updateAppointmentStatus(id, status) {
 }
 
 async function createAppointment(data) {
-  const pool = await getDb();
-  if (!pool) return null;
-
   if (!data || typeof data !== 'object') {
     const error = new Error('appointment details are required');
     error.statusCode = 422;
@@ -77,6 +74,7 @@ async function createAppointment(data) {
     error.statusCode = 422;
     throw error;
   }
+  const doctorId = Number(data.doctorId);
   const mode = data.mode || 'Video';
   if (!['Video', 'In-clinic'].includes(mode)) {
     const error = new Error('mode must be Video or In-clinic');
@@ -85,6 +83,8 @@ async function createAppointment(data) {
   }
 
   const appointmentAt = new Date(data.appointmentAt);
+  const pool = await getDb();
+  if (!pool) return null;
   if (Number.isNaN(appointmentAt.getTime()) || appointmentAt <= new Date()) {
     const error = new Error('appointmentAt must be a valid future date');
     error.statusCode = 422;
@@ -94,7 +94,7 @@ async function createAppointment(data) {
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
-    const doctor = await client.query('SELECT id FROM doctors WHERE id = $1', [data.doctorId]);
+    const doctor = await client.query('SELECT id FROM doctors WHERE id = $1', [doctorId]);
     if (doctor.rowCount === 0) {
       const error = new Error('Doctor not found');
       error.statusCode = 422;
@@ -103,7 +103,7 @@ async function createAppointment(data) {
 
     const existing = await client.query(
       'SELECT id FROM appointments WHERE doctor_id = $1 AND appointment_at = $2 AND status IS DISTINCT FROM $3 LIMIT 1',
-      [Number(data.doctorId), appointmentAt.toISOString(), 'cancelled']
+      [doctorId, appointmentAt.toISOString(), 'cancelled']
     );
     if (existing.rowCount > 0) {
       const error = new Error('Selected appointment slot is already booked');
@@ -122,7 +122,7 @@ async function createAppointment(data) {
       `INSERT INTO appointments (patient_id, doctor_id, appointment_at, mode, status)
        VALUES ($1,$2,$3,$4,'confirmed')
        RETURNING id, patient_id, doctor_id, appointment_at, mode, status`,
-      [patient.rows[0].id, data.doctorId, appointmentAt.toISOString(), mode]
+      [patient.rows[0].id, doctorId, appointmentAt.toISOString(), mode]
     );
     await client.query('COMMIT');
     return rows[0];
