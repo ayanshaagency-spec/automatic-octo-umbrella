@@ -46,3 +46,14 @@ test('OTP request cooldown and rate limit are enforced', async () => {
   await issueOtp('+919666666666');
   await assert.rejects(issueOtp('+919666666666'), error => error.statusCode === 429);
 });
+
+
+test('token verifier rejects unsupported JWT header algorithms even with a valid HMAC', () => {
+  process.env.JWT_SECRET = 'test-secret-that-is-long-enough-for-hmac-123456';
+  const token = createToken('+919999999999');
+  const parts = token.split('.');
+  const badHeader = Buffer.from(JSON.stringify({ alg: 'HS512', typ: 'JWT' })).toString('base64url');
+  const input = badHeader + '.' + parts[1];
+  const signature = require('crypto').createHmac('sha256', process.env.JWT_SECRET).update(input).digest('base64url');
+  assert.equal(verifyToken(input + '.' + signature), null);
+});
