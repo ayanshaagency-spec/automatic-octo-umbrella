@@ -71,6 +71,17 @@ test('Phase 5 API smoke/E2E contract', async t => {
   const webScript = await fetch(`${BASE_URL}/web/app.js`);
   assert.equal(webScript.status, 200);
   assert.match(webScript.headers.get('content-type'), /javascript/);
+  const doctorPage = await fetch(`${BASE_URL}/doctor-panel`);
+  assert.equal(doctorPage.status, 200);
+  assert.match(doctorPage.headers.get('content-type'), /text\\/html/);
+  assert.equal(doctorPage.headers.get('cache-control'), 'no-store');
+  assert.match(await doctorPage.text(), /Doctor Panel/);
+  const doctorScript = await fetch(`${BASE_URL}/doctor-panel/app.js`);
+  assert.equal(doctorScript.status, 200);
+  assert.match(doctorScript.headers.get('content-type'), /javascript/);
+  const webTraversal = await fetch(`${BASE_URL}/web/%2e%2e/backend/package.json`);
+  assert.ok([400,404].includes(webTraversal.status));
+
   const adminPage = await fetch(`${BASE_URL}/admin`);
   assert.equal(adminPage.status, 200);
   assert.match(adminPage.headers.get('content-type'), /text\/html/);
