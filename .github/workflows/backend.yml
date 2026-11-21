@@ -5,12 +5,10 @@ on:
     branches:
       - feat/phase5-payment-mvp
       - feat/phase6-emergency-hospitals
-      - recovery/backend-postgres-safe-fixes
   pull_request:
     branches:
       - feat/phase5-payment-mvp
       - feat/phase6-emergency-hospitals
-      - recovery/backend-postgres-safe-fixes
 
 jobs:
   test:
