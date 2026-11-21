@@ -77,3 +77,21 @@ test('concurrent same-slot appointment requests use separate transactions; one c
 });
 
 test.after(() => { delete require.cache[repositoryPath]; delete require.cache[dbPath]; });
+
+
+test('appointment creation rejects malformed fields before opening a transaction', async () => {
+  let connectCalls = 0;
+  const pool = { async connect() { connectCalls++; throw new Error('should not connect'); } };
+  const { createAppointment } = loadRepository(pool);
+  const base = { patientName: 'Test Patient', phone: '9000000001', doctorId: 22, appointmentAt: new Date(Date.now() + 86400000).toISOString(), mode: 'Video' };
+  for (const invalid of [
+    { ...base, patientName: '' },
+    { ...base, patientName: 'x'.repeat(121) },
+    { ...base, phone: 'bad-phone' },
+    { ...base, doctorId: 0 },
+    { ...base, doctorId: 'invalid' }
+  ]) {
+    await assert.rejects(createAppointment(invalid), error => error.statusCode === 422);
+  }
+  assert.equal(connectCalls, 0);
+});
