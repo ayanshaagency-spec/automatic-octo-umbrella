@@ -91,7 +91,8 @@ async function sendOtp(phone, otp) {
     body: JSON.stringify({
       to: String(phone),
       message: `Your Ayansha Health Care verification code is ${otp}. It expires in 5 minutes.`
-    })
+    }),
+    signal: AbortSignal.timeout(10000)
   });
   if (!response.ok) throw new AuthError('OTP provider rejected the request', 502);
   return { delivery: 'provider_accepted' };
