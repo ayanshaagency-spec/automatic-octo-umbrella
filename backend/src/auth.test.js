@@ -59,4 +59,14 @@ test('token verifier rejects unsupported JWT header algorithms even with a valid
 });
 
 
-test('token verifier rejects missing or future issued-at claims', () => {\n  process.env.JWT_SECRET = 'test-secret-that-is-long-enough-for-hmac-123456';\n  const now = Math.floor(Date.now() / 1000);\n  const b64 = value => Buffer.from(JSON.stringify(value)).toString('base64url');\n  const crypto = require('crypto');\n  for (const payload of [{ sub: '+919999999999', exp: now + 60 }, { sub: '+919999999999', iat: now + 120, exp: now + 180 }]) {\n    const input = b64({ alg: 'HS256', typ: 'JWT' }) + '.' + b64(payload);\n    const signature = crypto.createHmac('sha256', process.env.JWT_SECRET).update(input).digest('base64url');\n    assert.equal(verifyToken(input + '.' + signature), null);\n  }\n});\n
+test('token verifier rejects missing or future issued-at claims', () => {
+  process.env.JWT_SECRET = 'test-secret-that-is-long-enough-for-hmac-123456';
+  const now = Math.floor(Date.now() / 1000);
+  const b64 = value => Buffer.from(JSON.stringify(value)).toString('base64url');
+  const crypto = require('crypto');
+  for (const payload of [{ sub: '+919999999999', exp: now + 60 }, { sub: '+919999999999', iat: now + 120, exp: now + 180 }]) {
+    const input = b64({ alg: 'HS256', typ: 'JWT' }) + '.' + b64(payload);
+    const signature = crypto.createHmac('sha256', process.env.JWT_SECRET).update(input).digest('base64url');
+    assert.equal(verifyToken(input + '.' + signature), null);
+  }
+});
