@@ -49,4 +49,6 @@ jobs:
       - run: npm install
       - run: psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f db/schema.sql
       - run: npm run db:migrate
+      - name: Verify migration runner repeatability on disposable CI database
+        run: npm run db:migrate
       - run: npm test
