@@ -161,7 +161,7 @@ async function issueOtp(phone) {
 async function verifyOtp(phone, otp) {
   if (typeof phone !== 'string' || typeof otp !== 'string') return false;
   const normalizedPhone=phone.trim(), normalizedOtp=otp.trim();
-  if (!/^\\+?[1-9]\\d{9,14}$/.test(normalizedPhone) || !/^\\d{6}$/.test(normalizedOtp)) return false;
+  if (!/^\+?[1-9]\d{9,14}$/.test(normalizedPhone) || !/^\d{6}$/.test(normalizedOtp)) return false;
   const db=await getDb(); if(!db){ if(process.env.NODE_ENV==='production') return false; const record=fallbackOtp.get(normalizedPhone); if(!record||record.expiresAt<=Date.now()||record.attempts>=OTP_VERIFY_LIMIT){fallbackOtp.delete(normalizedPhone);return false;} if(record.hash!==otpHash(normalizedPhone,normalizedOtp)){record.attempts++;if(record.attempts>=OTP_VERIFY_LIMIT)fallbackOtp.delete(normalizedPhone);return false;} fallbackOtp.delete(normalizedPhone);return true; }
   const client=await db.connect();
   try {
