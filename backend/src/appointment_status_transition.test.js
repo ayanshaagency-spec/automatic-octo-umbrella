@@ -14,8 +14,8 @@ test('admin status update is atomic and rejects terminal-state reversals', async
   const {updateAppointmentStatus}=load(db);
   await assert.rejects(updateAppointmentStatus(1,'confirmed'),e=>e.statusCode===409);
   assert.match(updateSql,/status = ANY\(\$3::text\[\]\)/);
-  assert.ok(updateParams[2].includes('cancelled'));
-  assert.ok(!updateParams[2].includes('completed'));
+  assert.ok(updateParams[2].includes('confirmed'));
+  assert.ok(!updateParams[2].includes('cancelled'));
 });
 test('doctor status update atomically scopes appointment to doctor and allowed previous state', async () => {
   let updateSql, updateParams;
@@ -24,7 +24,7 @@ test('doctor status update atomically scopes appointment to doctor and allowed p
   const row=await updateDoctorAppointmentStatus(3,'doctor-phone','completed');
   assert.equal(row.status,'completed');
   assert.match(updateSql,/a\.status = ANY\(\$4::text\[\]\)/);
-  assert.equal(updateParams[3].includes('cancelled'),true);
+  assert.equal(updateParams[3].includes('in-progress'),true);\n  assert.equal(updateParams[3].includes('cancelled'),false);
 });
 test('missing appointment is still reported as 404', async () => {
   const db={async query(){return {rowCount:0,rows:[]};}};
