@@ -7,7 +7,7 @@ test('secure session token is signed and expires', async () => {
   const issued = await issueOtp('+919999999999');
   assert.equal(issued.delivery, 'development');
   assert.match(issued.devOtp, /^\d{6}$/);
-  assert.equal(verifyOtp('+919999999999', issued.devOtp), true);
+  assert.equal(await verifyOtp('+919999999999', issued.devOtp), true);
   const token = createToken('+919999999999');
   const payload = verifyToken(token);
   assert.equal(payload.sub, '+919999999999');
@@ -17,14 +17,14 @@ test('secure session token is signed and expires', async () => {
 test('OTP cannot be reused', async () => {
   process.env.JWT_SECRET = 'test-secret-that-is-long-enough-for-hmac-123456';
   const issued = await issueOtp('+919888888888');
-  assert.equal(verifyOtp('+919888888888', issued.devOtp), true);
-  assert.equal(verifyOtp('+919888888888', issued.devOtp), false);
+  assert.equal(await verifyOtp('+919888888888', issued.devOtp), true);
+  assert.equal(await verifyOtp('+919888888888', issued.devOtp), false);
 });
 
 test('OTP verification limits incorrect attempts', async () => {
   const issued = await issueOtp('+919777777777');
-  for (let i = 0; i < 5; i++) assert.equal(verifyOtp('+919777777777', '000000'), false);
-  assert.equal(verifyOtp('+919777777777', issued.devOtp), false);
+  for (let i = 0; i < 5; i++) assert.equal(await verifyOtp('+919777777777', '000000'), false);
+  assert.equal(await verifyOtp('+919777777777', issued.devOtp), false);
 });
 
 test('OTP expires after five minutes', async () => {
@@ -36,7 +36,7 @@ test('OTP expires after five minutes', async () => {
     const issued = await issueOtp(phone);
     assert.match(issued.devOtp, /^\d{6}$/);
     now += 5 * 60 * 1000 + 1;
-    assert.equal(verifyOtp(phone, issued.devOtp), false);
+    assert.equal(await verifyOtp(phone, issued.devOtp), false);
   } finally {
     Date.now = originalNow;
   }
@@ -115,11 +115,11 @@ test('OTP provider request includes a bounded timeout signal', async () => {
 
 test('OTP verifier rejects malformed phone and OTP inputs safely', async () => {
   const issued = await issueOtp('+919333333333');
-  assert.equal(verifyOtp('+919333333333', issued.devOtp), true);
-  assert.equal(verifyOtp('+919333333333', issued.devOtp), false);
-  assert.equal(verifyOtp('+919333333333', {}), false);
-  assert.equal(verifyOtp({}, '123456'), false);
-  assert.equal(verifyOtp('bad-phone', '123456'), false);
-  assert.equal(verifyOtp('+919333333333', '12345'), false);
-  assert.equal(verifyOtp('+919333333333', 'abcdef'), false);
+  assert.equal(await verifyOtp('+919333333333', issued.devOtp), true);
+  assert.equal(await verifyOtp('+919333333333', issued.devOtp), false);
+  assert.equal(await verifyOtp('+919333333333', {}), false);
+  assert.equal(await verifyOtp({}, '123456'), false);
+  assert.equal(await verifyOtp('bad-phone', '123456'), false);
+  assert.equal(await verifyOtp('+919333333333', '12345'), false);
+  assert.equal(await verifyOtp('+919333333333', 'abcdef'), false);
 });
