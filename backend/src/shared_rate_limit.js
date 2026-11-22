@@ -1,7 +1,8 @@
 const { getDb } = require('./db');
+const fallbackBuckets = new Map();
 async function limited(key, limit, windowMs) {
   const db = await getDb();
-  if (!db) throw new Error('Database unavailable for rate limiting');
+  if (!db) { if(process.env.NODE_ENV==='production') throw new Error('Database unavailable for rate limiting'); const nowMs=Date.now(); let bucket=fallbackBuckets.get(key); if(!bucket||bucket.resetAt<=nowMs)bucket={count:0,resetAt:nowMs+windowMs}; bucket.count++;fallbackBuckets.set(key,bucket);return bucket.count>limit; }
   const now = new Date();
   const reset = new Date(now.getTime() + windowMs);
   const result = await db.query(
