@@ -11,6 +11,18 @@ const OTP_VERIFY_LIMIT = 5;
 const OTP_STORE_MAX = 10000;
 const TOKEN_TTL_SECONDS = 24 * 60 * 60;
 
+
+function pruneFallbackStores(nowMs = Date.now()) {
+  for (const [phone, record] of fallbackOtp) {
+    if (!record || record.expiresAt <= nowMs) fallbackOtp.delete(phone);
+  }
+  for (const [phone, record] of fallbackRequests) {
+    if (!record || nowMs - record.windowStart >= OTP_REQUEST_WINDOW_MS) fallbackRequests.delete(phone);
+  }
+  while (fallbackOtp.size >= OTP_STORE_MAX) fallbackOtp.delete(fallbackOtp.keys().next().value);
+  while (fallbackRequests.size >= OTP_STORE_MAX) fallbackRequests.delete(fallbackRequests.keys().next().value);
+}
+
 class AuthError extends Error {
   constructor(message, statusCode = 503) {
     super(message);
@@ -112,6 +124,7 @@ async function issueOtp(phone) {
   if (!db) {
     if (process.env.NODE_ENV === 'production') throw new AuthError('OTP service requires database storage');
     const nowMs = Date.now();
+    pruneFallbackStores(nowMs);
     const prior = fallbackRequests.get(normalizedPhone);
     if (prior && nowMs-prior.lastRequestAt < OTP_REQUEST_COOLDOWN_MS) throw new AuthError('Please wait before requesting another OTP',429);
     if (prior && nowMs-prior.windowStart < OTP_REQUEST_WINDOW_MS && prior.count>=OTP_REQUEST_LIMIT) throw new AuthError('OTP request limit reached; try again later',429);
