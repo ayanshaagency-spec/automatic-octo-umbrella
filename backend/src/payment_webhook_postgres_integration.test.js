@@ -20,7 +20,7 @@ test('PostgreSQL webhook integration: success, duplicate event, mismatch rollbac
   }
   const db = new Client({ connectionString: process.env.DATABASE_URL });
   await db.connect();
-  const suffix = 'ci-webhook-' + Date.now() + '-' + Math.floor(Math.random()*10000);
+  // Keep generated phone values below patients.phone VARCHAR(30).\n  const suffix = 'wh-' + Date.now().toString().slice(-8) + '-' + Math.floor(Math.random()*1000);
   let patientId, doctorId, appointmentId, paymentId;
   try {
     patientId = (await db.query('INSERT INTO patients(name,phone) VALUES($1,$2) RETURNING id', ['CI webhook patient', suffix+'-p'])).rows[0].id;
