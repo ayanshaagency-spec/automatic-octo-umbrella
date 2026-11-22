@@ -345,3 +345,26 @@ test('API per-IP rate limits reject excess patient/doctor OTP and admin attempts
   }
   assert.equal((await postJson('/api/admin/login', { email: 'admin@example.test', password: 'wrong-password' })).status, 429);
 });
+
+test('OTP verification trims phone consistently in the returned session', async t => {
+  const server = startServer();
+  t.after(() => server.kill());
+  await waitForHealth(server);
+
+  const phone = '+919999999991';
+  const requested = await fetch(`${BASE_URL}/api/auth/request-otp`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ phone })
+  });
+  assert.equal(requested.status, 200);
+  const otp = (await requested.json()).devOtp;
+
+  const verified = await fetch(`${BASE_URL}/api/auth/verify-otp`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ phone: `  ${phone}  `, otp })
+  });
+  assert.equal(verified.status, 200);
+  const session = await verified.json();
+  assert.equal(session.user.phone, phone);
+  assert.ok(session.token);
+});
