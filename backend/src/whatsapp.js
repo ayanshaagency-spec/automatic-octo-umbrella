@@ -16,9 +16,9 @@ async function sendWhatsApp({to,text,event}){
   try{
     const r=await fetch(url,{method:'POST',headers:{Authorization:'Bearer '+process.env.WHATSAPP_ACCESS_TOKEN,'Content-Type':'application/json','X-Idempotency-Key':key},body:JSON.stringify({messaging_product:'whatsapp',to,type:'text',text:{body:text}})});
     const body=await r.text();
-    let data;try{data=JSON.parse(body)}catch{data={raw:body}};
-    if(!r.ok)return {ok:false,status:'provider_error',providerStatus:r.status,data};
-    return {ok:true,status:'provider_accepted',delivery:'not_confirmed',providerMessageId:data?.messages?.[0]?.id||null,data};
-  }catch(error){return {ok:false,status:'transport_error',message:error.message};}
+    let data;try{data=JSON.parse(body)}catch{data={}};
+    if(!r.ok)return {ok:false,status:'provider_error',providerStatus:r.status,message:'WhatsApp provider rejected the request'};
+    return {ok:true,status:'provider_accepted',delivery:'not_confirmed',providerMessageId:data?.messages?.[0]?.id||null};
+  }catch(error){return {ok:false,status:'transport_error',message:'WhatsApp transport request failed'};}
 }
 module.exports={configured,status,sendWhatsApp};
