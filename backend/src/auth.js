@@ -106,7 +106,7 @@ function otpHash(phone, otp) {
 
 async function issueOtp(phone) {
   const normalizedPhone = String(phone).trim();
-  if (!/^\\+?[1-9]\\d{9,14}$/.test(normalizedPhone)) throw new AuthError('phone must be a valid international phone number', 422);
+  if (!/^\+?[1-9]\d{9,14}$/.test(normalizedPhone)) throw new AuthError('phone must be a valid international phone number', 422);
   const db = await getDb();
   const otp = String(crypto.randomInt(100000, 1000000));
   if (!db) {
