@@ -1,4 +1,11 @@
 const { getDb } = require('./db');
+const APPOINTMENT_TRANSITIONS = {
+  confirmed: ['confirmed', 'in-progress', 'completed', 'cancelled'],
+  'in-progress': ['in-progress', 'completed', 'cancelled'],
+  completed: ['completed'],
+  cancelled: ['cancelled']
+};
+function transitionConflict() { const e = new Error('Invalid appointment status transition'); e.statusCode = 409; return e; }
 
 async function listDoctors() {
   const db = await getDb();
@@ -38,17 +45,16 @@ async function updateAppointmentStatus(id, status) {
     error.statusCode = 422;
     throw error;
   }
+  const allowedPrevious = Object.entries(APPOINTMENT_TRANSITIONS).filter(([, next]) => next.includes(status)).map(([previous]) => previous);
   const { rows } = await db.query(
-    `UPDATE appointments SET status = $1 WHERE id = $2
+    `UPDATE appointments SET status = $1 WHERE id = $2 AND status = ANY($3::text[])
      RETURNING id, patient_id, doctor_id, appointment_at, mode, status`,
-    [status, id]
+    [status, id, allowedPrevious]
   );
-  if (!rows.length) {
-    const error = new Error('Appointment not found');
-    error.statusCode = 404;
-    throw error;
-  }
-  return rows[0];
+  if (rows[0]) return rows[0];
+  const existing = await db.query('SELECT id, status FROM appointments WHERE id = $1', [id]);
+  if (!existing.rowCount) { const error = new Error('Appointment not found'); error.statusCode = 404; throw error; }
+  throw transitionConflict();
 }
 
 async function createAppointment(data) {
@@ -165,14 +171,17 @@ async function updateDoctorAppointmentStatus(id, doctorPhone, status) {
   if (!db) return null;
   const allowed = ['confirmed', 'completed', 'cancelled', 'in-progress'];
   if (!allowed.includes(status)) { const e = new Error(`status must be one of: ${allowed.join(', ')}`); e.statusCode=422; throw e; }
+  const allowedPrevious = Object.entries(APPOINTMENT_TRANSITIONS).filter(([, next]) => next.includes(status)).map(([previous]) => previous);
   const { rows } = await db.query(
     `UPDATE appointments a SET status = $1
        FROM doctors d
-      WHERE a.id = $2 AND a.doctor_id = d.id AND d.phone = $3
+      WHERE a.id = $2 AND a.doctor_id = d.id AND d.phone = $3 AND a.status = ANY($4::text[])
       RETURNING a.id, a.patient_id, a.doctor_id, a.appointment_at, a.mode, a.status`,
-    [status,id,doctorPhone]);
-  if (!rows.length) { const e=new Error('Appointment not found or not assigned to doctor'); e.statusCode=404; throw e; }
-  return rows[0];
+    [status,id,doctorPhone,allowedPrevious]);
+  if (rows[0]) return rows[0];
+  const existing = await db.query(`SELECT a.id, a.status FROM appointments a JOIN doctors d ON a.doctor_id=d.id WHERE a.id=$1 AND d.phone=$2`,[id,doctorPhone]);
+  if (!existing.rowCount) { const e=new Error('Appointment not found or not assigned to doctor'); e.statusCode=404; throw e; }
+  throw transitionConflict();
 }
 
 module.exports = { listDoctors, listAppointments, updateAppointmentStatus, createAppointment, getDoctorByPhone, listDoctorAppointments, updateDoctorAppointmentStatus };
