@@ -101,3 +101,45 @@ test('webhook processor rolls back on update failure', async () => {
 });
 
 
+
+test('webhook processor rejects unknown provider order and rolls back', async () => {
+  const fake=makeFakeDb();
+  fake.state.payment=null;
+  fake.db.connect=async()=>({query:async sql=>{
+    if(sql==='BEGIN'||sql==='ROLLBACK'||sql==='COMMIT') return {};
+    if(sql.includes('SELECT id, amount')) return {rowCount:0,rows:[]};
+    throw new Error('unexpected query');
+  },release(){}});
+  await assert.rejects(require('./payment_webhook_processor').processRazorpayWebhook({
+    eventId:'evt_unknown_order',event:'payment.captured',status:'paid',
+    providerPaymentId:'pay_ci_1',providerOrderId:'order_missing',amountMinor:10000,currency:'INR'
+  }, fake.db), /not found/);
+});
+
+test('webhook processor rejects provider mismatch and rolls back', async () => {
+  const fake=makeFakeDb({payment:{provider:'other-provider'}});
+  await assert.rejects(require('./payment_webhook_processor').processRazorpayWebhook({
+    eventId:'evt_provider_mismatch',event:'payment.captured',status:'paid',
+    providerPaymentId:'pay_ci_1',providerOrderId:'order_ci_1',amountMinor:10000,currency:'INR'
+  }, fake.db), /provider mismatch/);
+  assert.equal(fake.state.rolledBack,true);
+});
+
+test('webhook processor rejects invalid status transition and rolls back', async () => {
+  const fake=makeFakeDb({payment:{status:'cancelled'}});
+  await assert.rejects(require('./payment_webhook_processor').processRazorpayWebhook({
+    eventId:'evt_terminal_transition',event:'payment.captured',status:'paid',
+    providerPaymentId:'pay_ci_1',providerOrderId:'order_ci_1',amountMinor:10000,currency:'INR'
+  }, fake.db), /invalid payment status transition/);
+  assert.equal(fake.state.rolledBack,true);
+});
+
+test('webhook processor rejects missing event ID before database access', async () => {
+  let connected=false;
+  const db={async connect(){connected=true;throw new Error('must not connect');}};
+  await assert.rejects(require('./payment_webhook_processor').processRazorpayWebhook({
+    event:'payment.captured',status:'paid',providerPaymentId:'pay_ci_1',
+    providerOrderId:'order_ci_1',amountMinor:10000,currency:'INR'
+  }, db), /event ID is required/);
+  assert.equal(connected,false);
+});
