@@ -1,6 +1,8 @@
 const crypto = require('crypto');
 
 const { getDb } = require('./db');
+const fallbackOtp = new Map();
+const fallbackRequests = new Map();
 const OTP_TTL_MS = 5 * 60 * 1000;
 const OTP_REQUEST_WINDOW_MS = 60 * 60 * 1000;
 const OTP_REQUEST_LIMIT = 5;
@@ -106,8 +108,18 @@ async function issueOtp(phone) {
   const normalizedPhone = String(phone).trim();
   if (!/^\\+?[1-9]\\d{9,14}$/.test(normalizedPhone)) throw new AuthError('phone must be a valid international phone number', 422);
   const db = await getDb();
-  if (!db) throw new AuthError('OTP service requires database storage');
   const otp = String(crypto.randomInt(100000, 1000000));
+  if (!db) {
+    if (process.env.NODE_ENV === 'production') throw new AuthError('OTP service requires database storage');
+    const nowMs = Date.now();
+    const prior = fallbackRequests.get(normalizedPhone);
+    if (prior && nowMs-prior.lastRequestAt < OTP_REQUEST_COOLDOWN_MS) throw new AuthError('Please wait before requesting another OTP',429);
+    if (prior && nowMs-prior.windowStart < OTP_REQUEST_WINDOW_MS && prior.count>=OTP_REQUEST_LIMIT) throw new AuthError('OTP request limit reached; try again later',429);
+    fallbackRequests.set(normalizedPhone,{windowStart:prior && nowMs-prior.windowStart<OTP_REQUEST_WINDOW_MS?prior.windowStart:nowMs,count:prior && nowMs-prior.windowStart<OTP_REQUEST_WINDOW_MS?prior.count+1:1,lastRequestAt:nowMs});
+    fallbackOtp.set(normalizedPhone,{hash:otpHash(normalizedPhone,otp),expiresAt:nowMs+OTP_TTL_MS,attempts:0});
+    const delivery=await sendOtp(normalizedPhone,otp);
+    return {...delivery,expiresInSeconds:OTP_TTL_MS/1000};
+  }
   const now = new Date();
   const windowStart = new Date(now.getTime() - OTP_REQUEST_WINDOW_MS);
   const client = await db.connect();
@@ -150,7 +162,7 @@ async function verifyOtp(phone, otp) {
   if (typeof phone !== 'string' || typeof otp !== 'string') return false;
   const normalizedPhone=phone.trim(), normalizedOtp=otp.trim();
   if (!/^\\+?[1-9]\\d{9,14}$/.test(normalizedPhone) || !/^\\d{6}$/.test(normalizedOtp)) return false;
-  const db=await getDb(); if(!db) return false;
+  const db=await getDb(); if(!db){ if(process.env.NODE_ENV==='production') return false; const record=fallbackOtp.get(normalizedPhone); if(!record||record.expiresAt<=Date.now()||record.attempts>=OTP_VERIFY_LIMIT){fallbackOtp.delete(normalizedPhone);return false;} if(record.hash!==otpHash(normalizedPhone,normalizedOtp)){record.attempts++;if(record.attempts>=OTP_VERIFY_LIMIT)fallbackOtp.delete(normalizedPhone);return false;} fallbackOtp.delete(normalizedPhone);return true; }
   const client=await db.connect();
   try {
     await client.query('BEGIN');
