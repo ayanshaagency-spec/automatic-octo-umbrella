@@ -5,6 +5,7 @@ const PORT = process.env.PORT || 3000;
 const doctorsFallback = [{id:1,name:'Dr. Ananya Sharma',specialty:'Cardiology'},{id:2,name:'Dr. Rahul Mehta',specialty:'General Medicine'},{id:3,name:'Dr. Priya Kapoor',specialty:'Dermatology'}];
 const { issueOtp, verifyOtp, createToken, verifyToken, AuthError } = require('./auth');
 const { getDb } = require('./db');
+const { limited } = require('./shared_rate_limit');
 const { listDoctors, listAppointments, updateAppointmentStatus, createAppointment, getDoctorByPhone, listDoctorAppointments, updateDoctorAppointmentStatus } = require('./repository');
 const { listPrescriptions, createPrescription, listHealthRecords, createHealthRecord } = require('./phase3_repository');
 const { listLabOrders, createLabOrder, updateLabOrderStatus } = require('./phase4_repository');
@@ -23,25 +24,6 @@ const { verifyAdminCredentials, createAdminToken, createDoctorToken, verifyRoleT
 const configuredOrigins = (process.env.CORS_ALLOWED_ORIGINS || '').split(',').map(v => v.trim()).filter(Boolean);
 const isAllowedOrigin = origin => !origin || (process.env.NODE_ENV !== 'production' && configuredOrigins.includes('*')) || configuredOrigins.includes(origin) || (process.env.NODE_ENV !== 'production' && /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin));
 const send=(res,code,data,req)=>{const origin=req?.headers?.origin;if(isAllowedOrigin(origin)){res.setHeader('Access-Control-Allow-Origin',origin||'*');if(origin)res.setHeader('Vary','Origin');}res.setHeader('Access-Control-Allow-Methods','GET,POST,PATCH,OPTIONS');res.setHeader('Access-Control-Allow-Headers','Content-Type,Authorization,X-Payment-Signature');res.setHeader('X-Content-Type-Options','nosniff');res.setHeader('X-Frame-Options','DENY');res.setHeader('Referrer-Policy','no-referrer');res.setHeader('Cache-Control','no-store');res.writeHead(code,{'Content-Type':'application/json'});res.end(JSON.stringify(data));};
-// Lightweight per-process abuse controls; production multi-instance deployments should use shared storage.
-const apiRateBuckets = new Map();
-function limited(req, key, limit, windowMs) {
-  const now = Date.now();
-  // Bound memory: prune expired buckets and evict oldest entries if needed.
-  if (apiRateBuckets.size >= 1000) {
-    for (const [bucketKey, bucket] of apiRateBuckets) {
-      if (now >= bucket.resetAt) apiRateBuckets.delete(bucketKey);
-    }
-    while (apiRateBuckets.size >= 1000) {
-      const oldestKey = apiRateBuckets.keys().next().value;
-      if (oldestKey === undefined) break;
-      apiRateBuckets.delete(oldestKey);
-    }
-  }
-  const record = apiRateBuckets.get(key);
-  if (!record || now >= record.resetAt) { apiRateBuckets.set(key, {count:1,resetAt:now+windowMs}); return false; }
-  if (record.count >= limit) return true; record.count += 1; return false;
-}
 function clientKey(req, route) { return route + ':' + (req.socket.remoteAddress || 'unknown'); }
 const MAX_JSON_BODY_BYTES = 1024 * 1024;
 const MAX_WEBHOOK_BODY_BYTES = 512 * 1024;
@@ -89,11 +71,11 @@ const server=http.createServer(async(req,res)=>{
     return send(res,404,{error:'Web panel file not found'},req);
   }
   if(url.pathname==='/api/ai/status'&&req.method==='GET')return send(res,200,getAiStatus(),req);
-  if(url.pathname==='/api/ai/symptom-guidance'&&req.method==='POST')return parseBody(req,async(err,data)=>{if(limited(req,clientKey(req,'ai-guidance'),10,60*1000))return send(res,429,{error:'Too many requests; try again later'},req);if(err)return send(res,400,{error:'Invalid JSON'},req);if(!data.symptoms||typeof data.symptoms!=='string')return send(res,422,{error:'symptoms is required'},req);const symptoms=data.symptoms.trim();if(!symptoms||symptoms.length>2000)return send(res,422,{error:'symptoms must be 1-2000 characters'},req);try{const result=await generateSymptomGuidance(symptoms);return send(res,result.configured?200:503,result,req);}catch(e){return send(res,502,{error:'AI provider request failed'},req);}});
+  if(url.pathname==='/api/ai/symptom-guidance'&&req.method==='POST')return parseBody(req,async(err,data)=>{if(await limited(clientKey(req,'ai-guidance),10,60*1000))return send(res,429,{error:'Too many requests; try again later'},req);if(err)return send(res,400,{error:'Invalid JSON'},req);if(!data.symptoms||typeof data.symptoms!=='string')return send(res,422,{error:'symptoms is required'},req);const symptoms=data.symptoms.trim();if(!symptoms||symptoms.length>2000)return send(res,422,{error:'symptoms must be 1-2000 characters'},req);try{const result=await generateSymptomGuidance(symptoms);return send(res,result.configured?200:503,result,req);}catch(e){return send(res,502,{error:'AI provider request failed'},req);}});
   if(url.pathname==='/api/notifications/whatsapp/status'&&req.method==='GET')return send(res,200,whatsappStatus(),req);
   if(url.pathname==='/api/notifications/whatsapp'&&req.method==='POST')return parseBody(req,async(err,data)=>{
     const auth=requireAuth(req,res); if(!auth)return;
-    if(limited(req,clientKey(req,'whatsapp'),5,60*1000))return send(res,429,{error:'Too many requests; try again later'},req);
+    if(limited(req,clientKey(req,'whatsapp),5,60*1000))return send(res,429,{error:'Too many requests; try again later'},req);
     if(err)return send(res,400,{error:'Invalid JSON'},req);
     if(!data.to||!data.text||!data.event)return send(res,422,{error:'to, text and event are required'},req);
     const normalizePhone=value=>String(value).replace(/[^0-9]/g,'');
@@ -111,7 +93,7 @@ const server=http.createServer(async(req,res)=>{
     if(limited(req,clientKey(req,'patient-otp-verify'),10,60*1000))return send(res,429,{error:'Too many verification attempts; try again later'},req);
     if(err||!data.phone||!data.otp)return send(res,400,{error:'phone and otp are required'},req);
     const normalizedPhone=String(data.phone).trim();
-    if(!verifyOtp(normalizedPhone,String(data.otp)))return send(res,401,{error:'Invalid or expired OTP'},req);
+    if(!await verifyOtp(normalizedPhone,String(data.otp)))return send(res,401,{error:'Invalid or expired OTP'},req);
     try{
       const db=await getDb();
       if(db){
@@ -133,7 +115,7 @@ const server=http.createServer(async(req,res)=>{
   if(url.pathname==='/api/doctor/appointments'&&req.method==='GET'){const doctor=verifyRoleToken(getAuthToken(req),'doctor');if(!doctor)return send(res,401,{error:'Doctor authentication required'},req);try{const rows=await listDoctorAppointments(doctor.sub);if(rows===null)return send(res,503,{error:'DATABASE_URL not configured'},req);return send(res,200,rows,req);}catch(e){return send(res,503,{error:'Unable to load doctor appointments'},req);}}
   const doctorStatusMatch=url.pathname.match(/^\/api\/doctor\/appointments\/(\d+)\/status$/);
   if(doctorStatusMatch&&req.method==='PATCH')return parseBody(req,async(err,data)=>{const doctor=verifyRoleToken(getAuthToken(req),'doctor');if(!doctor)return send(res,401,{error:'Doctor authentication required'},req);if(err)return send(res,400,{error:'Invalid JSON'},req);try{const saved=await updateDoctorAppointmentStatus(Number(doctorStatusMatch[1]),doctor.sub,data.status);return send(res,200,saved,req);}catch(e){if(e.statusCode)return send(res,e.statusCode,{error:e.message},req);return send(res,503,{error:'Unable to update doctor appointment'},req);}});
-  if(url.pathname==='/api/admin/login'&&req.method==='POST')return parseBody(req,(err,data)=>{if(limited(req,clientKey(req,'admin-login'),5,15*60*1000))return send(res,429,{error:'Too many login attempts; try again later'},req);if(err)return send(res,400,{error:'Invalid JSON'},req);try{if(!verifyAdminCredentials(data.email,data.password))return send(res,401,{error:'Invalid admin credentials'},req);return send(res,200,{token:createAdminToken(data.email),user:{email:String(data.email).trim().toLowerCase(),role:'admin'}},req);}catch(e){if(e instanceof AuthError)return send(res,e.statusCode,{error:e.message},req);return send(res,503,{error:'Unable to create admin session'},req);}});
+  if(url.pathname==='/api/admin/login'&&req.method==='POST')return parseBody(req,(err,data)=>{if(limited(req,clientKey(req,'admin-login),5,15*60*1000))return send(res,429,{error:'Too many login attempts; try again later'},req);if(err)return send(res,400,{error:'Invalid JSON'},req);try{if(!verifyAdminCredentials(data.email,data.password))return send(res,401,{error:'Invalid admin credentials'},req);return send(res,200,{token:createAdminToken(data.email),user:{email:String(data.email).trim().toLowerCase(),role:'admin'}},req);}catch(e){if(e instanceof AuthError)return send(res,e.statusCode,{error:e.message},req);return send(res,503,{error:'Unable to create admin session'},req);}});
   if(url.pathname==='/api/admin/appointments'&&req.method==='GET'){if(!requireAdmin(req,res))return;try{const rows=await listAppointments();if(rows===null)return send(res,503,{error:'DATABASE_URL not configured'},req);return send(res,200,rows,req);}catch(e){return send(res,503,{error:'Unable to load admin appointments'},req);}}
   if(url.pathname==='/api/emergency'&&req.method==='GET')return send(res,200,emergencyResponse(),req);
   if(url.pathname==='/api/hospitals/nearby'&&req.method==='GET'){try{const {latitude,longitude}=validateCoordinates(url.searchParams.get('latitude'),url.searchParams.get('longitude'));const rows=await listNearbyHospitals(latitude,longitude,url.searchParams.get('radiusKm')||25,url.searchParams.get('limit')||20);if(rows===null)return send(res,503,{error:'Hospital directory database is not configured'},req);return send(res,200,{latitude,longitude,radiusKm:Number(url.searchParams.get('radiusKm')||25),hospitals:rows},req);}catch(e){if(e.statusCode)return send(res,e.statusCode,{error:e.message},req);return send(res,503,{error:'Unable to load nearby hospitals'},req);}}
