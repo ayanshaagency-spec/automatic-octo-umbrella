@@ -130,7 +130,7 @@ test('real PostgreSQL patient journey E2E', async t => {
       patientName: 'CI E2E Patient',
       phone: PHONE,
       doctorId,
-      appointmentAt: new Date(Date.now() + 86400000).toISOString(),
+      appointmentAt: new Date(Date.now() + 3 * 86400000).toISOString(),
       mode: 'Video'
     })
   });
