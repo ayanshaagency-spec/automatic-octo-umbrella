@@ -18,7 +18,7 @@ function makeFakeDb({ payment = {}, failUpdate = false } = {}) {
   const state = {
     payment: { id: 7, amount: '100.00', currency: 'INR', provider: 'razorpay',
       provider_order_id: 'order_ci_1', provider_payment_id: null, status: 'pending', ...payment },
-    events: new Set(), queries: [], failUpdate, committed: false, rolledBack: false
+    events: new Map(), queries: [], failUpdate, committed: false, rolledBack: false
   };
   const client = {
     async query(sql, params = []) {
@@ -29,8 +29,9 @@ function makeFakeDb({ payment = {}, failUpdate = false } = {}) {
       if (sql.includes('SELECT id, amount')) return { rowCount: 1, rows: [state.payment] };
       if (sql.includes('INSERT INTO payment_webhook_events')) {
         if (state.events.has(params[0])) return { rowCount: 0, rows: [] };
-        state.events.add(params[0]); return { rowCount: 1, rows: [{ event_id: params[0] }] };
+        state.events.set(params[0], { provider: params[1], payment_id: params[2], event_type: params[3] }); return { rowCount: 1, rows: [{ event_id: params[0] }] };
       }
+      if (sql.includes('SELECT provider, payment_id, event_type FROM payment_webhook_events')) { const prior=state.events.get(params[0]); return { rowCount: prior ? 1 : 0, rows: prior ? [prior] : [] }; }
       if (sql.includes('UPDATE payments SET status')) {
         if (state.failUpdate) throw new Error('simulated update failure');
         state.payment.status=params[0]; state.payment.provider_payment_id=params[1];
@@ -56,7 +57,7 @@ test('webhook processor commits a valid captured event and stores payment ID', a
 });
 
 test('webhook processor reports duplicate event IDs without updating payment', async () => {
-  const fake=makeFakeDb(); fake.state.events.add('evt_duplicate');
+  const fake=makeFakeDb(); fake.state.events.set('evt_duplicate',{provider:'razorpay',payment_id:7,event_type:'payment.captured'});
   const result=await require('./payment_webhook_processor').processRazorpayWebhook({
     eventId:'evt_duplicate',event:'payment.captured',status:'paid',
     providerPaymentId:'pay_ci_1',providerOrderId:'order_ci_1',amountMinor:10000,currency:'INR'
