@@ -303,6 +303,24 @@ test('real PostgreSQL patient journey E2E', async t => {
   });
   assert.equal(adminStatus.status, 200);
 
+  // Lifecycle checks: cancelled appointments are terminal and cannot be reopened.
+  const cancelOther = await fetch(BASE_URL + '/api/appointments/' + otherAppointment.rows[0].id + '/status', {
+    method: 'PATCH', headers: { Authorization: 'Bearer ci-admin-token', 'Content-Type': 'application/json' },
+    body: JSON.stringify({ status: 'cancelled' })
+  });
+  assert.equal(cancelOther.status, 200);
+  assert.equal((await cancelOther.json()).status, 'cancelled');
+  const reopenCancelled = await fetch(BASE_URL + '/api/appointments/' + otherAppointment.rows[0].id + '/status', {
+    method: 'PATCH', headers: { Authorization: 'Bearer ci-admin-token', 'Content-Type': 'application/json' },
+    body: JSON.stringify({ status: 'confirmed' })
+  });
+  assert.equal(reopenCancelled.status, 409);
+  const repeatCancel = await fetch(BASE_URL + '/api/appointments/' + otherAppointment.rows[0].id + '/status', {
+    method: 'PATCH', headers: { Authorization: 'Bearer ci-admin-token', 'Content-Type': 'application/json' },
+    body: JSON.stringify({ status: 'cancelled' })
+  });
+  assert.equal(repeatCancel.status, 200);
+
   const payments = await fetch(`${BASE_URL}/api/payments?phone=${encodeURIComponent(PHONE)}`, {
     headers: { Authorization: auth.Authorization }
   });
