@@ -22,7 +22,7 @@ test('PostgreSQL enforces one active doctor slot and permits rebooking after can
   }
   const safeHosts = new Set(['localhost', '127.0.0.1', '::1']);
   const safeDatabases = new Set(['healthcare_ci', 'ayansha_healthcare']);
-  const databaseName = decodeURIComponent(parsed.pathname.replace(/^\\//, ''));
+  const databaseName = decodeURIComponent(parsed.pathname.replace(/^\/+/, ''));
   if (!safeHosts.has(parsed.hostname) || !safeDatabases.has(databaseName)) {
     t.skip('PostgreSQL fixture test is restricted to an approved local CI database');
     return;
