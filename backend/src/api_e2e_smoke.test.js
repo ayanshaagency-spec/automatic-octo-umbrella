@@ -123,6 +123,18 @@ test('Phase 5 API smoke/E2E contract', async t => {
   assert.equal(adminAuthButNoDb.status, 503);
   assert.equal((await adminAuthButNoDb.json()).error, 'DATABASE_URL not configured');
 
+  // Sensitive clinical routes must reject unauthenticated and non-doctor writes.
+  const healthRecordNoToken = await fetch(`${BASE_URL}/api/health-records`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ phone: '9000000000', recordType: 'report', title: 'test' }) });
+  assert.equal(healthRecordNoToken.status, 403);
+  assert.equal((await healthRecordNoToken.json()).error, 'Doctor authorization required');
+  const prescriptionNoToken = await fetch(`${BASE_URL}/api/prescriptions`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ phone: '9000000000', appointmentId: 1, diagnosis: 'test', medicines: [{ medicineName: 'M', dosage: '1', frequency: 'daily', duration: '1 day' }] }) });
+  assert.equal(prescriptionNoToken.status, 403);
+  assert.equal((await prescriptionNoToken.json()).error, 'Doctor authorization required');
+  const healthRecordsNoPatientToken = await fetch(`${BASE_URL}/api/health-records?phone=9000000000`);
+  assert.equal(healthRecordsNoPatientToken.status, 401);
+  const prescriptionsNoPatientToken = await fetch(`${BASE_URL}/api/prescriptions?phone=9000000000`);
+  assert.equal(prescriptionsNoPatientToken.status, 401);
+
   const options = await fetch(`${BASE_URL}/api/payments`, { method: 'OPTIONS' });
   assert.equal(options.status, 204);
   assert.match(options.headers.get('access-control-allow-methods'), /POST/);
