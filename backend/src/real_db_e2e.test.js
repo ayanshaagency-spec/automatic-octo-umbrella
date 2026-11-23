@@ -141,6 +141,18 @@ test('real PostgreSQL patient journey E2E', async t => {
   const appointmentBody = await appointment.json();
   assert.equal(appointmentBody.doctor_id, doctorId);
 
+  const mismatchedPatientAppointments = await fetch(BASE_URL + '/api/appointments?phone=+919900000002', { headers: auth });
+  assert.equal(mismatchedPatientAppointments.status, 403);
+  const mismatchedPatientBooking = await fetch(BASE_URL + '/api/appointments', {
+    method: 'POST', headers: auth,
+    body: JSON.stringify({ patientName: 'Other Patient', phone: '+919900000002', doctorId, appointmentAt: new Date(Date.now() + 5 * 86400000).toISOString(), mode: 'Video' })
+  });
+  assert.equal(mismatchedPatientBooking.status, 403);
+  const patientStatusAttempt = await fetch(BASE_URL + '/api/appointments/' + appointmentBody.id + '/status', {
+    method: 'PATCH', headers: auth, body: JSON.stringify({ status: 'cancelled' })
+  });
+  assert.equal(patientStatusAttempt.status, 403);
+
   // CI-only fixture: a second doctor appointment checks doctor scoping.
   const otherAppointment = await db.query(
     \`INSERT INTO appointments (patient_id, doctor_id, appointment_at, mode, status)
@@ -159,6 +171,22 @@ test('real PostgreSQL patient journey E2E', async t => {
   const secondDoctorSession = await secondDoctorLogin.json();
   const secondDoctorAuth = { Authorization: 'Bearer ' + secondDoctorSession.token, 'Content-Type': 'application/json' };
 
+  const doctorOtpRequest = await fetch(`${BASE_URL}/api/doctor/auth/request-otp`, {
+    method: 'POST', headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({phone: DOCTOR_PHONE})
+  });
+  assert.equal(doctorOtpRequest.status, 200);
+  const doctorOtpBody = await doctorOtpRequest.json();
+  assert.ok(doctorOtpBody.devOtp);
+  const doctorOtpVerify = await fetch(`${BASE_URL}/api/doctor/auth/verify-otp`, {
+    method: 'POST', headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({phone: DOCTOR_PHONE, otp: doctorOtpBody.devOtp})
+  });
+  assert.equal(doctorOtpVerify.status, 200);
+  const doctorAuthBody = await doctorOtpVerify.json();
+  const doctorAuth = {Authorization: `Bearer ${doctorAuthBody.token}`, 'Content-Type':'application/json'};
+
+
   const scopedAppointments = await fetch(BASE_URL + '/api/doctor/appointments', { headers: doctorAuth });
   assert.equal(scopedAppointments.status, 200);
   assert.equal((await scopedAppointments.json()).some(a => a.id === otherAppointment.rows[0].id), false);
@@ -174,20 +202,6 @@ test('real PostgreSQL patient journey E2E', async t => {
   const patientAfterBooking = await db.query('SELECT name FROM patients WHERE phone = $1', [PHONE]);
   assert.equal(patientAfterBooking.rows[0].name, 'CI E2E Patient');
 
-  const doctorOtpRequest = await fetch(`${BASE_URL}/api/doctor/auth/request-otp`, {
-    method: 'POST', headers: {'Content-Type':'application/json'},
-    body: JSON.stringify({phone: DOCTOR_PHONE})
-  });
-  assert.equal(doctorOtpRequest.status, 200);
-  const doctorOtpBody = await doctorOtpRequest.json();
-  assert.ok(doctorOtpBody.devOtp);
-  const doctorOtpVerify = await fetch(`${BASE_URL}/api/doctor/auth/verify-otp`, {
-    method: 'POST', headers: {'Content-Type':'application/json'},
-    body: JSON.stringify({phone: DOCTOR_PHONE, otp: doctorOtpBody.devOtp})
-  });
-  assert.equal(doctorOtpVerify.status, 200);
-  const doctorAuthBody = await doctorOtpVerify.json();
-  const doctorAuth = {Authorization: `Bearer ${doctorAuthBody.token}`, 'Content-Type':'application/json'};
 
   const appointments = await fetch(`${BASE_URL}/api/appointments`, { headers: { Authorization: auth.Authorization } });
   assert.equal(appointments.status, 200);
