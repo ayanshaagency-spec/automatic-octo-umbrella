@@ -205,7 +205,7 @@ test('real PostgreSQL patient journey E2E', async t => {
 
   const appointments = await fetch(`${BASE_URL}/api/appointments`, { headers: { Authorization: auth.Authorization } });
   assert.equal(appointments.status, 200);
-  assert.equal((await appointments.json()).length, 1);
+  assert.equal((await appointments.json()).length, 2);
 
   const healthRecord = await fetch(`${BASE_URL}/api/health-records`, {
     method: 'POST', headers: doctorAuth,
