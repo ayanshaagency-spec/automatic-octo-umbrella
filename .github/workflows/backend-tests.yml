@@ -1,5 +1,6 @@
 name: Backend Tests
 # Recovery-branch validation workflow: runs PostgreSQL-backed tests on pushes and PRs.
+# CI uses only its disposable PostgreSQL service; never point this workflow at production.
 
 on:
   workflow_dispatch:
