@@ -78,6 +78,8 @@ test('real PostgreSQL patient journey E2E', async t => {
      RETURNING id`, [DOCTOR_PHONE]
   );
   const doctorId = doctor.rows[0].id;
+  const secondDoctor = await db.query(`INSERT INTO doctors (name, specialty, phone) VALUES ('CI E2E Other Doctor', 'Dermatology', $1) RETURNING id`, ['+919900000098']);
+  const secondDoctorId = secondDoctor.rows[0].id;
   const hospital = await db.query(
     `INSERT INTO hospitals (name, address, city, state, latitude, longitude, phone, emergency_available, active)
      VALUES ('CI E2E Hospital', 'Test Address', 'Delhi', 'Delhi', 28.6139, 77.2090, '01100000000', TRUE, TRUE)
@@ -97,6 +99,7 @@ test('real PostgreSQL patient journey E2E', async t => {
     await db.query('DELETE FROM appointments WHERE patient_id IN (SELECT id FROM patients WHERE phone = $1)', [PHONE]);
     await db.query('DELETE FROM patients WHERE phone = $1', [PHONE]);
     await db.query('DELETE FROM hospitals WHERE id = $1', [hospitalId]);
+    await db.query('DELETE FROM doctors WHERE id = $1', [secondDoctorId]);
     await db.query('DELETE FROM doctors WHERE id = $1', [doctorId]);
     await db.end();
   });
@@ -137,6 +140,37 @@ test('real PostgreSQL patient journey E2E', async t => {
   assert.equal(appointment.status, 201);
   const appointmentBody = await appointment.json();
   assert.equal(appointmentBody.doctor_id, doctorId);
+
+  // CI-only fixture: a second doctor appointment checks doctor scoping.
+  const otherAppointment = await db.query(
+    \`INSERT INTO appointments (patient_id, doctor_id, appointment_at, mode, status)
+     SELECT p.id, $2, $3, 'Video', 'confirmed' FROM patients p WHERE p.phone = $1 RETURNING id\`,
+    [PHONE, secondDoctorId, new Date(Date.now() + 4 * 86400000).toISOString()]
+  );
+  const secondDoctorOtpReq = await fetch(BASE_URL + '/api/doctor/auth/request-otp', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ phone: '+919900000098' })
+  });
+  assert.equal(secondDoctorOtpReq.status, 200);
+  const secondOtp = await secondDoctorOtpReq.json();
+  const secondDoctorLogin = await fetch(BASE_URL + '/api/doctor/auth/verify-otp', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ phone: '+919900000098', otp: secondOtp.devOtp })
+  });
+  assert.equal(secondDoctorLogin.status, 200);
+  const secondDoctorSession = await secondDoctorLogin.json();
+  const secondDoctorAuth = { Authorization: 'Bearer ' + secondDoctorSession.token, 'Content-Type': 'application/json' };
+
+  const scopedAppointments = await fetch(BASE_URL + '/api/doctor/appointments', { headers: doctorAuth });
+  assert.equal(scopedAppointments.status, 200);
+  assert.equal((await scopedAppointments.json()).some(a => a.id === otherAppointment.rows[0].id), false);
+  const crossDoctorStatus = await fetch(BASE_URL + '/api/doctor/appointments/' + otherAppointment.rows[0].id + '/status', {
+    method: 'PATCH', headers: doctorAuth, body: JSON.stringify({ status: 'completed' })
+  });
+  assert.equal(crossDoctorStatus.status, 404);
+  const crossDoctorPrescription = await fetch(BASE_URL + '/api/prescriptions', {
+    method: 'POST', headers: secondDoctorAuth,
+    body: JSON.stringify({ phone: PHONE, appointmentId: appointmentBody.id, diagnosis: 'scope test', medicines: [{ medicineName: 'Test', dosage: '1', frequency: 'daily', duration: '1 day' }] })
+  });
+  assert.equal(crossDoctorPrescription.status, 404);
   const patientAfterBooking = await db.query('SELECT name FROM patients WHERE phone = $1', [PHONE]);
   assert.equal(patientAfterBooking.rows[0].name, 'CI E2E Patient');
 
