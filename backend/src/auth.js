@@ -88,6 +88,16 @@ function verifyToken(token) {
 async function sendOtp(phone, otp) {
   const providerUrl = (process.env.OTP_PROVIDER_URL || '').trim();
   const accessToken = (process.env.OTP_PROVIDER_TOKEN || '').trim();
+  if (providerUrl) {
+    let parsedProviderUrl;
+    try { parsedProviderUrl = new URL(providerUrl); } catch { throw new AuthError('OTP provider URL is invalid'); }
+    const allowLocalHttp = process.env.NODE_ENV !== 'production' &&
+      ['localhost', '127.0.0.1'].includes(parsedProviderUrl.hostname);
+    if (parsedProviderUrl.protocol !== 'https:' && !allowLocalHttp) {
+      throw new AuthError('OTP provider URL must use HTTPS');
+    }
+  }
+
   if (!providerUrl || !accessToken) {
     if (process.env.NODE_ENV === 'production') {
       throw new AuthError('OTP provider is not configured');
