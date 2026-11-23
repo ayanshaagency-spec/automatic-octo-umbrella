@@ -1,4 +1,5 @@
 const { getDb } = require('./db');
+const { assertLabStatusTransition } = require('./lab_status_transition');
 
 async function listLabOrders(phone) {
   const db = await getDb();
@@ -61,15 +62,16 @@ async function createLabOrder(data) {
 async function updateLabOrderStatus(id, status) {
   const db = await getDb();
   if (!db) return null;
-  const allowed = ['booked', 'confirmed', 'sample-collected', 'completed', 'cancelled'];
-  if (!allowed.includes(status)) {
-    const error = new Error(`status must be one of: ${allowed.join(', ')}`);
-    error.statusCode = 422;
+  const current = await db.query('SELECT status FROM lab_orders WHERE id = $1', [id]);
+  if (!current.rows.length) {
+    const error = new Error('Lab order not found');
+    error.statusCode = 404;
     throw error;
   }
+  assertLabStatusTransition(current.rows[0].status, status);
   const { rows } = await db.query(
-    'UPDATE lab_orders SET status = $1 WHERE id = $2 RETURNING id, patient_id, test_name, lab_name, scheduled_at, status, amount, notes, created_at',
-    [status, id]
+    'UPDATE lab_orders SET status = $1 WHERE id = $2 AND status = $3 RETURNING id, patient_id, test_name, lab_name, scheduled_at, status, amount, notes, created_at',
+    [status, id, current.rows[0].status]
   );
   if (!rows.length) {
     const error = new Error('Lab order not found');
