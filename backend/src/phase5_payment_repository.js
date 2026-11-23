@@ -33,18 +33,23 @@ async function getPaymentById(id) {
 async function setProviderOrderId(id, provider, providerOrderId) {
   const db = await getDb();
   if (!db) return null;
+  // First gateway order wins: concurrent checkout requests cannot overwrite it.
   const { rows } = await db.query(`
     UPDATE payments
        SET provider = $1,
            provider_order_id = $2,
            status = CASE WHEN status = 'created' THEN 'pending' ELSE status END,
            updated_at = NOW()
-     WHERE id = $3
+     WHERE id = $3 AND provider_order_id IS NULL
      RETURNING id, patient_id, appointment_id, lab_order_id, amount, currency, provider,
                provider_order_id, provider_payment_id, idempotency_key, status, notes, created_at, updated_at`,
     [provider, providerOrderId, id]
   );
-  return rows[0] || null;
+  if (rows[0]) return rows[0];
+  // A competing request may have saved an order; return that persisted winner.
+  const existing = await getPaymentById(id);
+  if (existing && existing.provider_order_id) return existing;
+  return null;
 }
 
 
