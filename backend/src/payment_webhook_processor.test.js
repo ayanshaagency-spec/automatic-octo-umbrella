@@ -144,3 +144,6 @@ test('webhook processor rejects missing event ID before database access', async 
   }, db), /event ID is required/);
   assert.equal(connected,false);
 });
+
+
+test('webhook processor rejects event ID collision across payment or event type', async () => { const fake=makeFakeDb(); fake.state.events.set('evt_collision',{provider:'razorpay',payment_id:99,event_type:'payment.failed'}); await assert.rejects(require('./payment_webhook_processor').processRazorpayWebhook({eventId:'evt_collision',event:'payment.captured',status:'paid',providerPaymentId:'pay_ci_1',providerOrderId:'order_ci_1',amountMinor:10000,currency:'INR'},fake.db), /event ID collision/); assert.equal(fake.state.rolledBack,true); });
