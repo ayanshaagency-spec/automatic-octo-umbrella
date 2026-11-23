@@ -3,11 +3,31 @@ const assert = require('node:assert/strict');
 const { Client } = require('pg');
 
 test('PostgreSQL enforces one active doctor slot and permits rebooking after cancellation', async t => {
-  if (!process.env.DATABASE_URL) {
+  const databaseUrl = (process.env.DATABASE_URL || '').trim();
+  if (!databaseUrl) {
     t.skip('DATABASE_URL is required for PostgreSQL constraint test');
     return;
   }
-  const db = new Client({ connectionString: process.env.DATABASE_URL });
+  // This integration test writes and deletes fixtures: restrict it to local CI databases.
+  if (process.env.NODE_ENV === 'production') {
+    t.skip('PostgreSQL fixture test is disabled in production');
+    return;
+  }
+  let parsed;
+  try {
+    parsed = new URL(databaseUrl);
+  } catch {
+    t.skip('DATABASE_URL must be a valid URL for PostgreSQL fixture test');
+    return;
+  }
+  const safeHosts = new Set(['localhost', '127.0.0.1', '::1']);
+  const safeDatabases = new Set(['healthcare_ci', 'ayansha_healthcare']);
+  const databaseName = decodeURIComponent(parsed.pathname.replace(/^\\//, ''));
+  if (!safeHosts.has(parsed.hostname) || !safeDatabases.has(databaseName)) {
+    t.skip('PostgreSQL fixture test is restricted to an approved local CI database');
+    return;
+  }
+  const db = new Client({ connectionString: databaseUrl });
   const contenderA = new Client({ connectionString: process.env.DATABASE_URL });
   const contenderB = new Client({ connectionString: process.env.DATABASE_URL });
   await Promise.all([db.connect(), contenderA.connect(), contenderB.connect()]);
