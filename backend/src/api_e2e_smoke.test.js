@@ -256,6 +256,17 @@ test('authenticated patient access and ownership contract', async t => {
   const foreignPayment = await fetch(`${BASE_URL}/api/payments?phone=+919888888888`, { headers: authHeaders });
   assert.equal(foreignPayment.status, 403);
   assert.equal((await foreignPayment.json()).error, 'Patient access denied');
+  // Ownership must be enforced consistently across clinical and lab endpoints.
+  for (const route of ['/api/prescriptions?phone=+919888888888','/api/health-records?phone=+919888888888','/api/lab-orders?phone=+919888888888']) {
+    const response = await fetch(`${BASE_URL}${route}`, { headers: authHeaders });
+    assert.equal(response.status, 403, route);
+    assert.equal((await response.json()).error, 'Patient access denied', route);
+  }
+  // A patient session must not be accepted as admin or doctor credentials.
+  const patientOnAdmin = await fetch(`${BASE_URL}/api/admin/appointments`, { headers: authHeaders });
+  assert.equal(patientOnAdmin.status, 401);
+  const patientOnDoctor = await fetch(`${BASE_URL}/api/doctor/appointments`, { headers: authHeaders });
+  assert.equal(patientOnDoctor.status, 401);
 
   const invalidSession = await fetch(`${BASE_URL}/api/appointments`, {
     headers: { Authorization: 'Bearer invalid.token.value' }
