@@ -156,7 +156,7 @@ test('real PostgreSQL patient journey E2E', async t => {
   // CI-only fixture: a second doctor appointment checks doctor scoping.
   const otherAppointment = await db.query(
     `INSERT INTO appointments (patient_id, doctor_id, appointment_at, mode, status)
-     SELECT p.id, $2, $3, 'Video', 'confirmed' FROM patients p WHERE p.phone = $1 RETURNING id\`,
+     SELECT p.id, $2, $3, 'Video', 'confirmed' FROM patients p WHERE p.phone = $1 RETURNING id`,
     [PHONE, secondDoctorId, new Date(Date.now() + 4 * 86400000).toISOString()]
   );
   const secondDoctorOtpReq = await fetch(BASE_URL + '/api/doctor/auth/request-otp', {
