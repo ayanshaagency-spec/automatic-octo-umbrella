@@ -327,4 +327,13 @@ test('real PostgreSQL patient journey E2E', async t => {
   assert.equal(payments.status, 200);
   assert.equal((await payments.json()).some(item => item.id === paymentBody.id), true);
   assert.ok(labBody.id);
+
+  // Race two authenticated bookings for the same doctor and exact slot.
+  const raceSlot = new Date(Date.now() + 6 * 86400000).toISOString();
+  const racePayload = { patientName: 'CI E2E Patient', phone: PHONE, doctorId, appointmentAt: raceSlot, mode: 'Video' };
+  const raceResponses = await Promise.all([1, 2].map(() => fetch(BASE_URL + '/api/appointments', {
+    method: 'POST', headers: auth, body: JSON.stringify(racePayload)
+  })));
+  const raceStatuses = raceResponses.map(response => response.status).sort((a, b) => a - b);
+  assert.deepEqual(raceStatuses, [201, 409], 'exactly one concurrent booking should succeed and the other conflict');
 });
