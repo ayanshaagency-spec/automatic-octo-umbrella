@@ -99,11 +99,28 @@ async function createHealthRecord(data) {
   const db = await getDb();
   if (!db) return null;
   if (!data.phone || !data.doctorPhone || !data.recordType || !data.title) {
-    const error = new Error('phone, recordType and title are required');
+    const error = new Error('phone, recordType, title and doctorPhone are required');
     error.statusCode = 422;
     throw error;
   }
-  const patient = await db.query(`SELECT p.id FROM patients p JOIN appointments a ON a.patient_id = p.id JOIN doctors d ON d.id = a.doctor_id WHERE p.phone = $1 AND d.phone = $2 LIMIT 1`, [data.phone, data.doctorPhone]);
+  const recordType = String(data.recordType).trim();
+  const title = String(data.title).trim();
+  const description = data.description == null ? null : String(data.description).trim();
+  const source = data.source == null ? null : String(data.source).trim();
+  if (!recordType || recordType.length > 80 || !title || title.length > 160 ||
+      (description !== null && description.length > 2000) ||
+      (source !== null && source.length > 80)) {
+    const error = new Error('recordType/title/source must be within limits and description must be at most 2000 characters');
+    error.statusCode = 422;
+    throw error;
+  }
+  let recordDate = data.recordDate || null;
+  if (recordDate !== null && (typeof recordDate !== 'string' || Number.isNaN(Date.parse(recordDate)))) {
+    const error = new Error('recordDate must be a valid date');
+    error.statusCode = 422;
+    throw error;
+  }
+  const patient = await db.query(`SELECT p.id FROM patients p JOIN appointments a ON a.patient_id = p.id JOIN doctors d ON d.id = a.doctor_id WHERE p.phone = $1 AND d.phone = $2 LIMIT 1`, [data.phone.trim(), data.doctorPhone.trim()]);
   if (patient.rowCount === 0) {
     const error = new Error('Patient not found');
     error.statusCode = 404;
@@ -113,7 +130,7 @@ async function createHealthRecord(data) {
     `INSERT INTO health_records (patient_id, record_type, title, description, record_date, source)
      VALUES ($1,$2,$3,$4,COALESCE($5::timestamptz,NOW()),$6)
      RETURNING id, patient_id, record_type, title, description, record_date, source`,
-    [patient.rows[0].id, data.recordType, data.title, data.description || null, data.recordDate || null, data.source || null]
+    [patient.rows[0].id, recordType, title, description || null, recordDate, source || null]
   );
   return rows[0];
 }
