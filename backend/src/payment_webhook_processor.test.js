@@ -147,3 +147,16 @@ test('webhook processor rejects missing event ID before database access', async 
 
 
 test('webhook processor rejects event ID collision across payment or event type', async () => { const fake=makeFakeDb(); fake.state.events.set('evt_collision',{provider:'razorpay',payment_id:99,event_type:'payment.failed'}); await assert.rejects(require('./payment_webhook_processor').processRazorpayWebhook({eventId:'evt_collision',event:'payment.captured',status:'paid',providerPaymentId:'pay_ci_1',providerOrderId:'order_ci_1',amountMinor:10000,currency:'INR'},fake.db), /event ID collision/); assert.equal(fake.state.rolledBack,true); });
+
+test('webhook replay with a new event ID for an already-paid payment is safely idempotent', async () => {
+  const fake=makeFakeDb({payment:{status:'paid',provider_payment_id:'pay_ci_1'}});
+  const result=await require('./payment_webhook_processor').processRazorpayWebhook({
+    eventId:'evt_replay_new_id',event:'payment.captured',status:'paid',
+    providerPaymentId:'pay_ci_1',providerOrderId:'order_ci_1',amountMinor:10000,currency:'INR'
+  }, fake.db);
+  assert.equal(result.duplicate,false);
+  assert.equal(result.payment.status,'paid');
+  assert.equal(fake.state.committed,true);
+  assert.equal(fake.state.rolledBack,false);
+  assert.equal(fake.state.events.has('evt_replay_new_id'),true);
+});
