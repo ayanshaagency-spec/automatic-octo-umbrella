@@ -72,7 +72,7 @@ function createPaymentDb() {
 
       if (sql.includes('UPDATE payments') && sql.includes('SET provider = $1')) {
         const payment = findPayment(params[2]);
-        if (!payment) return { rowCount: 0, rows: [] };
+        if (!payment || payment.provider_order_id) return { rowCount: 0, rows: [] };
         payment.provider = params[0];
         payment.provider_order_id = params[1];
         if (payment.status === 'created') payment.status = 'pending';
@@ -85,6 +85,11 @@ function createPaymentDb() {
         payment.status = params[0];
         if (params[1]) payment.provider_payment_id = params[1];
         return { rowCount: 1, rows: [payment] };
+      }
+
+      if (sql.includes('SELECT pay.id, patient_id, appointment_id') && sql.includes('WHERE id = $1')) {
+        const payment = findPayment(params[0]);
+        return { rowCount: payment ? 1 : 0, rows: payment ? [payment] : [] };
       }
 
       if (sql.includes('SELECT pay.id, pay.patient_id, p.phone')) {
@@ -162,4 +167,15 @@ test('Phase 5 payment repository: idempotency key rejects mismatched immutable d
   );
   assert.equal(fakeDb.payments.length, 1);
   assert.equal(first.amount, 499);
+});
+
+test('Phase 5 payment repository: concurrent gateway-order persistence keeps the first order', async () => {
+  const fakeDb = createPaymentDb();
+  const { createPayment, setProviderOrderId } = installFakeDb(fakeDb);
+  const payment = await createPayment({ phone: '9999999999', amount: 499, currency: 'INR' });
+  const first = await setProviderOrderId(payment.id, 'razorpay', 'order_winner');
+  const second = await setProviderOrderId(payment.id, 'razorpay', 'order_loser');
+  assert.equal(first.provider_order_id, 'order_winner');
+  assert.equal(second.provider_order_id, 'order_winner');
+  assert.equal(fakeDb.payments[0].provider_order_id, 'order_winner');
 });
