@@ -172,7 +172,7 @@ test('Phase 5 payment repository: idempotency key rejects mismatched immutable d
 test('Phase 5 payment repository: concurrent gateway-order persistence keeps the first order', async () => {
   const fakeDb = createPaymentDb();
   const { createPayment, setProviderOrderId } = installFakeDb(fakeDb);
-  const payment = await createPayment({ phone: '9999999999', amount: 499, currency: 'INR' });
+  const payment = await createPayment({ phone: '9999999999', labOrderId: 52, amount: 499, currency: 'INR' });
   const first = await setProviderOrderId(payment.id, 'razorpay', 'order_winner');
   const second = await setProviderOrderId(payment.id, 'razorpay', 'order_loser');
   assert.equal(first.provider_order_id, 'order_winner');
