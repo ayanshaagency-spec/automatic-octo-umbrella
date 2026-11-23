@@ -24,7 +24,8 @@ test('doctor status update atomically scopes appointment to doctor and allowed p
   const row=await updateDoctorAppointmentStatus(3,'doctor-phone','completed');
   assert.equal(row.status,'completed');
   assert.match(updateSql,/a\.status = ANY\(\$4::text\[\]\)/);
-  assert.equal(updateParams[3].includes('in-progress'),true);\n  assert.equal(updateParams[3].includes('cancelled'),false);
+  assert.equal(updateParams[3].includes('in-progress'),true);
+  assert.equal(updateParams[3].includes('cancelled'),false);
 });
 test('missing appointment is still reported as 404', async () => {
   const db={async query(){return {rowCount:0,rows:[]};}};
