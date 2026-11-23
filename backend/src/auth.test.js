@@ -123,3 +123,19 @@ test('OTP verifier rejects malformed phone and OTP inputs safely', async () => {
   assert.equal(await verifyOtp('+919333333333', '12345'), false);
   assert.equal(await verifyOtp('+919333333333', 'abcdef'), false);
 });
+
+test('OTP provider rejects insecure HTTP URLs outside local development', async () => {
+  const originalUrl = process.env.OTP_PROVIDER_URL;
+  const originalToken = process.env.OTP_PROVIDER_TOKEN;
+  const originalNodeEnv = process.env.NODE_ENV;
+  process.env.OTP_PROVIDER_URL = 'http://otp-provider.example/send';
+  process.env.OTP_PROVIDER_TOKEN = 'test-token';
+  process.env.NODE_ENV = 'production';
+  try {
+    await assert.rejects(issueOtp('+919222222222'), error => error.statusCode === 503 && /HTTPS/.test(error.message));
+  } finally {
+    if (originalUrl === undefined) delete process.env.OTP_PROVIDER_URL; else process.env.OTP_PROVIDER_URL = originalUrl;
+    if (originalToken === undefined) delete process.env.OTP_PROVIDER_TOKEN; else process.env.OTP_PROVIDER_TOKEN = originalToken;
+    if (originalNodeEnv === undefined) delete process.env.NODE_ENV; else process.env.NODE_ENV = originalNodeEnv;
+  }
+});
