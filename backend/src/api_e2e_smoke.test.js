@@ -380,3 +380,54 @@ test('OTP verification trims phone consistently in the returned session', async 
   assert.equal(session.user.phone, phone);
   assert.ok(session.token);
 });
+
+test('doctor role token is required for doctor appointment and prescription routes', async t => {
+  const server = startServer();
+  t.after(() => server.kill());
+  await waitForHealth(server);
+
+  const signRoleToken = role => {
+    const b64 = value => Buffer.from(value).toString('base64url');
+    const now = Math.floor(Date.now() / 1000);
+    const input = b64(JSON.stringify({ alg: 'HS256', typ: 'JWT' })) + '.' +
+      b64(JSON.stringify({ sub: '+919555555555', role, iat: now, exp: now + 3600 }));
+    return input + '.' + crypto.createHmac('sha256', JWT_SECRET).update(input).digest('base64url');
+  };
+  const patientHeaders = { Authorization: 'Bearer ' + signRoleToken('patient') };
+  const doctorHeaders = { Authorization: 'Bearer ' + signRoleToken('doctor') };
+
+  const patientOnDoctorList = await fetch(BASE_URL + '/api/doctor/appointments', { headers: patientHeaders });
+  assert.equal(patientOnDoctorList.status, 401);
+  assert.equal((await patientOnDoctorList.json()).error, 'Doctor authentication required');
+
+  const patientOnDoctorStatus = await fetch(BASE_URL + '/api/doctor/appointments/1/status', {
+    method: 'PATCH', headers: { ...patientHeaders, 'Content-Type': 'application/json' }, body: JSON.stringify({ status: 'completed' })
+  });
+  assert.equal(patientOnDoctorStatus.status, 401);
+  assert.equal((await patientOnDoctorStatus.json()).error, 'Doctor authentication required');
+
+  const patientOnPrescription = await fetch(BASE_URL + '/api/prescriptions', {
+    method: 'POST', headers: { ...patientHeaders, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ phone: '+919555555555', appointmentId: 1, diagnosis: 'test', medicines: [{ medicineName: 'Test', dosage: '1', frequency: 'daily', duration: '1 day' }] })
+  });
+  assert.equal(patientOnPrescription.status, 403);
+  assert.equal((await patientOnPrescription.json()).error, 'Doctor authorization required');
+
+  // Valid doctor role passes route guards; DB-dependent actions safely fail in this DB-less smoke environment.
+  const doctorListUnavailable = await fetch(BASE_URL + '/api/doctor/appointments', { headers: doctorHeaders });
+  assert.equal(doctorListUnavailable.status, 503);
+  assert.equal((await doctorListUnavailable.json()).error, 'DATABASE_URL not configured');
+
+  const doctorStatusUnavailable = await fetch(BASE_URL + '/api/doctor/appointments/1/status', {
+    method: 'PATCH', headers: { ...doctorHeaders, 'Content-Type': 'application/json' }, body: JSON.stringify({ status: 'completed' })
+  });
+  assert.equal(doctorStatusUnavailable.status, 503);
+  assert.equal((await doctorStatusUnavailable.json()).error, 'Unable to update doctor appointment');
+
+  const doctorPrescriptionUnavailable = await fetch(BASE_URL + '/api/prescriptions', {
+    method: 'POST', headers: { ...doctorHeaders, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ phone: '+919555555555', appointmentId: 1, diagnosis: 'test', medicines: [{ medicineName: 'Test', dosage: '1', frequency: 'daily', duration: '1 day' }] })
+  });
+  assert.equal(doctorPrescriptionUnavailable.status, 503);
+  assert.equal((await doctorPrescriptionUnavailable.json()).error, 'DATABASE_URL not configured');
+});
