@@ -1,4 +1,5 @@
 name: Backend Tests
+# Recovery-branch validation workflow: runs PostgreSQL-backed tests on pushes and PRs.
 
 on:
   workflow_dispatch:
