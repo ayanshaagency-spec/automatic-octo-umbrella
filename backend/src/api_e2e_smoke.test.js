@@ -86,7 +86,7 @@ test('Phase 5 API smoke/E2E contract', async t => {
   assert.equal(adminPage.status, 200);
   assert.match(adminPage.headers.get('content-type'), /text\/html/);
   assert.equal(adminPage.headers.get('cache-control'), 'no-store');
-  assert.match(await adminPage.text(), /Ayansha Health Care Admin/);
+  assert.match(await adminPage.text(), /Ayansha Health Care \| Admin Operations/);
   const traversal = await fetch(`${BASE_URL}/admin/..%2Fbackend%2Fpackage.json`);
   assert.equal(traversal.status, 404);
 
