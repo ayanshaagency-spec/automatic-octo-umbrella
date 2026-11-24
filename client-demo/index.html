@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex,nofollow">
+  <title>Ayansha Health Care — Client Demo Hub</title>
+  <style>
+    :root{font-family:Inter,system-ui,-apple-system,Segoe UI,sans-serif;color:#17343d;background:#f3f8f8}
+    *{box-sizing:border-box}body{margin:0}header{padding:28px max(22px,calc((100% - 1080px)/2));background:#0d5960;color:#fff}
+    header p{margin:6px 0 0;color:#d8eeee}main{max-width:1080px;margin:42px auto;padding:0 22px}
+    h1{margin:0;font-size:clamp(28px,5vw,42px)}h2{margin:0 0 8px}.intro{max-width:720px;line-height:1.65;color:#47636a}
+    .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:18px;margin:28px 0}
+    article{background:#fff;border:1px solid #d9e7e8;border-radius:18px;padding:24px;box-shadow:0 8px 24px #17343d0b}
+    article p{min-height:72px;line-height:1.55;color:#597078}.link{display:inline-block;padding:11px 16px;border-radius:10px;background:#0d7779;color:#fff;text-decoration:none;font-weight:650}
+    .notice{padding:18px 20px;border-left:4px solid #bd8124;background:#fff8e9;border-radius:10px;line-height:1.6;color:#61491f}
+    footer{max-width:1080px;margin:36px auto;padding:0 22px 30px;color:#698087;font-size:13px}
+  </style>
+</head>
+<body>
+  <header><h1>Ayansha Health Care</h1><p>Client demonstration · Existing project panels</p></header>
+  <main>
+    <p class="intro">Explore the three existing workspaces below. This hub is a static navigation page; it does not create accounts, connect to patient records, or replace the existing backend.</p>
+    <section class="grid" aria-label="Healthcare demo panels">
+      <article><h2>Patient Experience</h2><p>Explore the patient-facing website and its healthcare journey layout.</p><a class="link" href="../web/">Open Patient Panel</a></article>
+      <article><h2>Doctor Workspace</h2><p>Review the existing doctor sign-in and clinical workspace interface.</p><a class="link" href="../doctor-panel/">Open Doctor Panel</a></article>
+      <article><h2>Admin Operations</h2><p>Review the existing admin sign-in and appointment operations interface.</p><a class="link" href="../admin-panel/">Open Admin Panel</a></article>
+    </section>
+    <aside class="notice"><strong>Demo limitation:</strong> These panels currently call the existing backend APIs. A static preview does not provide a backend, database, OTP delivery, or live records. Do not enter real patient information or credentials in a static demo. Backend-dependent actions require an explicitly configured, authorized non-production API.</aside>
+  </main>
+  <footer>Ayansha Health Care · Existing repository assets · No production connection configured</footer>
+</body>
+</html>
