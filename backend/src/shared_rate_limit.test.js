@@ -70,3 +70,25 @@ test('production rate limiting fails closed when the database is unavailable', a
     else process.env.NODE_ENV = previousNodeEnv;
   }
 });
+
+test('PostgreSQL rate limiter enforces the configured limit under concurrent requests', async t => {
+  const { getDb } = require('./db');
+  const db = await getDb();
+  if (!db) return t.skip('PostgreSQL is not configured in this environment');
+
+  const key = 'rate-limit-concurrency-' + process.pid + '-' + Date.now();
+  try {
+    const results = await Promise.all(
+      Array.from({ length: 24 }, () => limited(key, 4, 60_000))
+    );
+    assert.equal(results.filter(blocked => blocked === false).length, 4);
+    assert.equal(results.filter(blocked => blocked === true).length, 20);
+    const stored = await db.query(
+      'SELECT count FROM api_rate_limit_buckets WHERE bucket_key = $1',
+      [key]
+    );
+    assert.equal(Number(stored.rows[0].count), 24);
+  } finally {
+    await db.query('DELETE FROM api_rate_limit_buckets WHERE bucket_key = $1', [key]);
+  }
+});
