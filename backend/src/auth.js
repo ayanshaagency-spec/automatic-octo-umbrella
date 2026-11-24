@@ -196,7 +196,7 @@ async function verifyOtp(phone, otp, purpose = 'patient') {
   const normalizedPhone=phone.trim(), normalizedOtp=otp.trim();
   const storeKey = `${purpose}:${normalizedPhone}`;
   if (!/^\+?[1-9]\d{9,14}$/.test(normalizedPhone) || !/^\d{6}$/.test(normalizedOtp)) return false;
-  const db=await getDb(); if(!db){ if(process.env.NODE_ENV==='production') return false; const record=fallbackOtp.get(storeKey); if(!record||record.expiresAt<=Date.now()||record.attempts>=OTP_VERIFY_LIMIT){fallbackOtp.delete(storeKey);return false;} if(!safeHashEquals(record.hash,otpHash(normalizedPhone,normalizedOtp))){record.attempts++;if(record.attempts>=OTP_VERIFY_LIMIT)fallbackOtp.delete(normalizedPhone);return false;} fallbackOtp.delete(normalizedPhone);return true; }
+  const db=await getDb(); if(!db){ if(process.env.NODE_ENV==='production') return false; const record=fallbackOtp.get(storeKey); if(!record||record.expiresAt<=Date.now()||record.attempts>=OTP_VERIFY_LIMIT){fallbackOtp.delete(storeKey);return false;} if(!safeHashEquals(record.hash,otpHash(normalizedPhone,normalizedOtp))){record.attempts++;if(record.attempts>=OTP_VERIFY_LIMIT)fallbackOtp.delete(storeKey);return false;} fallbackOtp.delete(storeKey);return true; }
   const client=await db.connect();
   try {
     await client.query('BEGIN');
@@ -207,7 +207,7 @@ async function verifyOtp(phone, otp, purpose = 'patient') {
     }
     if(!safeHashEquals(row.otp_hash,otpHash(normalizedPhone,normalizedOtp))){
       const attempts=Number(row.attempts)+1;
-      if(attempts>=OTP_VERIFY_LIMIT) await client.query('DELETE FROM auth_otp_state WHERE phone=$1',[normalizedPhone]);
+      if(attempts>=OTP_VERIFY_LIMIT) await client.query('DELETE FROM auth_otp_state WHERE phone=$1 AND purpose=$2',[normalizedPhone,purpose]);
       else await client.query('UPDATE auth_otp_state SET attempts=$3 WHERE phone=$1 AND purpose=$2',[normalizedPhone,purpose,attempts]);
       await client.query('COMMIT'); return false;
     }
