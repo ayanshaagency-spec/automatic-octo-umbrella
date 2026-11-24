@@ -45,6 +45,19 @@ jobs:
         run: |
           set -euo pipefail
           node --check web/app.js
+          node --check doctor-panel/app.js
+          node --check doctor-panel/health-record.js
+          test -s admin-panel/styles.css
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+          html = Path("admin-panel/index.html").read_text(encoding="utf-8")
+          scripts = re.findall(r"<script>(.*?)</script>", html, flags=re.S)
+          if len(scripts) != 1:
+              raise SystemExit("Expected exactly one inline admin script")
+          Path("/tmp/admin-panel-inline.js").write_text(scripts[0], encoding="utf-8")
+          PY
+          node --check /tmp/admin-panel-inline.js
           python3 - <<'PY'
           from html.parser import HTMLParser
           from pathlib import Path
