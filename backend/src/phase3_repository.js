@@ -98,8 +98,8 @@ async function listHealthRecords(phone) {
 async function createHealthRecord(data) {
   const db = await getDb();
   if (!db) return null;
-  if (!data.phone || !data.doctorPhone || !data.recordType || !data.title) {
-    const error = new Error('phone, recordType, title and doctorPhone are required');
+  if (!data.phone || !data.doctorPhone || !data.appointmentId || !data.recordType || !data.title) {
+    const error = new Error('appointmentId, phone, recordType, title and doctorPhone are required');
     error.statusCode = 422;
     throw error;
   }
@@ -120,7 +120,7 @@ async function createHealthRecord(data) {
     error.statusCode = 422;
     throw error;
   }
-  const patient = await db.query(`SELECT p.id FROM patients p JOIN appointments a ON a.patient_id = p.id JOIN doctors d ON d.id = a.doctor_id WHERE p.phone = $1 AND d.phone = $2 LIMIT 1`, [data.phone.trim(), data.doctorPhone.trim()]);
+  const patient = await db.query(`SELECT p.id FROM appointments a JOIN patients p ON p.id = a.patient_id JOIN doctors d ON d.id = a.doctor_id WHERE a.id = $1 AND p.phone = $2 AND d.phone = $3 LIMIT 1`, [Number(data.appointmentId), data.phone.trim(), data.doctorPhone.trim()]);
   if (patient.rowCount === 0) {
     const error = new Error('Patient not found');
     error.statusCode = 404;
