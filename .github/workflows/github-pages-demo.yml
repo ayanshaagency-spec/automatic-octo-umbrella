@@ -90,10 +90,12 @@ jobs:
           PY
 
           # Guard against accidentally publishing backend configuration or secrets.
-          if find dist -type f \\( -name ".env" -o -name "*.pem" -o -name "*.key" \\) | grep -q .; then
-            echo "Refusing to publish secret/configuration files."
-            exit 1
-          fi
+          python3 - <<'PY'
+          from pathlib import Path
+          forbidden = [p for p in Path("dist").rglob("*") if p.is_file() and (p.name == ".env" or p.suffix in {".pem", ".key"})]
+          if forbidden:
+              raise SystemExit("Refusing to publish secret/configuration files: " + ", ".join(str(p) for p in forbidden))
+          PY
           test -s dist/index.html
           test -s dist/web/index.html
           test -s dist/doctor-panel/index.html
