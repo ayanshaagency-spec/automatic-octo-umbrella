@@ -209,7 +209,7 @@ test('real PostgreSQL patient journey E2E', async t => {
 
   const healthRecord = await fetch(`${BASE_URL}/api/health-records`, {
     method: 'POST', headers: doctorAuth,
-    body: JSON.stringify({ phone: PHONE, doctorPhone: DOCTOR_PHONE, recordType: 'lab', title: 'CI CBC' })
+    body: JSON.stringify({ appointmentId: appointmentBody.id, phone: PHONE, doctorPhone: DOCTOR_PHONE, recordType: 'lab', title: 'CI CBC' })
   });
   assert.equal(healthRecord.status, 201);
 
