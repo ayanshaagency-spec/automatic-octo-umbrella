@@ -176,7 +176,7 @@ async function issueOtp(phone, purpose = 'patient') {
     );
     await client.query(
       `INSERT INTO auth_otp_state(phone,purpose,otp_hash,expires_at,attempts,created_at)
-       VALUES($1,$2,$3,$4,0,$5) ON CONFLICT(phone) DO UPDATE SET purpose=$2,otp_hash=$3,expires_at=$4,attempts=0,created_at=$5`,
+       VALUES($1,$2,$3,$4,0,$5) ON CONFLICT(phone,purpose) DO UPDATE SET otp_hash=$3,expires_at=$4,attempts=0,created_at=$5`,
       [normalizedPhone, purpose, otpHash(normalizedPhone, otp), new Date(now.getTime()+OTP_TTL_MS), now]
     );
     await client.query('COMMIT');
