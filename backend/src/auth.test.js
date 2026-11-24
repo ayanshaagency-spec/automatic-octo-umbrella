@@ -33,7 +33,7 @@ test('OTP expires after five minutes', async () => {
   const db = await getDb();
   if (db) {
     const issued = await issueOtp(phone);
-    assert.match(issued.devOtp, /^\\d{6}$/);
+    assert.match(issued.devOtp, /^\d{6}$/);
     await db.query(
       "UPDATE auth_otp_state SET expires_at = NOW() - INTERVAL '1 second' WHERE phone = $1 AND purpose = 'patient'",
       [phone]
@@ -48,7 +48,7 @@ test('OTP expires after five minutes', async () => {
   Date.now = () => now;
   try {
     const issued = await issueOtp(phone);
-    assert.match(issued.devOtp, /^\\d{6}$/);
+    assert.match(issued.devOtp, /^\d{6}$/);
     now += 5 * 60 * 1000 + 1;
     assert.equal(await verifyOtp(phone, issued.devOtp), false);
   } finally {
