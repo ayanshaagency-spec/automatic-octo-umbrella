@@ -35,6 +35,9 @@ jobs:
           test -s doctor-panel/health-record.js
           test -s doctor-panel/styles.css
           test -s admin-panel/index.html
+          test -s admin-panel/styles.css
+          grep -q 'href="styles.css"' doctor-panel/index.html
+          grep -q 'href="/admin-panel/styles.css"' admin-panel/index.html
           grep -q "Patient Experience" client-demo/index.html
           grep -q "Doctor Workspace" client-demo/index.html
           grep -q "Admin Operations" client-demo/index.html
@@ -97,18 +100,30 @@ jobs:
         run: |
           mkdir -p dist/ayansha-health-care-demo
           cp -R client-demo web doctor-panel admin-panel dist/ayansha-health-care-demo/
-          # Keep the production app route unchanged; adjust only the packaged static demo copy.
+          # Rewrite only the packaged static copy so assets work under a repository subpath.
           python3 - <<'PY'
           from pathlib import Path
-          page = Path("dist/ayansha-health-care-demo/web/index.html")
-          html = page.read_text(encoding="utf-8")
-          old_link = 'href="/admin"'
-          new_link = 'href="../admin-panel/"'
-          if old_link not in html:
-              raise SystemExit("Expected Admin Operations link was not found in packaged patient panel")
-          page.write_text(html.replace(old_link, new_link), encoding="utf-8")
-          if new_link not in page.read_text(encoding="utf-8"):
+          patient = Path("dist/ayansha-health-care-demo/web/index.html")
+          html = patient.read_text(encoding="utf-8")
+          replacements = {
+              'href="/web/styles.css"': 'href="styles.css"',
+              'src="/web/app.js"': 'src="app.js"',
+              'href="/admin"': 'href="../admin-panel/"',
+          }
+          for old, new in replacements.items():
+              if old not in html:
+                  raise SystemExit(f"Expected packaged patient asset/link missing: {old}")
+              html = html.replace(old, new)
+          patient.write_text(html, encoding="utf-8")
+          admin = Path("dist/ayansha-health-care-demo/admin-panel/index.html")
+          admin_html = admin.read_text(encoding="utf-8")
+          if 'href="/admin-panel/styles.css"' not in admin_html:
+              raise SystemExit("Expected admin stylesheet link missing")
+          admin.write_text(admin_html.replace('href="/admin-panel/styles.css"', 'href="styles.css"'), encoding="utf-8")
+          if 'href="../admin-panel/' not in patient.read_text(encoding="utf-8"):
               raise SystemExit("Static Admin Operations link rewrite did not verify")
+          if 'href="styles.css"' not in admin.read_text(encoding="utf-8"):
+              raise SystemExit("Static Admin stylesheet path rewrite did not verify")
           PY
           cd dist
           zip -qr ayansha-health-care-demo.zip ayansha-health-care-demo
