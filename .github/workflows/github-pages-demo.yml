@@ -3,7 +3,7 @@ name: GitHub Pages — Static Client Demo
 on:
   push:
     branches:
-      - feat/github-pages-static-client-demo
+      - recovery/backend-postgres-safe-fixes
     paths:
       - "client-demo/**"
       - "web/**"
