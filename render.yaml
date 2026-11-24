@@ -1,0 +1,40 @@
+# Isolated, non-production staging only.
+# Render Free Postgres is temporary (30-day lifetime); use dummy test data only.
+services:
+  - type: web
+    name: ayansha-health-care-staging
+    runtime: docker
+    plan: free
+    region: singapore
+    branch: recovery/backend-postgres-safe-fixes
+    autoDeployTrigger: checksPass
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
+    healthCheckPath: /health
+    initialDeployHook: npm run db:migrate
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: DATABASE_URL
+        fromDatabase:
+          name: ayansha-health-care-staging-db
+          property: connectionString
+      - key: JWT_SECRET
+        generateValue: true
+      - key: CORS_ALLOWED_ORIGINS
+        sync: false
+      - key: ADMIN_EMAIL
+        sync: false
+      - key: ADMIN_PASSWORD
+        sync: false
+      - key: OTP_PROVIDER_URL
+        sync: false
+      - key: OTP_PROVIDER_TOKEN
+        sync: false
+
+databases:
+  - name: ayansha-health-care-staging-db
+    databaseName: ayansha_health_care_staging
+    user: ayansha_staging
+    plan: free
+    region: singapore
