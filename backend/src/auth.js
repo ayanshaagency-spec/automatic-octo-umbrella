@@ -134,8 +134,10 @@ function safeHashEquals(expectedHex, providedHex) {
   return expected.length === provided.length && crypto.timingSafeEqual(expected, provided);
 }
 
-async function issueOtp(phone) {
+async function issueOtp(phone, purpose = 'patient') {
+  if (!['patient', 'doctor'].includes(purpose)) throw new AuthError('Invalid OTP purpose', 400);
   const normalizedPhone = String(phone).trim();
+  const storeKey = `${purpose}:${normalizedPhone}`;
   if (!/^\+?[1-9]\d{9,14}$/.test(normalizedPhone)) throw new AuthError('phone must be a valid international phone number', 422);
   const db = await getDb();
   const otp = String(crypto.randomInt(100000, 1000000));
@@ -143,11 +145,11 @@ async function issueOtp(phone) {
     if (process.env.NODE_ENV === 'production') throw new AuthError('OTP service requires database storage');
     const nowMs = Date.now();
     pruneFallbackStores(nowMs);
-    const prior = fallbackRequests.get(normalizedPhone);
+    const prior = fallbackRequests.get(storeKey);
     if (prior && nowMs-prior.lastRequestAt < OTP_REQUEST_COOLDOWN_MS) throw new AuthError('Please wait before requesting another OTP',429);
     if (prior && nowMs-prior.windowStart < OTP_REQUEST_WINDOW_MS && prior.count>=OTP_REQUEST_LIMIT) throw new AuthError('OTP request limit reached; try again later',429);
-    fallbackRequests.set(normalizedPhone,{windowStart:prior && nowMs-prior.windowStart<OTP_REQUEST_WINDOW_MS?prior.windowStart:nowMs,count:prior && nowMs-prior.windowStart<OTP_REQUEST_WINDOW_MS?prior.count+1:1,lastRequestAt:nowMs});
-    fallbackOtp.set(normalizedPhone,{hash:otpHash(normalizedPhone,otp),expiresAt:nowMs+OTP_TTL_MS,attempts:0});
+    fallbackRequests.set(storeKey,{windowStart:prior && nowMs-prior.windowStart<OTP_REQUEST_WINDOW_MS?prior.windowStart:nowMs,count:prior && nowMs-prior.windowStart<OTP_REQUEST_WINDOW_MS?prior.count+1:1,lastRequestAt:nowMs});
+    fallbackOtp.set(storeKey,{hash:otpHash(normalizedPhone,otp),expiresAt:nowMs+OTP_TTL_MS,attempts:0});
     const delivery=await sendOtp(normalizedPhone,otp);
     return {...delivery,expiresInSeconds:OTP_TTL_MS/1000};
   }
@@ -173,9 +175,9 @@ async function issueOtp(phone) {
       [normalizedPhone, now, now, windowStart]
     );
     await client.query(
-      `INSERT INTO auth_otp_state(phone,otp_hash,expires_at,attempts,created_at)
-       VALUES($1,$2,$3,0,$4) ON CONFLICT(phone) DO UPDATE SET otp_hash=$2,expires_at=$3,attempts=0,created_at=$4`,
-      [normalizedPhone, otpHash(normalizedPhone, otp), new Date(now.getTime()+OTP_TTL_MS), now]
+      `INSERT INTO auth_otp_state(phone,purpose,otp_hash,expires_at,attempts,created_at)
+       VALUES($1,$2,$3,$4,0,$5) ON CONFLICT(phone) DO UPDATE SET purpose=$2,otp_hash=$3,expires_at=$4,attempts=0,created_at=$5`,
+      [normalizedPhone, purpose, otpHash(normalizedPhone, otp), new Date(now.getTime()+OTP_TTL_MS), now]
     );
     await client.query('COMMIT');
   } catch(error) { try { await client.query('ROLLBACK'); } catch {} throw error; }
@@ -184,28 +186,29 @@ async function issueOtp(phone) {
     const delivery = await sendOtp(normalizedPhone, otp);
     return { ...delivery, expiresInSeconds: OTP_TTL_MS / 1000 };
   } catch(error) {
-    await db.query('DELETE FROM auth_otp_state WHERE phone=$1', [normalizedPhone]);
+    await db.query('DELETE FROM auth_otp_state WHERE phone=$1 AND purpose=$2', [normalizedPhone,purpose]);
     throw error;
   }
 }
 
-async function verifyOtp(phone, otp) {
-  if (typeof phone !== 'string' || typeof otp !== 'string') return false;
+async function verifyOtp(phone, otp, purpose = 'patient') {
+  if (typeof phone !== 'string' || typeof otp !== 'string' || !['patient', 'doctor'].includes(purpose)) return false;
   const normalizedPhone=phone.trim(), normalizedOtp=otp.trim();
+  const storeKey = `${purpose}:${normalizedPhone}`;
   if (!/^\+?[1-9]\d{9,14}$/.test(normalizedPhone) || !/^\d{6}$/.test(normalizedOtp)) return false;
-  const db=await getDb(); if(!db){ if(process.env.NODE_ENV==='production') return false; const record=fallbackOtp.get(normalizedPhone); if(!record||record.expiresAt<=Date.now()||record.attempts>=OTP_VERIFY_LIMIT){fallbackOtp.delete(normalizedPhone);return false;} if(!safeHashEquals(record.hash,otpHash(normalizedPhone,normalizedOtp))){record.attempts++;if(record.attempts>=OTP_VERIFY_LIMIT)fallbackOtp.delete(normalizedPhone);return false;} fallbackOtp.delete(normalizedPhone);return true; }
+  const db=await getDb(); if(!db){ if(process.env.NODE_ENV==='production') return false; const record=fallbackOtp.get(storeKey); if(!record||record.expiresAt<=Date.now()||record.attempts>=OTP_VERIFY_LIMIT){fallbackOtp.delete(storeKey);return false;} if(!safeHashEquals(record.hash,otpHash(normalizedPhone,normalizedOtp))){record.attempts++;if(record.attempts>=OTP_VERIFY_LIMIT)fallbackOtp.delete(normalizedPhone);return false;} fallbackOtp.delete(normalizedPhone);return true; }
   const client=await db.connect();
   try {
     await client.query('BEGIN');
-    const q=await client.query('SELECT * FROM auth_otp_state WHERE phone=$1 FOR UPDATE',[normalizedPhone]);
+    const q=await client.query('SELECT * FROM auth_otp_state WHERE phone=$1 AND purpose=$2 FOR UPDATE',[normalizedPhone,purpose]);
     const row=q.rows[0];
     if(!row || new Date(row.expires_at).getTime()<=Date.now() || Number(row.attempts)>=OTP_VERIFY_LIMIT){
-      await client.query('DELETE FROM auth_otp_state WHERE phone=$1',[normalizedPhone]); await client.query('COMMIT'); return false;
+      await client.query('DELETE FROM auth_otp_state WHERE phone=$1 AND purpose=$2',[normalizedPhone,purpose]); await client.query('COMMIT'); return false;
     }
     if(!safeHashEquals(row.otp_hash,otpHash(normalizedPhone,normalizedOtp))){
       const attempts=Number(row.attempts)+1;
       if(attempts>=OTP_VERIFY_LIMIT) await client.query('DELETE FROM auth_otp_state WHERE phone=$1',[normalizedPhone]);
-      else await client.query('UPDATE auth_otp_state SET attempts=$2 WHERE phone=$1',[normalizedPhone,attempts]);
+      else await client.query('UPDATE auth_otp_state SET attempts=$3 WHERE phone=$1 AND purpose=$2',[normalizedPhone,purpose,attempts]);
       await client.query('COMMIT'); return false;
     }
     await client.query('DELETE FROM auth_otp_state WHERE phone=$1',[normalizedPhone]);
