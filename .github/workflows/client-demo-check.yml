@@ -94,6 +94,23 @@ jobs:
           if unresolved:
               raise SystemExit("Patient JavaScript references missing UI IDs: " + ", ".join(unresolved))
           print(f"Verified {len(parser.ids)} patient UI IDs and {len(referenced)} JavaScript ID references.")
+          for folder, scripts in [
+              ("doctor-panel", ["app.js", "health-record.js"]),
+              ("admin-panel", []),
+          ]:
+              panel_html = Path(folder, "index.html").read_text(encoding="utf-8")
+              panel_parser = IdParser()
+              panel_parser.feed(panel_html)
+              panel_scripts = [Path(folder, name).read_text(encoding="utf-8") for name in scripts]
+              if folder == "admin-panel":
+                  panel_scripts = re.findall(r"<script>(.*?)</script>", panel_html, flags=re.S)
+              panel_refs = set()
+              for source in panel_scripts:
+                  panel_refs.update(re.findall(r"getElementById\(['\"]([^'\"]+)['\"]\)", source))
+              missing_refs = sorted(panel_refs - panel_parser.ids)
+              if missing_refs:
+                  raise SystemExit(f"{folder} JavaScript references missing UI IDs: " + ", ".join(missing_refs))
+              print(f"Verified {folder}: {len(panel_parser.ids)} UI IDs and {len(panel_refs)} JavaScript references.")
           PY
 
       - name: Package static client demo (no backend or secrets)
