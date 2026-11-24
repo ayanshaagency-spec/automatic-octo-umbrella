@@ -8,7 +8,7 @@ function safeTarget(url) {
   if (!url || process.env.NODE_ENV === 'production') return false;
   try {
     const parsed = new URL(url);
-    const name = decodeURIComponent(parsed.pathname.replace(/^\\//, ''));
+    const name = decodeURIComponent(parsed.pathname.replace(/^\//, ''));
     return ['localhost', '127.0.0.1', '::1'].includes(parsed.hostname) && SAFE_DATABASES.has(name);
   } catch { return false; }
 }
