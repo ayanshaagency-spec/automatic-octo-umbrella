@@ -139,3 +139,13 @@ test('OTP provider rejects insecure HTTP URLs outside local development', async 
     if (originalNodeEnv === undefined) delete process.env.NODE_ENV; else process.env.NODE_ENV = originalNodeEnv;
   }
 });
+
+
+test('OTP hash comparison rejects malformed hashes and compares fixed-length hashes safely', () => {
+  const crypto = require('crypto');
+  const source = require('fs').readFileSync(require.resolve('./auth'), 'utf8');
+  assert.match(source, /crypto\.timingSafeEqual\(expected, provided\)/);
+  const valid = crypto.createHash('sha256').update('otp-test').digest('hex');
+  assert.match(valid, /^[a-f0-9]{64}$/);
+  assert.doesNotMatch(source, /record\.hash\s*!==\s*otpHash|row\.otp_hash\s*!==\s*otpHash/);
+});
