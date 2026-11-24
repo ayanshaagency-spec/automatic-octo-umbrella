@@ -44,6 +44,15 @@ const server=http.createServer(async(req,res)=>{
     }
     return send(res,503,{error:'Admin panel unavailable'},req);
   }
+  // Serve only the admin panel stylesheet; keep the admin HTML entry point fixed above.
+  if(req.method==='GET' && url.pathname==='/admin-panel/styles.css'){
+    const adminCss=path.resolve(__dirname,'../../admin-panel/styles.css');
+    if(fs.existsSync(adminCss) && fs.statSync(adminCss).isFile()){
+      res.writeHead(200,{'Content-Type':'text/css; charset=utf-8','X-Content-Type-Options':'nosniff','Cache-Control':'no-store'});
+      return fs.createReadStream(adminCss).pipe(res);
+    }
+    return send(res,404,{error:'Admin panel stylesheet not found'},req);
+  }
   // Serve the existing doctor panel from this backend origin so its same-origin API default works.
   if(req.method==='GET' && (url.pathname==='/doctor-panel' || url.pathname.startsWith('/doctor-panel/'))){
     const relative=url.pathname==='/doctor-panel'?'index.html':url.pathname.slice('/doctor-panel/'.length);
