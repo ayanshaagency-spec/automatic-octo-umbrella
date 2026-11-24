@@ -1,0 +1,56 @@
+name: Client Demo Bundle Check
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - recovery/backend-postgres-safe-fixes
+    paths:
+      - "client-demo/**"
+      - "web/**"
+      - "doctor-panel/**"
+      - "admin-panel/**"
+      - ".github/workflows/client-demo-check.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  verify-and-package:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout existing recovery branch
+        uses: actions/checkout@v4
+
+      - name: Verify all existing panel entry points and assets
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -s client-demo/index.html
+          test -s web/index.html
+          test -s web/app.js
+          test -s web/styles.css
+          test -s doctor-panel/index.html
+          test -s doctor-panel/app.js
+          test -s doctor-panel/health-record.js
+          test -s doctor-panel/styles.css
+          test -s admin-panel/index.html
+          grep -q "Patient Experience" client-demo/index.html
+          grep -q "Doctor Workspace" client-demo/index.html
+          grep -q "Admin Operations" client-demo/index.html
+          grep -q "static preview" client-demo/index.html
+
+      - name: Package static client demo (no backend or secrets)
+        run: |
+          mkdir -p dist/ayansha-health-care-demo
+          cp -R client-demo web doctor-panel admin-panel dist/ayansha-health-care-demo/
+          cd dist
+          zip -qr ayansha-health-care-demo.zip ayansha-health-care-demo
+
+      - name: Upload reviewable demo bundle
+        uses: actions/upload-artifact@v4
+        with:
+          name: ayansha-health-care-client-demo
+          path: dist/ayansha-health-care-demo.zip
+          if-no-files-found: error
+          retention-days: 7
