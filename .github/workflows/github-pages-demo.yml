@@ -1,0 +1,109 @@
+name: GitHub Pages — Static Client Demo
+
+on:
+  push:
+    branches:
+      - feat/github-pages-static-client-demo
+    paths:
+      - "client-demo/**"
+      - "web/**"
+      - "doctor-panel/**"
+      - "admin-panel/**"
+      - ".github/workflows/github-pages-demo.yml"
+      - "docs/GITHUB_PAGES_STATIC_DEMO.md"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: github-pages-demo
+  cancel-in-progress: true
+
+jobs:
+  build-and-deploy:
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout existing demo branch
+        uses: actions/checkout@v4
+
+      - name: Configure GitHub Pages
+        uses: actions/configure-pages@v5
+
+      - name: Build static-only client demo
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -s client-demo/index.html
+          test -s web/index.html
+          test -s web/app.js
+          test -s web/styles.css
+          test -s doctor-panel/index.html
+          test -s doctor-panel/app.js
+          test -s doctor-panel/health-record.js
+          test -s doctor-panel/styles.css
+          test -s admin-panel/index.html
+          test -s admin-panel/styles.css
+
+          mkdir -p dist
+          cp client-demo/index.html dist/index.html
+          cp -R web doctor-panel admin-panel dist/
+
+          # Convert root-absolute asset links to project-site-relative links.
+          python3 - <<'PY'
+          from pathlib import Path
+
+          patient = Path("dist/web/index.html")
+          html = patient.read_text(encoding="utf-8")
+          for old, new in (
+              ('href="/web/styles.css"', 'href="styles.css"'),
+              ('src="/web/app.js"', 'src="app.js"'),
+          ):
+              if old not in html:
+                  raise SystemExit(f"Expected patient asset reference missing: {old}")
+              html = html.replace(old, new)
+          patient.write_text(html, encoding="utf-8")
+
+          admin = Path("dist/admin-panel/index.html")
+          html = admin.read_text(encoding="utf-8")
+          old = 'href="/admin-panel/styles.css"'
+          if old not in html:
+              raise SystemExit("Expected admin stylesheet reference missing")
+          admin.write_text(html.replace(old, 'href="styles.css"'), encoding="utf-8")
+
+          hub = Path("dist/index.html")
+          html = hub.read_text(encoding="utf-8")
+          for old, new in (
+              ('href="../web/"', 'href="web/"'),
+              ('href="../doctor-panel/"', 'href="doctor-panel/"'),
+              ('href="../admin-panel/"', 'href="admin-panel/"'),
+          ):
+              if old not in html:
+                  raise SystemExit(f"Expected demo navigation link missing: {old}")
+              html = html.replace(old, new)
+          hub.write_text(html, encoding="utf-8")
+          PY
+
+          # Guard against accidentally publishing backend configuration or secrets.
+          if find dist -type f \\( -name ".env" -o -name "*.pem" -o -name "*.key" \\) | grep -q .; then
+            echo "Refusing to publish secret/configuration files."
+            exit 1
+          fi
+          test -s dist/index.html
+          test -s dist/web/index.html
+          test -s dist/doctor-panel/index.html
+          test -s dist/admin-panel/index.html
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: dist
+
+      - name: Deploy static demo to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
