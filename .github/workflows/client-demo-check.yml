@@ -155,7 +155,6 @@ jobs:
           replacements = {
               'href="/web/styles.css"': 'href="styles.css"',
               'src="/web/app.js"': 'src="app.js"',
-              'href="/admin"': 'href="../admin-panel/"',
           }
           for old, new in replacements.items():
               if old not in html:
@@ -167,8 +166,6 @@ jobs:
           if 'href="/admin-panel/styles.css"' not in admin_html:
               raise SystemExit("Expected admin stylesheet link missing")
           admin.write_text(admin_html.replace('href="/admin-panel/styles.css"', 'href="styles.css"'), encoding="utf-8")
-          if 'href="../admin-panel/' not in patient.read_text(encoding="utf-8"):
-              raise SystemExit("Static Admin Operations link rewrite did not verify")
           if 'href="styles.css"' not in admin.read_text(encoding="utf-8"):
               raise SystemExit("Static Admin stylesheet path rewrite did not verify")
           PY
