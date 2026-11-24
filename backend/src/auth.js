@@ -126,6 +126,14 @@ function otpHash(phone, otp) {
   return crypto.createHmac('sha256', secret).update(phone + ':' + otp).digest('hex');
 }
 
+function safeHashEquals(expectedHex, providedHex) {
+  if (typeof expectedHex !== 'string' || typeof providedHex !== 'string' ||
+      !/^[a-f0-9]{64}$/i.test(expectedHex) || !/^[a-f0-9]{64}$/i.test(providedHex)) return false;
+  const expected = Buffer.from(expectedHex, 'hex');
+  const provided = Buffer.from(providedHex, 'hex');
+  return expected.length === provided.length && crypto.timingSafeEqual(expected, provided);
+}
+
 async function issueOtp(phone) {
   const normalizedPhone = String(phone).trim();
   if (!/^\+?[1-9]\d{9,14}$/.test(normalizedPhone)) throw new AuthError('phone must be a valid international phone number', 422);
@@ -185,7 +193,7 @@ async function verifyOtp(phone, otp) {
   if (typeof phone !== 'string' || typeof otp !== 'string') return false;
   const normalizedPhone=phone.trim(), normalizedOtp=otp.trim();
   if (!/^\+?[1-9]\d{9,14}$/.test(normalizedPhone) || !/^\d{6}$/.test(normalizedOtp)) return false;
-  const db=await getDb(); if(!db){ if(process.env.NODE_ENV==='production') return false; const record=fallbackOtp.get(normalizedPhone); if(!record||record.expiresAt<=Date.now()||record.attempts>=OTP_VERIFY_LIMIT){fallbackOtp.delete(normalizedPhone);return false;} if(record.hash!==otpHash(normalizedPhone,normalizedOtp)){record.attempts++;if(record.attempts>=OTP_VERIFY_LIMIT)fallbackOtp.delete(normalizedPhone);return false;} fallbackOtp.delete(normalizedPhone);return true; }
+  const db=await getDb(); if(!db){ if(process.env.NODE_ENV==='production') return false; const record=fallbackOtp.get(normalizedPhone); if(!record||record.expiresAt<=Date.now()||record.attempts>=OTP_VERIFY_LIMIT){fallbackOtp.delete(normalizedPhone);return false;} if(!safeHashEquals(record.hash,otpHash(normalizedPhone,normalizedOtp))){record.attempts++;if(record.attempts>=OTP_VERIFY_LIMIT)fallbackOtp.delete(normalizedPhone);return false;} fallbackOtp.delete(normalizedPhone);return true; }
   const client=await db.connect();
   try {
     await client.query('BEGIN');
@@ -194,7 +202,7 @@ async function verifyOtp(phone, otp) {
     if(!row || new Date(row.expires_at).getTime()<=Date.now() || Number(row.attempts)>=OTP_VERIFY_LIMIT){
       await client.query('DELETE FROM auth_otp_state WHERE phone=$1',[normalizedPhone]); await client.query('COMMIT'); return false;
     }
-    if(row.otp_hash!==otpHash(normalizedPhone,normalizedOtp)){
+    if(!safeHashEquals(row.otp_hash,otpHash(normalizedPhone,normalizedOtp))){
       const attempts=Number(row.attempts)+1;
       if(attempts>=OTP_VERIFY_LIMIT) await client.query('DELETE FROM auth_otp_state WHERE phone=$1',[normalizedPhone]);
       else await client.query('UPDATE auth_otp_state SET attempts=$2 WHERE phone=$1',[normalizedPhone,attempts]);
