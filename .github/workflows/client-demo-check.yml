@@ -113,6 +113,36 @@ jobs:
               print(f"Verified {folder}: {len(panel_parser.ids)} UI IDs and {len(panel_refs)} JavaScript references.")
           PY
 
+      - name: Verify all three panel API contracts still have backend routes
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          server = Path("backend/src/server.js").read_text(encoding="utf-8")
+          expected = {
+              "patient": [
+                  "/api/doctors", "/api/appointments", "/api/auth/request-otp",
+                  "/api/auth/verify-otp", "/api/health-records", "/api/prescriptions",
+                  "/api/payments", "/api/lab-orders", "/api/ai/symptom-guidance",
+                  "/api/hospitals/nearby", "/api/emergency",
+              ],
+              "doctor": [
+                  "/api/doctor/auth/request-otp", "/api/doctor/auth/verify-otp",
+                  "/api/doctor/appointments", "/api/prescriptions", "/api/health-records",
+              ],
+              "admin": ["/api/admin/login", "/api/admin/appointments"],
+          }
+          missing = []
+          for panel, paths in expected.items():
+              for path in paths:
+                  if f"url.pathname==='{path}'" not in server:
+                      missing.append(f"{panel}: {path}")
+          if missing:
+              raise SystemExit("Panel/backend API contract mismatch: " + ", ".join(missing))
+          print("Verified patient, doctor and admin API route contracts.")
+          PY
+
       - name: Package static client demo (no backend or secrets)
         run: |
           mkdir -p dist/ayansha-health-care-demo
