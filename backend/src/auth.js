@@ -211,7 +211,7 @@ async function verifyOtp(phone, otp, purpose = 'patient') {
       else await client.query('UPDATE auth_otp_state SET attempts=$3 WHERE phone=$1 AND purpose=$2',[normalizedPhone,purpose,attempts]);
       await client.query('COMMIT'); return false;
     }
-    await client.query('DELETE FROM auth_otp_state WHERE phone=$1',[normalizedPhone]);
+    await client.query('DELETE FROM auth_otp_state WHERE phone=$1 AND purpose=$2',[normalizedPhone,purpose]);
     await client.query('COMMIT'); return true;
   } catch(e){try{await client.query('ROLLBACK')}catch{} throw e;}
   finally{client.release();}
