@@ -7,4 +7,8 @@ test('direct payment status update requires configured admin token', () => {
   assert.equal(isAuthorizedPaymentStatusUpdate({ authorization: 'Bearer wrong' }, 'secret'), false);
   assert.equal(isAuthorizedPaymentStatusUpdate({}, 'secret'), false);
   assert.equal(isAuthorizedPaymentStatusUpdate({ authorization: 'Bearer secret' }, ''), false);
+  assert.equal(isAuthorizedPaymentStatusUpdate({ authorization: 'Bearer secret' }, null), false);
+  assert.equal(isAuthorizedPaymentStatusUpdate({ authorization: 'Bearer secret-extra' }, 'secret'), false);
+  assert.equal(isAuthorizedPaymentStatusUpdate({ authorization: ['Bearer secret'] }, 'secret'), false);
+  assert.equal(isAuthorizedPaymentStatusUpdate({ authorization: 'bearer secret' }, 'secret'), false);
 });
