@@ -9,6 +9,7 @@ form?.addEventListener('submit', async (event) => {
   message.className = 'message';
   message.textContent = 'Saving health record…';
   const payload = {
+    appointmentId: Number(fd.get('appointmentId')),
     phone: fd.get('phone'),
     recordType: fd.get('recordType'),
     title: fd.get('title'),
