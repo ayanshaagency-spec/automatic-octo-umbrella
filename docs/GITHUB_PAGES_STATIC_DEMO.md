@@ -20,7 +20,7 @@ GitHub Pages is static hosting. It cannot run the Node.js backend or PostgreSQL.
 
 ## Deployment
 
-The workflow runs only from `feat/github-pages-static-client-demo` when relevant demo files change, or when manually dispatched. It packages the existing panels and deploys the static artifact to the repository's GitHub Pages environment.
+The workflow runs only from `recovery/backend-postgres-safe-fixes` when relevant demo files change, or when manually dispatched. It packages the existing panels and deploys the static artifact to the repository's GitHub Pages environment.
 
 The Pages URL is emitted by the completed GitHub Actions deployment. If GitHub Pages is not enabled for the repository or the linked GitHub account lacks Pages permissions, the workflow will report that configuration/permission blocker. No paid hosting or production deployment is part of this workflow.
 
