@@ -441,3 +441,25 @@ test('doctor role token is required for doctor appointment and prescription rout
   assert.equal(doctorPrescriptionUnavailable.status, 503);
   assert.equal((await doctorPrescriptionUnavailable.json()).error, 'DATABASE_URL not configured');
 });
+
+test('untrusted forwarded IP headers cannot bypass per-client API rate limits', async t => {
+  const server = startServer();
+  t.after(() => server.kill());
+  await waitForHealth(server);
+
+  let lastResponse;
+  for (let i = 0; i < 11; i += 1) {
+    lastResponse = await fetch(BASE_URL + '/api/ai/symptom-guidance', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Forwarded-For': `198.51.100.${i + 1}`,
+        'X-Real-IP': `203.0.113.${i + 1}`
+      },
+      body: JSON.stringify({ symptoms: 'test symptom' })
+    });
+    if (i < 10) assert.notEqual(lastResponse.status, 429);
+  }
+  assert.equal(lastResponse.status, 429);
+  assert.equal((await lastResponse.json()).error, 'Too many requests; try again later');
+});
