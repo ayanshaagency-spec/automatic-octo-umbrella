@@ -44,6 +44,19 @@ jobs:
         run: |
           mkdir -p dist/ayansha-health-care-demo
           cp -R client-demo web doctor-panel admin-panel dist/ayansha-health-care-demo/
+          # Keep the production app route unchanged; adjust only the packaged static demo copy.
+          python3 - <<'PY'
+          from pathlib import Path
+          page = Path("dist/ayansha-health-care-demo/web/index.html")
+          html = page.read_text(encoding="utf-8")
+          old_link = 'href="/admin"'
+          new_link = 'href="../admin-panel/"'
+          if old_link not in html:
+              raise SystemExit("Expected Admin Operations link was not found in packaged patient panel")
+          page.write_text(html.replace(old_link, new_link), encoding="utf-8")
+          if new_link not in page.read_text(encoding="utf-8"):
+              raise SystemExit("Static Admin Operations link rewrite did not verify")
+          PY
           cd dist
           zip -qr ayansha-health-care-demo.zip ayansha-health-care-demo
 
