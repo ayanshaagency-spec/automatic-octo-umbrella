@@ -59,16 +59,14 @@ function assertIdempotentPaymentMatches(existing, data, patientId) {
     appointment_id: data.appointmentId || null,
     lab_order_id: data.labOrderId || null,
     amount: Number(data.amount),
-    currency: data.currency || 'INR',
-    provider: data.provider || null
+    currency: data.currency || 'INR'
   };
   const actual = {
     patient_id: existing.patient_id,
     appointment_id: existing.appointment_id || null,
     lab_order_id: existing.lab_order_id || null,
     amount: Number(existing.amount),
-    currency: existing.currency || 'INR',
-    provider: existing.provider || null
+    currency: existing.currency || 'INR'
   };
   if (Object.keys(expected).some(key => expected[key] !== actual[key])) {
     const error = new Error('Idempotency key was already used with different payment details');
@@ -138,8 +136,7 @@ async function createPayment(data) {
       RETURNING id, patient_id, appointment_id, lab_order_id, amount, currency, provider, provider_order_id,
                 provider_payment_id, idempotency_key, status, notes, created_at, updated_at`,
       [patient.rows[0].id, data.appointmentId || null, data.labOrderId || null, amount,
-       data.currency || 'INR', data.provider || null, data.providerOrderId || null,
-       data.idempotencyKey || null, data.notes || null]
+       data.currency || 'INR', null, null, data.idempotencyKey || null, data.notes || null]
     );
     return rows[0];
   } catch (error) {
