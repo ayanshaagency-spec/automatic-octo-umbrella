@@ -28,20 +28,33 @@ test('OTP verification limits incorrect attempts', async () => {
 });
 
 test('OTP expires after five minutes', async () => {
+  const phone = '+919555555555';
+  const { getDb } = require('./db');
+  const db = await getDb();
+  if (db) {
+    const issued = await issueOtp(phone);
+    assert.match(issued.devOtp, /^\\d{6}$/);
+    await db.query(
+      "UPDATE auth_otp_state SET expires_at = NOW() - INTERVAL '1 second' WHERE phone = $1 AND purpose = 'patient'",
+      [phone]
+    );
+    assert.equal(await verifyOtp(phone, issued.devOtp), false);
+    return;
+  }
+
+  // Unit-test the in-memory fallback with a controlled clock when no DB is configured.
   const originalNow = Date.now;
   let now = originalNow();
   Date.now = () => now;
   try {
-    const phone = '+919555555555';
     const issued = await issueOtp(phone);
-    assert.match(issued.devOtp, /^\d{6}$/);
+    assert.match(issued.devOtp, /^\\d{6}$/);
     now += 5 * 60 * 1000 + 1;
     assert.equal(await verifyOtp(phone, issued.devOtp), false);
   } finally {
     Date.now = originalNow;
   }
 });
-
 test('OTP request cooldown and rate limit are enforced', async () => {
   await issueOtp('+919666666666');
   await assert.rejects(issueOtp('+919666666666'), error => error.statusCode === 429);
