@@ -10,6 +10,7 @@ COPY backend/ ./
 COPY web/ /web/
 # Include only the existing admin entry page; backend files are not copied to a public path.
 COPY admin-panel/index.html /admin-panel/index.html
+COPY admin-panel/styles.css /admin-panel/styles.css
 # The backend doctor-panel route resolves this folder at the container root.
 COPY doctor-panel/ /doctor-panel/
 
