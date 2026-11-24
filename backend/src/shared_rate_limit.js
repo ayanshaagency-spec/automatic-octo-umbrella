@@ -4,6 +4,7 @@ const fallbackBuckets = new Map();
 const FALLBACK_BUCKET_MAX = 10000;
 const FALLBACK_PRUNE_EVERY = 128;
 let fallbackOperations = 0;
+let databaseOperations = 0;
 
 function pruneFallbackBuckets(nowMs) {
   for (const [key, bucket] of fallbackBuckets) {
@@ -54,7 +55,8 @@ async function limited(key, limit, windowMs) {
   );
 
   // Periodically remove expired shared buckets without adding a random DB query per request.
-  if (result.rows[0] && Number(result.rows[0].count) % 128 === 0) {
+  databaseOperations += 1;
+  if (databaseOperations % 128 === 0) {
     await db.query('DELETE FROM api_rate_limit_buckets WHERE reset_at <= $1', [now]);
   }
   return Number(result.rows[0].count) > limit;
