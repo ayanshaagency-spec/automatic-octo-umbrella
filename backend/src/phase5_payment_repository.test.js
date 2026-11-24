@@ -169,6 +169,35 @@ test('Phase 5 payment repository: idempotency key rejects mismatched immutable d
   assert.equal(first.amount, 499);
 });
 
+
+test('Phase 5 payment repository: client cannot inject gateway provider or order ID', async () => {
+  const fakeDb = createPaymentDb();
+  const { createPayment, setProviderOrderId } = installFakeDb(fakeDb);
+  const request = {
+    phone: '9999999999',
+    appointmentId: 41,
+    amount: 499,
+    currency: 'INR',
+    idempotencyKey: 'checkout-provider-injection',
+    provider: 'attacker-controlled',
+    providerOrderId: 'order_forged_by_client'
+  };
+
+  const payment = await createPayment(request);
+  assert.equal(payment.provider, null);
+  assert.equal(payment.provider_order_id, null);
+
+  const persisted = await setProviderOrderId(payment.id, 'razorpay', 'order_created_by_gateway');
+  assert.equal(persisted.provider, 'razorpay');
+  assert.equal(persisted.provider_order_id, 'order_created_by_gateway');
+
+  const retry = await createPayment(request);
+  assert.equal(retry.id, payment.id);
+  assert.equal(retry.provider, 'razorpay');
+  assert.equal(retry.provider_order_id, 'order_created_by_gateway');
+  assert.equal(fakeDb.payments.length, 1);
+});
+
 test('Phase 5 payment repository: concurrent gateway-order persistence keeps the first order', async () => {
   const fakeDb = createPaymentDb();
   const { createPayment, setProviderOrderId } = installFakeDb(fakeDb);
