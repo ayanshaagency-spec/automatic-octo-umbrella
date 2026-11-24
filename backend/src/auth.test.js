@@ -149,3 +149,13 @@ test('OTP hash comparison rejects malformed hashes and compares fixed-length has
   assert.match(valid, /^[a-f0-9]{64}$/);
   assert.doesNotMatch(source, /record\.hash\s*!==\s*otpHash|row\.otp_hash\s*!==\s*otpHash/);
 });
+
+
+test('OTP purpose is isolated between patient and doctor authentication', async () => {
+  process.env.JWT_SECRET = 'test-secret-that-is-long-enough-for-hmac-123456';
+  const phone = '+919111111111';
+  const issued = await issueOtp(phone, 'doctor');
+  assert.equal(await verifyOtp(phone, issued.devOtp, 'patient'), false);
+  assert.equal(await verifyOtp(phone, issued.devOtp, 'doctor'), true);
+  assert.equal(await verifyOtp(phone, issued.devOtp, 'doctor'), false);
+});
